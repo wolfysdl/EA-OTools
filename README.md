@@ -18,7 +18,7 @@ Extract test.o to test.gltf
 ```
 otools export "test.o"
 ```
-Import all models (.gltf, .glb, .fbx, .dae, .obj, .3ds) to .o format
+Import all models (.gltf, .glb, .fbx, .dae, .obj, .3ds) in "test" folder to .o format
 ```
 otools import "test"
 ```
