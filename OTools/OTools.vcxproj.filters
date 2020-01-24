@@ -1,0 +1,50 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClInclude Include="elf.h" />
+    <ClInclude Include="memory.h" />
+    <ClInclude Include="main.h" />
+    <ClInclude Include="binbuf.h" />
+    <ClInclude Include="utils.h" />
+    <ClInclude Include="commandline.h" />
+    <ClInclude Include="errormsg.h" />
+    <ClInclude Include="shaders.h" />
+    <ClInclude Include="NvTriStrip\NvTriStrip.h">
+      <Filter>NvTriStrip</Filter>
+    </ClInclude>
+    <ClInclude Include="NvTriStrip\NvTriStripObjects.h">
+      <Filter>NvTriStrip</Filter>
+    </ClInclude>
+    <ClInclude Include="NvTriStrip\VertexCache.h">
+      <Filter>NvTriStrip</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="dump.cpp" />
+    <ClCompile Include="export.cpp" />
+    <ClCompile Include="import.cpp" />
+    <ClCompile Include="main.cpp" />
+    <ClCompile Include="binbuf.cpp" />
+    <ClCompile Include="utils.cpp" />
+    <ClCompile Include="commandline.cpp" />
+    <ClCompile Include="info.cpp" />
+    <ClCompile Include="errormsg.cpp" />
+    <ClCompile Include="shaders.cpp" />
+    <ClCompile Include="memory.cpp" />
+    <ClCompile Include="elf.cpp" />
+    <ClCompile Include="NvTriStrip\NvTriStrip.cpp">
+      <Filter>NvTriStrip</Filter>
+    </ClCompile>
+    <ClCompile Include="NvTriStrip\NvTriStripObjects.cpp">
+      <Filter>NvTriStrip</Filter>
+    </ClCompile>
+    <ClCompile Include="NvTriStrip\VertexCache.cpp">
+      <Filter>NvTriStrip</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="NvTriStrip">
+      <UniqueIdentifier>{e32f25c1-e616-49ee-9131-7ca96662335d}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>
