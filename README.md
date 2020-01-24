@@ -52,3 +52,11 @@ Additional import options:
 `-swapYZ` - swap Y and Z axis
 
 `-forceLighting` - force using shaders for dynamic lighting on models
+
+**Source code dependencies**
+
+* Visual Studio 2017/2019
+
+* MSVC v141_xp toolset
+
+* assimp (Open Asset Import Library) in static library
