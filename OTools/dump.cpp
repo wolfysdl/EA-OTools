@@ -711,7 +711,7 @@ unsigned int WriteVertexBuffer(void *baseObj, string const &name, unsigned char 
     Writer::openScope("VertexBuffer " + name, offset); // TODO: write references
     unsigned int numVertices = GetAt<unsigned int>(baseObj, 28);
     unsigned int vertexSize = GetAt<unsigned int>(baseObj, 8);
-    Writer::writeLine("...");
+    Writer::writeLine(to_string(numVertices) + " vertices (vertex stride " + to_string(vertexSize) + " bytes) [...]");
     Writer::closeScope();
     return numVertices * vertexSize;
 }
@@ -719,9 +719,17 @@ unsigned int WriteVertexBuffer(void *baseObj, string const &name, unsigned char 
 unsigned int WriteIndexBuffer(void *baseObj, string const &name, unsigned char *data, unsigned int offset) {
     Writer::openScope("IndexBuffer " + name, offset); // TODO: write references
     unsigned int numIndices = GetAt<unsigned int>(baseObj, 20);
-    Writer::writeLine("...");
+    Writer::writeLine(to_string(numIndices) + " indices [...]");
     Writer::closeScope();
     return numIndices * 2;
+}
+
+unsigned int WriteBoneWeightsBuffer(void *baseObj, string const &name, unsigned char *data, unsigned int offset) {
+    Writer::openScope("BoneWeightsBuffer " + name, offset); // TODO: write references
+    unsigned int numBoneWeights = GetAt<unsigned int>(baseObj, 0);
+    Writer::writeLine(to_string(numBoneWeights) + " bone weights [...]");
+    Writer::closeScope();
+    return numBoneWeights * 16;
 }
 
 void InitAnalyzer() {
@@ -772,6 +780,7 @@ void InitAnalyzer() {
     GetStructs()["vertexbuffer"] = WriteVertexBuffer;
     GetStructs()["indexbuffer"] = WriteIndexBuffer;
     GetStructs()["texture"] = WriteTexture;
+    GetStructs()["boneweightsbuffer"] = WriteBoneWeightsBuffer;
 
     codeTechniques = {
         { "PlayerIDShader", 9 },
@@ -949,6 +958,9 @@ void AnalyzeFile(string const &filename, unsigned char *fileData, unsigned int f
                                             break;
                                         case 7:
                                             AddObjectInfo("IndexBuffer", Format("IndexBuffer.%X", GetAt<unsigned int>(renderCode, commandOffset + 16)), GetAt<unsigned int>(renderCode, commandOffset + 16), 0, At<void *>(renderCode, commandOffset));
+                                            break;
+                                        case 28:
+                                            AddObjectInfo("BoneWeightsBuffer", Format("BoneWeightsBuffer.%X", GetAt<unsigned int>(globalParameters, 4)), GetAt<unsigned int>(globalParameters, 4), 0, globalParameters);
                                             break;
                                         }
                                         if (numCommands != 0)

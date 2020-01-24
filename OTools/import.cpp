@@ -12,8 +12,6 @@
 #include "shaders.h"
 #include "NvTriStrip/NvTriStrip.h"
 
-const char *IMPORTER_VERSION = "0.100";
-
 struct Vector4D {
     float x = 0.0f;
     float y = 0.0f;
@@ -563,13 +561,17 @@ void oimport(path const &out, path const &in) {
             }
             float alphaCutoff = 0.0f;
             mat->Get(AI_MATKEY_GLTF_ALPHACUTOFF, alphaCutoff);
+            float roughnessFactor = 1.0f;
+            mat->Get(AI_MATKEY_GLTF_PBRMETALLICROUGHNESS_ROUGHNESS_FACTOR, roughnessFactor);
+            float metallicFactor = 0.0f;
+            mat->Get(AI_MATKEY_GLTF_PBRMETALLICROUGHNESS_METALLIC_FACTOR, metallicFactor);
 
             bool hasMatColor = matColor.r != 1 || matColor.g != 1 || matColor.b != 1;
             bool hasMatAlpha = matAlpha != 1;
             bool usesAlphaBlending = blendFunc != 0 || hasMatAlpha || alphaMode == ALPHA_BLEND;
+            bool isMetallic = roughnessFactor <= 0.5f && metallicFactor >= 0.5f;
 
             Tex tex[3];
-            bool texUsed[3] = { false, false, false };
             bool texAlreadyPresent[3] = { false, false, false };
             bool hasDiffuseTex = LoadTextureIntoTexSlot(scene, mat, aiTextureType_DIFFUSE, textures, &texAlreadyPresent[0], &tex[0]);
             bool hasReflectionTex = LoadTextureIntoTexSlot(scene, mat, aiTextureType_REFLECTION, textures, &texAlreadyPresent[1], &tex[1]);
@@ -597,7 +599,7 @@ void oimport(path const &out, path const &in) {
                         shader = FindShader("XFadeScrollTexture");
                     else {
                         if (usesAlphaBlending) {
-                            if (!isUnlit && (hasReflectionTex || hasSpecularTex))
+                            if (!isUnlit && (hasReflectionTex || hasSpecularTex || isMetallic))
                                 shader = FindShader("IrradLitTextureEnvmapTransparent2x");
                             else {
                                 if (blendFunc == aiBlendMode::aiBlendMode_Additive)
@@ -610,7 +612,7 @@ void oimport(path const &out, path const &in) {
                             if (isUnlit)
                                 shader = FindShader("Texture2x");
                             else {
-                                if (hasReflectionTex || hasSpecularTex)
+                                if (hasReflectionTex || hasSpecularTex || isMetallic)
                                     shader = FindShader("LitTextureIrradEnvmap");
                                 else {
                                     if (hasLights)
@@ -632,6 +634,21 @@ void oimport(path const &out, path const &in) {
 
             if (!shader)
                 shader = &Shaders[0];
+
+            if (!hasReflectionTex && !hasSpecularTex &&
+                (shader->nameLowered == "littextureirradenvmap" || shader->nameLowered == "irradlittextureenvmaptransparent2x"))
+            {
+                auto texit = textures.find("spec");
+                if (texit != textures.end()) {
+                    texAlreadyPresent[1] = true;
+                    tex[1] = (*texit).second;
+                }
+                else {
+                    tex[1].name = "spec";
+                    textures["spec"] = tex[1];
+                }
+                hasSpecularTex = true;
+            }
 
             unsigned int numVertices = mesh->mNumVertices;
             unsigned int numIndices = mesh->mNumFaces * 3;
@@ -1258,7 +1275,7 @@ void oimport(path const &out, path const &in) {
     bufSymbols.Put(Elf32_Sym(0, 0, 0, 0x03, 0, 1));
     bufSymbolNames.Put("");
     bufSymbols.Put(Elf32_Sym(bufSymbolNames.Position(), 0, 4, 0x21, 0, 1));
-    bufSymbolNames.Put(string("__OTOOLS_VERSION:::OTOOLS_VERSION-") + IMPORTER_VERSION);
+    bufSymbolNames.Put(string("__OTOOLS_VERSION:::OTOOLS_VERSION-") + OTOOLS_VERSION);
     bufSymbols.Put(Elf32_Sym(bufSymbolNames.Position(), 0, 4, 0x21, 0, 1));
     bufSymbolNames.Put("__EAGL_TOOLLIB_VERSION:::EAGL_TOOLLIB_VERSION-4");
     
@@ -1301,7 +1318,7 @@ void oimport(path const &out, path const &in) {
         timess << std::put_time(&tm, "%d-%b-%Y %H:%M:%S");
         metadata += "<Metadata>";
         metadata += "<Tools>otools</Tools>";
-        metadata += "<ToolsVersion>" + string(IMPORTER_VERSION) + "</ToolsVersion>";
+        metadata += "<ToolsVersion>" + string(OTOOLS_VERSION) + "</ToolsVersion>";
         metadata += "<TimeStamp>" + timess.str() + "</TimeStamp>";
         //metadata += "<Author>" + "</Author>";
         metadata += "<OriginalFileName>" + out.filename().string() + "</OriginalFileName>";
@@ -1312,7 +1329,7 @@ void oimport(path const &out, path const &in) {
     }
 
     string versionMessage = "This file was generated with otools version ";
-    versionMessage += IMPORTER_VERSION;
+    versionMessage += OTOOLS_VERSION;
 
     BinaryBuffer bufElf;
     Elf32_Ehdr header;

@@ -21,10 +21,10 @@ Shader::Shader(char const *_name, unsigned int _numTechniques, std::vector<Verte
         }
     }
     // Validate
-    //if ((_commands.size() % numTechniques) != 0)
-    //    Error("Invalid command buffer in shader " + name);
-    //else if ((_commands.size() / numTechniques) != (globalArguments.size() + 2))
-    //    Error("Invalid argument buffer in shader " + name);
+    if ((_commands.size() % numTechniques) != 0)
+        Error("Invalid command buffer in shader " + name);
+    else if ((_commands.size() / numTechniques) != (globalArguments.size() + 2))
+        Error("Invalid argument buffer in shader " + name);
 }
 
 unsigned int Shader::VertexDeclElement::Size() const {
@@ -1320,7 +1320,7 @@ Shader shaderInfo[] = {
     Shader::IndexData
     }
     },
-    { "Gouraud_Skin", 9, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color1 }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 }, { Shader::UByte4, Shader::BlendIndices }, { Shader::Float4, Shader::BlendWeight } }, {}, {} },
+    //{ "Gouraud_Skin", 9, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color1 }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 }, { Shader::UByte4, Shader::BlendIndices }, { Shader::Float4, Shader::BlendWeight } }, {}, {} },
     { "IrradLitGouraud2x", 3, { { Shader::Float3, Shader::Position }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 } },
     {
     { SETUP_RENDER, { 0, -1 } },
@@ -2237,11 +2237,11 @@ Shader shaderInfo[] = {
     Shader::IndexData
     }
     },
-    { "LitTexture2Alpha2x_Skin", 18, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color1 }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 }, { Shader::Float2, Shader::Texcoord1 }, { Shader::UByte4, Shader::BlendIndices }, { Shader::Float4, Shader::BlendWeight } }, {}, {} },
-    { "LitTexture2Hair_Skin", 18, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color1 }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 }, { Shader::Float2, Shader::Texcoord1 }, { Shader::UByte4, Shader::BlendIndices }, { Shader::Float4, Shader::BlendWeight } }, {}, {} },
-    { "LitTexture2Haircap_Skin", 18, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color1 }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 }, { Shader::Float2, Shader::Texcoord1 }, { Shader::UByte4, Shader::BlendIndices }, { Shader::Float4, Shader::BlendWeight } }, {}, {} },
-    { "LitTexture2IrradSkinSubSurfSpec", 9, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color1 }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 }, { Shader::UByte4, Shader::BlendIndices }, { Shader::Float4, Shader::BlendWeight } }, {}, {} },
-    { "LitTexture2IrradSpecMap_Skin", 17, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color1 }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 }, { Shader::Float2, Shader::Texcoord1 }, { Shader::UByte4, Shader::BlendIndices }, { Shader::Float4, Shader::BlendWeight } }, {}, {} },
+    //{ "LitTexture2Alpha2x_Skin", 18, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color1 }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 }, { Shader::Float2, Shader::Texcoord1 }, { Shader::UByte4, Shader::BlendIndices }, { Shader::Float4, Shader::BlendWeight } }, {}, {} },
+    //{ "LitTexture2Hair_Skin", 18, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color1 }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 }, { Shader::Float2, Shader::Texcoord1 }, { Shader::UByte4, Shader::BlendIndices }, { Shader::Float4, Shader::BlendWeight } }, {}, {} },
+    //{ "LitTexture2Haircap_Skin", 18, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color1 }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 }, { Shader::Float2, Shader::Texcoord1 }, { Shader::UByte4, Shader::BlendIndices }, { Shader::Float4, Shader::BlendWeight } }, {}, {} },
+    //{ "LitTexture2IrradSkinSubSurfSpec", 9, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color1 }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 }, { Shader::UByte4, Shader::BlendIndices }, { Shader::Float4, Shader::BlendWeight } }, {}, {} },
+    //{ "LitTexture2IrradSpecMap_Skin", 17, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color1 }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 }, { Shader::Float2, Shader::Texcoord1 }, { Shader::UByte4, Shader::BlendIndices }, { Shader::Float4, Shader::BlendWeight } }, {}, {} },
     { "LitTexture2x", 9, { { Shader::Float3, Shader::Position }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 } },
     {
     { SETUP_RENDER, { 0, -1 } },
@@ -2454,9 +2454,9 @@ Shader shaderInfo[] = {
     Shader::IndexData
     }
     },
-    { "LitTexture2x_Skin", 9, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color1 }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 }, { Shader::UByte4, Shader::BlendIndices }, { Shader::Float4, Shader::BlendWeight } }, {}, {} },
-    { "LitTexture4Head_Skin", 3, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color1 }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 }, { Shader::Float2, Shader::Texcoord1 }, { Shader::UByte4, Shader::BlendIndices }, { Shader::Float4, Shader::BlendWeight } }, {}, {} },
-    { "LitTextureEye_Skin", 9, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color1 }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 }, { Shader::UByte4, Shader::BlendIndices }, { Shader::Float4, Shader::BlendWeight } }, {}, {} },
+    //{ "LitTexture2x_Skin", 9, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color1 }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 }, { Shader::UByte4, Shader::BlendIndices }, { Shader::Float4, Shader::BlendWeight } }, {}, {} },
+    //{ "LitTexture4Head_Skin", 3, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color1 }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 }, { Shader::Float2, Shader::Texcoord1 }, { Shader::UByte4, Shader::BlendIndices }, { Shader::Float4, Shader::BlendWeight } }, {}, {} },
+    //{ "LitTextureEye_Skin", 9, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color1 }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 }, { Shader::UByte4, Shader::BlendIndices }, { Shader::Float4, Shader::BlendWeight } }, {}, {} },
     { "LitTextureIrradEnvmap", 9, { { Shader::Float3, Shader::Position }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 } },
     {
     { SETUP_RENDER, { 0, -1 } },
@@ -2669,8 +2669,8 @@ Shader shaderInfo[] = {
     Shader::IndexData
     }
     },
-    { "LitTextureIrradSpecMap_Skin", 9, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color1 }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 }, { Shader::UByte4, Shader::BlendIndices }, { Shader::Float4, Shader::BlendWeight } }, {}, {} },
-    { "PitchLitMow", 9, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 }, { Shader::Float2, Shader::Texcoord1 }, { Shader::Float2, Shader::Texcoord2 } }, {}, {} },
+    //{ "LitTextureIrradSpecMap_Skin", 9, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color1 }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 }, { Shader::UByte4, Shader::BlendIndices }, { Shader::Float4, Shader::BlendWeight } }, {}, {} },
+    //{ "PitchLitMow", 9, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 }, { Shader::Float2, Shader::Texcoord1 }, { Shader::Float2, Shader::Texcoord2 } }, {}, {} },
     { "PlanarShadow", 12, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color0 } },
     {
     { SETUP_RENDER, { 0, -1 } },
@@ -2920,8 +2920,8 @@ Shader shaderInfo[] = {
     Shader::IndexData
     }
     },
-    { "PlanarShadow_Skin", 15, { { Shader::Float3, Shader::Position }, { Shader::UByte4, Shader::BlendIndices }, { Shader::D3DColor, Shader::Color0 } }, {}, {} },
-    { "PlayerIDShader", 9, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color1 }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 }, { Shader::UByte4, Shader::BlendIndices }, { Shader::Float4, Shader::BlendWeight } }, {}, {} }
+    //{ "PlanarShadow_Skin", 15, { { Shader::Float3, Shader::Position }, { Shader::UByte4, Shader::BlendIndices }, { Shader::D3DColor, Shader::Color0 } }, {}, {} },
+    //{ "PlayerIDShader", 9, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color1 }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 }, { Shader::UByte4, Shader::BlendIndices }, { Shader::Float4, Shader::BlendWeight } }, {}, {} }
 };
 
 Shader *Shaders = shaderInfo;

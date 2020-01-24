@@ -2,6 +2,8 @@
 #include "commandline.h"
 #include "errormsg.h"
 
+const char *OTOOLS_VERSION = "0.110";
+
 GlobalOptions &options() {
     static GlobalOptions go;
     return go;

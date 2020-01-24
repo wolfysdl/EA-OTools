@@ -310,7 +310,7 @@ class exporter {
         Vector4 weights;
     };
 
-    struct Texture {
+    struct TAR {
         unsigned int unknown1;
         char tag[4];
         unsigned int unknown2;
@@ -324,25 +324,25 @@ class exporter {
         unsigned int unknown7;
     };
 
-    struct Material {
-        unsigned int id = 0;
-        string shader;
-        int textures[3] = { -1, -1, -1 };
-        bool doubleSided = false;
-        string alphaMode;
-        float alphaCutoff = 0.0f;
-    };
-
-    struct TexDesc {
-        unsigned int symbolId;
-        Texture *pTex;
+    struct Texture {
         string name;
         string source;
         string mimeType;
-        unsigned int wrapU = 33071;
-        unsigned int wrapV = 33071;
+        unsigned int wrapU = 10497;
+        unsigned int wrapV = 10497;
         unsigned int minFilter = 9729;
         unsigned int magFilter = 9729;
+    };
+
+    struct Material {
+        unsigned int id = 0;
+        string shader;
+        Texture *textures[3] = { nullptr, nullptr, nullptr };
+        bool doubleSided = true;
+        string alphaMode;
+        float alphaCutoff = 0.0f;
+        float metallicFactor = 0.0f;
+        float roughnessFactor = 1.0f;
     };
 
     struct GeoPrimState {
@@ -506,7 +506,8 @@ public:
         vector<VertexSkinData *> vertexSkinBuffers;
         Matrix4x4 *skinMatrices = nullptr;
         vector<Material> materials;
-        vector<TexDesc> textures;
+        map<string, Texture *> textures;
+        set<string> globalTextures;
 
         for (auto const &s : symbols) {
             if (isSymbolDataPresent(s)) {
@@ -548,7 +549,7 @@ public:
 
         startScope();
         openScope("asset");
-        writeFieldString("generator", "EA Sports .O to Khronos glTF - converter");
+        writeFieldString("generator", string("otools version ") + OTOOLS_VERSION);
         writeFieldString("version", "2.0");
         closeScope();
         writeFieldInt("scene", 0);
@@ -698,6 +699,9 @@ public:
                 closeArray();
             }
             // meshes
+
+            // TODO: embedded textures export (check for embedded textures symbols)
+
             if (model && model->mNumLayers) {
                 openArray("meshes");
                 unsigned int *modelLayers = (unsigned int *)(model->mLayers);
@@ -737,6 +741,9 @@ public:
                             if (codeName.ends_with("__EAGLMicroCode")) {
                                 shaderName = codeName.substr(0, codeName.length() - 15);
                                 mat.shader = shaderName;
+                                string shaderLowered = ToLower(mat.shader);
+                                if (shaderLowered == "cliptextureaddnodepthwrite" || shaderLowered == "cliptexturealphablend" || shaderLowered.find("transparent") != string::npos)
+                                    mat.alphaMode = "BLEND";
                                 shader = shaderInfo[shaderName];
                                 if (shader.numTechniques) {
                                     void *renderCode = GetAt<void *>(renderMethod, 0);
@@ -782,6 +789,8 @@ public:
                                                     geoPrimMode = 5;
                                                 else if (geoPrimState->nPrimitiveType == 6)
                                                     geoPrimMode = 6;
+                                                if (geoPrimState->bCullEnable == 1)
+                                                    mat.doubleSided = false;
                                             }
                                             else {
                                                 it = symbolRelocations.find(unsigned int(At<GeoPrimState *>(globalParameters, 4)) - unsigned int(data));
@@ -803,13 +812,169 @@ public:
                                                         else if (primTypeStr.starts_with("EAGL::PT_TRIANGLEFAN"))
                                                             geoPrimMode = 6;
                                                     }
+
+                                                    auto cullEnablePos = format.rfind("SetCullEnable=");
+                                                    if (cullEnablePos != string::npos) {
+                                                        string cullEnableValue = format.substr(cullEnablePos + 14);
+                                                        if (cullEnableValue == "true")
+                                                            mat.doubleSided = false;
+                                                    }
                                                 }
                                             }
                                             break;
                                         case 9:
                                         case 32:
-                                            if (GetAt<unsigned int>(renderCode, commandOffset + 4) < 3)
-                                                mat.textures[GetAt<unsigned int>(renderCode, commandOffset + 4)] = (unsigned int)At<char *>(globalParameters, 4) - (unsigned int)data;
+                                            {
+                                                unsigned int samplerIndex = GetAt<unsigned int>(renderCode, commandOffset + 4);
+                                                if (samplerIndex < 3) {
+                                                    Texture tex;
+                                                    TAR const *tar = GetAt<TAR *>(globalParameters, 4);
+                                                    FileSymbol const *texSymbol = nullptr;
+                                                    string tarAttributes;
+                                                    bool isGlobal = false;
+                                                    if (tar) { // local texture
+                                                        char texTag[5];
+                                                        CopyMemory(texTag, tar->tag, 4);
+                                                        texTag[4] = '\0';
+                                                        tex.name = texTag;
+                                                    }
+                                                    else { // global or runtime-constructed texture
+                                                        unsigned int tarOffset = unsigned int(At<TAR *>(globalParameters, 4)) - unsigned int(data);
+                                                        auto it = symbolRelocations.find(tarOffset);
+                                                        if (it != symbolRelocations.end()) {
+                                                            auto const &s = (*it).second;
+                                                            texSymbol = &s;
+                                                            if (s.name.length() > 14 && s.name.starts_with("__EAGL::TAR:::")) {
+                                                                tarAttributes = s.name.substr(14);
+                                                                if (!tarAttributes.starts_with("RUNTIME_ALLOC")) {
+                                                                    tex.name = "global_" + tarAttributes;
+                                                                    isGlobal = true;
+                                                                }
+                                                                else {
+                                                                    auto shapenamePos = tarAttributes.find("SHAPENAME=");
+                                                                    if (shapenamePos != string::npos) {
+                                                                        auto semiColonPos = tarAttributes.find_first_of(",;", shapenamePos + 10);
+                                                                        if (semiColonPos != string::npos)
+                                                                            tex.name = tarAttributes.substr(shapenamePos + 10, semiColonPos - shapenamePos - 10);
+                                                                        else
+                                                                            tex.name = tarAttributes.substr(shapenamePos + 10);
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                    Texture *pTex = nullptr;
+                                                    if (!tex.name.empty()) {
+                                                        auto texKey = ToLower(tex.name);
+                                                        if (samplerIndex == 1 && (texKey == "spec")) {
+                                                            mat.roughnessFactor = 0.3f;
+                                                            mat.metallicFactor = 0.5f;
+                                                        }
+                                                        else if (samplerIndex == 0) { // temporary disabled additional texture maps
+                                                            auto txit = textures.find(texKey);
+                                                            if (txit != textures.end())
+                                                                pTex = (*txit).second;
+                                                            else {
+                                                                if (tar) {
+                                                                    if (tar->wrapU == 3 || tar->wrapU == 5)
+                                                                        tex.wrapU = 33071; // CLAMP_TO_EDGE
+                                                                    else if (tar->wrapU == 2)
+                                                                        tex.wrapU = 33648; // MIRRORED_REPEAT
+                                                                    if (tar->wrapV == 3 || tar->wrapV == 5)
+                                                                        tex.wrapV = 33071; // CLAMP_TO_EDGE
+                                                                    else if (tar->wrapV == 2)
+                                                                        tex.wrapV = 33648; // MIRRORED_REPEAT
+                                                                }
+                                                                else if (texSymbol) {
+                                                                    if (!isGlobal && !tarAttributes.empty()) {
+                                                                        bool foundU = false, foundV = false;
+                                                                        {
+                                                                            auto attrPos = tarAttributes.rfind("PCEXTOBJ_SetClampU=");
+                                                                            if (attrPos != string::npos) {
+                                                                                string attr;
+                                                                                auto semiColonPos = tarAttributes.find_first_of(";", attrPos + 19);
+                                                                                if (semiColonPos != string::npos)
+                                                                                    attr = tarAttributes.substr(attrPos + 19, semiColonPos - attrPos - 19);
+                                                                                else
+                                                                                    attr = tarAttributes.substr(attrPos + 19);
+                                                                                if (attr == "EAGL::PCCM_CLAMP" || attr == "EAGL::PCCM_CLAMPTOEDGE")
+                                                                                    tex.wrapU = 33071; // CLAMP_TO_EDGE
+                                                                                else if (attr == "EAGL::PCCM_MIRROR")
+                                                                                    tex.wrapU = 33648; // MIRRORED_REPEAT
+                                                                                foundU = true;
+                                                                            }
+                                                                        }
+                                                                        {
+                                                                            auto attrPos = tarAttributes.rfind("PCEXTOBJ_SetClampV=");
+                                                                            if (attrPos != string::npos) {
+                                                                                string attr;
+                                                                                auto semiColonPos = tarAttributes.find_first_of(";", attrPos + 19);
+                                                                                if (semiColonPos != string::npos)
+                                                                                    attr = tarAttributes.substr(attrPos + 19, semiColonPos - attrPos - 19);
+                                                                                else
+                                                                                    attr = tarAttributes.substr(attrPos + 19);
+                                                                                if (attr == "EAGL::PCCM_CLAMP" || attr == "EAGL::PCCM_CLAMPTOEDGE")
+                                                                                    tex.wrapV = 33071; // CLAMP_TO_EDGE
+                                                                                else if (attr == "EAGL::PCCM_MIRROR")
+                                                                                    tex.wrapV = 33648; // MIRRORED_REPEAT
+                                                                                foundV = true;
+                                                                            }
+                                                                        }
+                                                                        if (!foundU && !foundV) {
+                                                                            auto attrPos = tarAttributes.rfind("SetClampMode=");
+                                                                            if (attrPos != string::npos) {
+                                                                                string attr;
+                                                                                auto semiColonPos = tarAttributes.find_first_of(";", attrPos + 13);
+                                                                                if (semiColonPos != string::npos)
+                                                                                    attr = tarAttributes.substr(attrPos + 13, semiColonPos - attrPos - 13);
+                                                                                else
+                                                                                    attr = tarAttributes.substr(attrPos + 13);
+                                                                                if (attr == "EAGL::CM_CLAMP")
+                                                                                    tex.wrapU = tex.wrapV = 33071; // CLAMP_TO_EDGE
+                                                                                else if (attr == "EAGL::CM_MIRROR")
+                                                                                    tex.wrapU = tex.wrapV = 33648; // MIRRORED_REPEAT
+                                                                            }
+                                                                        }
+                                                                        {
+                                                                            auto attrPos = tarAttributes.rfind("SetFilterMode=");
+                                                                            if (attrPos != string::npos) {
+                                                                                string attr;
+                                                                                auto semiColonPos = tarAttributes.find_first_of(";", attrPos + 14);
+                                                                                if (semiColonPos != string::npos)
+                                                                                    attr = tarAttributes.substr(attrPos + 14, semiColonPos - attrPos - 14);
+                                                                                else
+                                                                                    attr = tarAttributes.substr(attrPos + 14);
+                                                                                if (attr == "EAGL::FM_POINT")
+                                                                                    tex.magFilter = 9728; // NEAREST
+                                                                            }
+                                                                        }
+                                                                        {
+                                                                            auto attrPos = tarAttributes.rfind("SetMIPMAPMode=");
+                                                                            if (attrPos != string::npos) {
+                                                                                string attr;
+                                                                                auto semiColonPos = tarAttributes.find_first_of(";", attrPos + 14);
+                                                                                if (semiColonPos != string::npos)
+                                                                                    attr = tarAttributes.substr(attrPos + 14, semiColonPos - attrPos - 14);
+                                                                                else
+                                                                                    attr = tarAttributes.substr(attrPos + 14);
+                                                                                if (attr == "EAGL::MMM_NEAREST")
+                                                                                    tex.minFilter = 9985; // LINEAR_MIPMAP_NEAREST
+                                                                                else if (attr == "EAGL::MMM_LINEAR")
+                                                                                    tex.minFilter = 9987; // LINEAR_MIPMAP_LINEAR
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                                tex.source = tex.name + (options().jpegTextures ? ".jpeg" : ".png");
+                                                                tex.mimeType = string("image/") + (options().jpegTextures ? "jpeg" : "png");
+                                                                pTex = new Texture(tex);
+                                                                textures[texKey] = pTex;
+                                                            }
+                                                        }
+                                                    }
+                                                    mat.textures[samplerIndex] = pTex;
+                                                }
+                                            }
                                             break;
                                         }
                                         if (numCommands != 0)
@@ -1013,154 +1178,160 @@ public:
                 closeArray();
             }
             
-            if (model && model->mTextures) {
-                void *texDesc = model->mTextures;
-                char const *texName = GetAt<char const *>(texDesc, 0);
-                while (texName) { // TODO: replace with IsValidOffset()
-                    TexDesc t;
-                    t.name = texName;
-                    t.source = t.name + (options().jpegTextures? ".jpeg" : ".png");
-                    t.mimeType = string("image/") + (options().jpegTextures ? "jpeg" : "png");
-                    void **pTexTar = At<void *>(texDesc, 8);
-                    unsigned int tarOffset = unsigned int(pTexTar) - unsigned int(data);
-                    auto it = symbolRelocations.find(tarOffset);
-                    if (it != symbolRelocations.end()) {
-                        auto const &s = (*it).second;
-                        t.symbolId = s.id;
-                    }
-                    Texture *tar = (Texture *)(*pTexTar);
-                    t.pTex = tar;
-                    if (tar) {
-                        //Error(Utils::Format(L"%d %d %d", tar->wrapU, tar->wrapV, tar->wrapW));
-                    }
-                    else {
-                        unsigned int tarOffset = unsigned int(pTexTar) - unsigned int(data);
-                        auto it = symbolRelocations.find(tarOffset);
-                        if (it != symbolRelocations.end()) {
-                            auto const &s = (*it).second;
-                            //Error(s.name);
-                        }
-                    }
-                    textures.push_back(t);
-                    unsigned int texCount = GetAt<unsigned int>(texDesc, 4);
-                    unsigned int texSize = texCount * 4;
-                    unsigned short info = GetAt<unsigned int>(texDesc, 8 + texSize);
-                    if (info == 1)
-                        texDesc = At<void>(texDesc, 12 + texSize);
-                    else
-                        texDesc = At<void>(texDesc, 8 + texSize);
-                    texName = GetAt<char const *>(texDesc, 0);
+            vector<Texture *> vecTextures;
+            if (!textures.empty()) {
+                // samplers
+                openArray("samplers");
+                for (auto const &[k, t] : textures) {
+                    openScope();
+                    writeFieldString("name", t->name);
+                    writeFieldInt("magFilter", t->magFilter);
+                    writeFieldInt("minFilter", t->minFilter);
+                    //if (t->wrapU != 10497)
+                        writeFieldInt("wrapS", t->wrapU);
+                    //if (t->wrapV != 10497)
+                        writeFieldInt("wrapT", t->wrapV);
+                    closeScope();
+                    vecTextures.push_back(t);
                 }
-                if (textures.size() > 0) {
-                    // samplers
-                    openArray("samplers");
-                    for (auto const &t : textures) {
-                        openScope();
-                        writeFieldString("name", t.name);
-                        writeFieldInt("magFilter", t.magFilter);
-                        writeFieldInt("minFilter", t.minFilter);
-                        writeFieldInt("wrapS", t.wrapU);
-                        writeFieldInt("wrapT", t.wrapV);
-                        closeScope();
-                    }
-                    closeArray();
-                    // textures
-                    openArray("textures");
-                    unsigned int i = 0;
-                    for (auto const &t : textures) {
-                        openScope();
-                        writeFieldString("name", t.name);
-                        writeFieldInt("sampler", i);
-                        writeFieldInt("source", i);
-                        closeScope();
-                        i++;
-                    }
-                    closeArray();
-                    // images
-                    openArray("images");
-                    for (auto const &t : textures) {
-                        openScope();
-                        writeFieldString("name", t.name);
-                        writeFieldString("mimeType", t.mimeType);
-                        writeFieldString("uri", t.source);
-                        closeScope();
+                closeArray();
+                // textures
+                openArray("textures");
+                unsigned int i = 0;
+                for (auto const &[k, t] : textures) {
+                    openScope();
+                    writeFieldString("name", t->name);
+                    writeFieldInt("sampler", i);
+                    writeFieldInt("source", i);
+                    closeScope();
+                    i++;
+                }
+                closeArray();
+                // images
+                openArray("images");
+                for (auto const &[k, t] : textures) {
+                    openScope();
+                    writeFieldString("name", t->name);
+                    writeFieldString("mimeType", t->mimeType);
+                    writeFieldString("uri", t->source);
+                    closeScope();
 
-                        if (options().dummyTextures) {
-                            if (!options().jpegTextures) {
-                                static unsigned char pngData[] = {
-                                    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
-                                    0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x04, 0x08, 0x06, 0x00, 0x00, 0x00, 0xA9, 0xF1, 0x9E,
-                                    0x7E, 0x00, 0x00, 0x00, 0x13, 0x49, 0x44, 0x41, 0x54, 0x18, 0x57, 0x63, 0xFC, 0xFF, 0xFF, 0xFF,
-                                    0x7F, 0x06, 0x24, 0xC0, 0x48, 0xBA, 0x00, 0x00, 0x7E, 0x8C, 0x0F, 0xF5, 0xE8, 0x50, 0x94, 0x80,
-                                    0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82
-                                };
-                                static BinaryBuffer pngBuf(std::size(pngData));
-                                static bool pngBufInitialized = false;
-                                if (!pngBufInitialized) {
-                                    pngBuf.Put(pngData, std::size(pngData));
-                                    pngBufInitialized = true;
-                                }
-                                pngBuf.WriteToFile(outPath.parent_path() / t.source);
+                    if (options().dummyTextures) {
+                        if (!options().jpegTextures) {
+                            static unsigned char pngData[] = {
+                                0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+                                0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x04, 0x08, 0x06, 0x00, 0x00, 0x00, 0xA9, 0xF1, 0x9E,
+                                0x7E, 0x00, 0x00, 0x00, 0x13, 0x49, 0x44, 0x41, 0x54, 0x18, 0x57, 0x63, 0xFC, 0xFF, 0xFF, 0xFF,
+                                0x7F, 0x06, 0x24, 0xC0, 0x48, 0xBA, 0x00, 0x00, 0x7E, 0x8C, 0x0F, 0xF5, 0xE8, 0x50, 0x94, 0x80,
+                                0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82
+                            };
+                            static BinaryBuffer pngBuf(std::size(pngData));
+                            static bool pngBufInitialized = false;
+                            if (!pngBufInitialized) {
+                                pngBuf.Put(pngData, std::size(pngData));
+                                pngBufInitialized = true;
                             }
-                            else {
-                                unsigned char jpegData[] = {
-                                    0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01,
-                                    0x00, 0x01, 0x00, 0x00, 0xFF, 0xDB, 0x00, 0x43, 0x00, 0x03, 0x02, 0x02, 0x02, 0x02, 0x02, 0x03,
-                                    0x02, 0x02, 0x02, 0x03, 0x03, 0x03, 0x03, 0x04, 0x06, 0x04, 0x04, 0x04, 0x04, 0x04, 0x08, 0x06,
-                                    0x06, 0x05, 0x06, 0x09, 0x08, 0x0A, 0x0A, 0x09, 0x08, 0x09, 0x09, 0x0A, 0x0C, 0x0F, 0x0C, 0x0A,
-                                    0x0B, 0x0E, 0x0B, 0x09, 0x09, 0x0D, 0x11, 0x0D, 0x0E, 0x0F, 0x10, 0x10, 0x11, 0x10, 0x0A, 0x0C,
-                                    0x12, 0x13, 0x12, 0x10, 0x13, 0x0F, 0x10, 0x10, 0x10, 0xFF, 0xC0, 0x00, 0x0B, 0x08, 0x00, 0x04,
-                                    0x00, 0x04, 0x01, 0x01, 0x11, 0x00, 0xFF, 0xC4, 0x00, 0x14, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
-                                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x09, 0xFF, 0xC4, 0x00, 0x14,
-                                    0x10, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                                    0x00, 0x00, 0xFF, 0xDA, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3F, 0x00, 0x54, 0xDF, 0xFF, 0xD9
-                                };
-                                static BinaryBuffer jpegBuf(std::size(jpegData));
-                                static bool jpegBufInitialized = false;
-                                if (!jpegBufInitialized) {
-                                    jpegBuf.Put(jpegData, std::size(jpegData));
-                                    jpegBufInitialized = true;
-                                }
-                                jpegBuf.WriteToFile(outPath.parent_path() / t.source);
+                            pngBuf.WriteToFile(outPath.parent_path() / t->source);
+                        }
+                        else {
+                            unsigned char jpegData[] = {
+                                0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01,
+                                0x00, 0x01, 0x00, 0x00, 0xFF, 0xDB, 0x00, 0x43, 0x00, 0x03, 0x02, 0x02, 0x02, 0x02, 0x02, 0x03,
+                                0x02, 0x02, 0x02, 0x03, 0x03, 0x03, 0x03, 0x04, 0x06, 0x04, 0x04, 0x04, 0x04, 0x04, 0x08, 0x06,
+                                0x06, 0x05, 0x06, 0x09, 0x08, 0x0A, 0x0A, 0x09, 0x08, 0x09, 0x09, 0x0A, 0x0C, 0x0F, 0x0C, 0x0A,
+                                0x0B, 0x0E, 0x0B, 0x09, 0x09, 0x0D, 0x11, 0x0D, 0x0E, 0x0F, 0x10, 0x10, 0x11, 0x10, 0x0A, 0x0C,
+                                0x12, 0x13, 0x12, 0x10, 0x13, 0x0F, 0x10, 0x10, 0x10, 0xFF, 0xC0, 0x00, 0x0B, 0x08, 0x00, 0x04,
+                                0x00, 0x04, 0x01, 0x01, 0x11, 0x00, 0xFF, 0xC4, 0x00, 0x14, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
+                                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x09, 0xFF, 0xC4, 0x00, 0x14,
+                                0x10, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                                0x00, 0x00, 0xFF, 0xDA, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3F, 0x00, 0x54, 0xDF, 0xFF, 0xD9
+                            };
+                            static BinaryBuffer jpegBuf(std::size(jpegData));
+                            static bool jpegBufInitialized = false;
+                            if (!jpegBufInitialized) {
+                                jpegBuf.Put(jpegData, std::size(jpegData));
+                                jpegBufInitialized = true;
                             }
+                            jpegBuf.WriteToFile(outPath.parent_path() / t->source);
                         }
                     }
-                    closeArray();
                 }
+                closeArray();
             }
             // materials
+            bool hasSpecOrEnvMap = false;
             if (!materials.empty()) {
                 openArray("materials");
                 for (unsigned int i = 0; i < materials.size(); i++) {
                     openScope();
-                    writeFieldString("name", string("material") + Format("%02d", materials[i].id) + "[" + materials[i].shader + "]");
-                    writeFieldBool("doubleSided", true);
+                    writeFieldString("name", string("material") + Format("%02d", materials[i].id) + " [" + materials[i].shader + "]");
+                    if (materials[i].doubleSided)
+                        writeFieldBool("doubleSided", true);
+                    if (!materials[i].alphaMode.empty())
+                        writeFieldString("alphaMode", "BLEND");
                     openScope("pbrMetallicRoughness");
-                    if (materials[i].textures[0] != -1) {
-                        int symbolId = -1;
-                        auto it = symbolRelocations.find(materials[i].textures[0]);
-                        if (it != symbolRelocations.end())
-                            symbolId = (*it).second.id;
-                        Texture *pTex = GetAt<Texture *>(data, materials[i].textures[0]);
-                        int texId = -1;
-                        for (unsigned int t = 0; t < textures.size(); t++) {
-                            if (textures[t].symbolId == symbolId && textures[t].pTex == pTex) {
-                                texId = t;
-                                break;
+                    writeFieldFloat("metallicFactor", materials[i].metallicFactor);
+                    writeFieldFloat("roughnessFactor", materials[i].roughnessFactor);
+                    if (!options().noTextures) {
+                        int diffuseTexId = -1, specTexId = -1;
+                        if (materials[i].textures[0]) {
+                            for (unsigned int ti = 0; ti < vecTextures.size(); ti++) {
+                                if (materials[i].textures[0] == vecTextures[ti]) {
+                                    diffuseTexId = ti;
+                                    break;
+                                }
                             }
                         }
-                        if (texId != -1 && !options().noTextures) {
-                            openScope("baseColorTexture");
-                            writeFieldInt("index", texId);
+                        if (materials[i].textures[1]) {
+                            for (unsigned int ti = 0; ti < vecTextures.size(); ti++) {
+                                if (materials[i].textures[1] == vecTextures[ti]) {
+                                    specTexId = ti;
+                                    break;
+                                }
+                            }
+                        }
+                        if (specTexId != -1) {
+                            closeScope();
+                            openScope("extensions");
+                            openScope("KHR_materials_pbrSpecularGlossiness");
+                            if (diffuseTexId != -1) {
+                                openScope("diffuseTexture");
+                                writeFieldInt("index", diffuseTexId);
+                                //writeFieldInt("texCoord", 0);
+                                closeScope();
+                            }
+                            openScope("specularGlossinessTexture");
+                            writeFieldInt("index", specTexId);
                             //writeFieldInt("texCoord", 0);
                             closeScope();
+                            closeScope();
+                            closeScope();
+                            if (!hasSpecOrEnvMap)
+                                hasSpecOrEnvMap = true;
                         }
+                        else if (diffuseTexId != -1) {
+                            openScope("baseColorTexture");
+                            writeFieldInt("index", diffuseTexId);
+                            //writeFieldInt("texCoord", 0);
+                            closeScope();
+                            closeScope();
+                        }
+                        else
+                            closeScope();
                     }
-                    writeFieldFloat("metallicFactor", 0.0f);
-                    writeFieldFloat("roughnessFactor", 1.0f);
-                    closeScope();
+                    else
+                        closeScope();
                     closeScope();
                 }
+                closeArray();
+            }
+            // extensions
+            if (hasSpecOrEnvMap) {
+                openArray("extensionsUsed");
+                writeValueString("KHR_materials_pbrSpecularGlossiness");
+                closeArray();
+                openArray("extensionsRequired");
+                writeValueString("KHR_materials_pbrSpecularGlossiness");
                 closeArray();
             }
             // accessors

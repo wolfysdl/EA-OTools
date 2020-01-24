@@ -38,6 +38,8 @@ struct GlobalVars {
 
 GlobalVars &globalVars();
 
+extern const char *OTOOLS_VERSION;
+
 void odump(path const &out, path const &in);
 void oexport(path const &out, path const &in);
 void oimport(path const &out, path const &in);
