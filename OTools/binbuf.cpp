@@ -1,5 +1,6 @@
 #include "binbuf.h"
 #include "memory.h"
+#include "utils.h"
 
 void BinaryBuffer::PutData(void const *data, unsigned int size) {
     if (size > 0) {
@@ -9,13 +10,15 @@ void BinaryBuffer::PutData(void const *data, unsigned int size) {
             if (requiredSize > newCapacity)
                 newCapacity = requiredSize;
             unsigned char *newData = new unsigned char[newCapacity];
-            CopyMemory(newData, mData, mCapacity);
+            if (!newData)
+                throw std::runtime_error("Unable to allocate memory for BinaryBuffer");
+            Memory_Copy(newData, mData, mCapacity);
             delete[] mData;
             mData = newData;
             mCapacity = newCapacity;
             mCurrent = mData + mSize;
         }
-        CopyMemory(mCurrent, data, size);
+        Memory_Copy(mCurrent, data, size);
         mCurrent += size;
         if (mCurrent > (mData + mSize))
             mSize = mCurrent - mData;
@@ -46,6 +49,10 @@ unsigned int BinaryBuffer::Position() const {
 
 unsigned int BinaryBuffer::Size() const {
     return mSize;
+}
+
+unsigned int BinaryBuffer::Capacity() const {
+    return mCapacity;
 }
 
 unsigned char *BinaryBuffer::Data() const {

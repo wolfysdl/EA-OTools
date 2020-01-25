@@ -11,6 +11,7 @@
 #include "binbuf.h"
 #include "shaders.h"
 #include "NvTriStrip/NvTriStrip.h"
+#include "Fsh\Fsh.h"
 
 struct Vector4D {
     float x = 0.0f;
@@ -95,6 +96,7 @@ struct Tex {
     MipMapMode mipMapMode = Linear;
     unsigned int offset = 0;
     bool isGlobal = false;
+    string filepath;
 
     Tex() {
         name = "----";
@@ -265,7 +267,7 @@ struct Modifiables {
     template<typename T>
     GlobalArg GetArg(string const &name, BinaryBuffer &buf, T const &obj, bool putZero = false, bool align = false, string const &_layerName = string()) {
         vector<unsigned char> newVec(sizeof(T));
-        CopyMemory(&newVec[0], &obj, sizeof(T));
+        Memory_Copy(&newVec[0], &obj, sizeof(T));
         bool isPresent = false;
         unsigned int offset = 0;
         for (auto const &m : vec) {
@@ -355,6 +357,18 @@ struct IrradLight {
     }
 };
 
+unsigned int FshHash (string const &name) {
+    unsigned int hash = 0;
+    for (unsigned char c : name) {
+        if (c < 'A' || c > 'Z')
+            c = c - 97;
+        else
+            c = c - 65;
+        hash = c + 32 * hash;
+    }
+    return hash;
+};
+
 bool IsRootNode(aiNode *node) {
     string nodeName = node->mName.C_Str();
     return nodeName == "<3DSRoot>" ||
@@ -401,17 +415,37 @@ unsigned int SamplerIndex(unsigned int argType) {
     return 0;
 }
 
-bool LoadTextureIntoTexSlot(aiScene const *scene, aiMaterial const *mat, aiTextureType texType, map<string, Tex> &texMap, bool *texPresentFlag, Tex *slot) {
+struct TexNameGenerator {
+    map<string, string> texNames;
+    string texNameFormat;
+
+    void SetTexNameFormat(string const &format) {
+        texNameFormat = format;
+    }
+
+    string GenerateName(string const &originalName) {
+        string nameKey = ToLower(originalName);
+        auto it = texNames.find(nameKey);
+        if (it != texNames.end())
+            return (*it).second;
+        string newTexName = Format(texNameFormat, texNames.size());
+        texNames[nameKey] = newTexName;
+        return newTexName;
+    }
+};
+
+bool LoadTextureIntoTexSlot(aiScene const *scene, aiMaterial const *mat, aiTextureType texType, map<string, Tex> &texMap, bool *texPresentFlag, Tex *slot, TexNameGenerator &texNameGen) {
     auto texCount = mat->GetTextureCount(texType);
     if (texCount > 0) {
         aiString texPath;
         aiTextureMapMode mapMode = aiTextureMapMode_Wrap;
         mat->GetTexture(texType, 0, &texPath, nullptr, nullptr, nullptr, nullptr, &mapMode);
-        string texFileName;
+        path texFilePath;
         if (auto texture = scene->GetEmbeddedTexture(texPath.C_Str()))
-            texFileName = path(texture->mFilename.C_Str()).stem().string();
+            texFilePath = texture->mFilename.C_Str();
         else
-            texFileName = path(texPath.C_Str()).stem().string();
+            texFilePath = texPath.C_Str();
+        string texFileName = texFilePath.stem().string();
         if (!texFileName.empty()) {
             string texFileNameLowered = ToLower(texFileName);
             if (texFileNameLowered.starts_with("global_")) {
@@ -423,6 +457,8 @@ bool LoadTextureIntoTexSlot(aiScene const *scene, aiMaterial const *mat, aiTextu
                 slot->name = globalTexName;
             }
             else {
+                if (options().genTexNames)
+                    texFileName = texNameGen.GenerateName(texFileName);
                 if (texFileName.length() > 4)
                     texFileName = texFileName.substr(0, 4);
                 string texId = ToLower(texFileName);
@@ -433,6 +469,7 @@ bool LoadTextureIntoTexSlot(aiScene const *scene, aiMaterial const *mat, aiTextu
                 }
                 else {
                     slot->name = texFileName;
+                    slot->filepath = texFilePath.string();
                     slot->SetUVAddressingMode(mapMode);
                     texMap[texId] = *slot;
                 }
@@ -446,7 +483,7 @@ bool LoadTextureIntoTexSlot(aiScene const *scene, aiMaterial const *mat, aiTextu
 void oimport(path const &out, path const &in) {
     Assimp::Importer importer;
     importer.SetPropertyInteger(AI_CONFIG_PP_SBP_REMOVE, aiPrimitiveType_POINT | aiPrimitiveType_LINE);
-    unsigned int sceneLoadingFlags = aiProcess_Triangulate | aiProcess_GenSmoothNormals | aiProcess_SplitLargeMeshes;
+    unsigned int sceneLoadingFlags = aiProcess_Triangulate | aiProcess_GenSmoothNormals | aiProcess_SplitLargeMeshes | aiProcess_SortByPType;
     if (!options().swapYZ)
         sceneLoadingFlags |= aiProcess_FlipUVs;
     const aiScene *scene = importer.ReadFile(in.string(), sceneLoadingFlags);
@@ -485,6 +522,19 @@ void oimport(path const &out, path const &in) {
     unsigned short computationIndex = 2;
     vector<Node> nodes;
     map<string, Tex> textures;
+    TexNameGenerator texNamesGen;
+
+    if (options().genTexNames) {
+        auto potentialTexCount = scene->mNumMaterials * 2;
+        if (potentialTexCount < 10)
+            texNamesGen.SetTexNameFormat("tex%1d");
+        else if (potentialTexCount < 100)
+            texNamesGen.SetTexNameFormat("tx%02d");
+        else if (potentialTexCount < 1000)
+            texNamesGen.SetTexNameFormat("t%03d");
+        else
+            texNamesGen.SetTexNameFormat("%04d");
+    }
 
     if (IsRootNode(scene->mRootNode)) {
         for (unsigned int c = 0; c < scene->mRootNode->mNumChildren; c++) {
@@ -573,11 +623,11 @@ void oimport(path const &out, path const &in) {
 
             Tex tex[3];
             bool texAlreadyPresent[3] = { false, false, false };
-            bool hasDiffuseTex = LoadTextureIntoTexSlot(scene, mat, aiTextureType_DIFFUSE, textures, &texAlreadyPresent[0], &tex[0]);
-            bool hasReflectionTex = LoadTextureIntoTexSlot(scene, mat, aiTextureType_REFLECTION, textures, &texAlreadyPresent[1], &tex[1]);
+            bool hasDiffuseTex = LoadTextureIntoTexSlot(scene, mat, aiTextureType_DIFFUSE, textures, &texAlreadyPresent[0], &tex[0], texNamesGen);
+            bool hasReflectionTex = LoadTextureIntoTexSlot(scene, mat, aiTextureType_REFLECTION, textures, &texAlreadyPresent[1], &tex[1], texNamesGen);
             bool hasSpecularTex = false;
             if (!hasReflectionTex)
-                hasSpecularTex = LoadTextureIntoTexSlot(scene, mat, aiTextureType_SPECULAR, textures, &texAlreadyPresent[1], &tex[1]);
+                hasSpecularTex = LoadTextureIntoTexSlot(scene, mat, aiTextureType_SPECULAR, textures, &texAlreadyPresent[1], &tex[1], texNamesGen);
 
             bool usesCustomShaderName = false;
             if (!matName.empty()) {
@@ -660,9 +710,9 @@ void oimport(path const &out, path const &in) {
             unsigned int vertexBufferOffset = 0;
             unsigned int indexBufferOffset = 0;
             unsigned char *vertexBuffer = new unsigned char[vertexBufferSize];
-            ZeroMemory(vertexBuffer, vertexBufferSize);
+            Memory_Zero(vertexBuffer, vertexBufferSize);
             unsigned short *indexBuffer = new unsigned short[numIndices];
-            ZeroMemory(indexBuffer, indexBufferSize);
+            Memory_Zero(indexBuffer, indexBufferSize);
             unsigned int numColors = mesh->GetNumColorChannels();
             unsigned int numTexCoords = mesh->GetNumUVChannels();
 
@@ -694,7 +744,7 @@ void oimport(path const &out, path const &in) {
                             aiVector3D vecPos = mesh->mVertices[v];
                             if (flipAxis)
                                 swap(vecPos.y, vecPos.z);
-                            CopyMemory(&vertexBuffer[vertexOffset], &vecPos, 12);
+                            Memory_Copy(&vertexBuffer[vertexOffset], &vecPos, 12);
                             ProcessBoundBox(n.boundMin, n.boundMax, n.anyVertexProcessed, vecPos);
                         }
                         break;
@@ -703,14 +753,14 @@ void oimport(path const &out, path const &in) {
                             aiVector3D vecNormal = mesh->mNormals[v];
                             if (flipAxis)
                                 swap(vecNormal.y, vecNormal.z);
-                            CopyMemory(&vertexBuffer[vertexOffset], &vecNormal, 12);
+                            Memory_Copy(&vertexBuffer[vertexOffset], &vecNormal, 12);
                         }
                         break;
                     case Shader::Color0:
-                        {
+                        if (d.type == Shader::D3DColor || d.type == Shader::UByte4) {
                             aiColor4D vertexColor;
-                            if ((d.type == Shader::D3DColor || d.type == Shader::UByte4) && numColors > 0 && mesh->mColors[0]) {
-                                aiColor4D vertexColor = mesh->mColors[0][v];
+                            if (numColors > 0 && mesh->HasVertexColors(0) && mesh->mColors[0]) {
+                                vertexColor = mesh->mColors[0][v];
                                 if (options().vColScale != 0.0f) {
                                     vertexColor.r *= options().vColScale;
                                     vertexColor.g *= options().vColScale;
@@ -732,8 +782,8 @@ void oimport(path const &out, path const &in) {
                                 vertexColor.a *= matAlpha;
                             unsigned char rgba[4];
                             for (unsigned int clr = 0; clr < 4; clr++)
-                                rgba[clr] = unsigned char(mesh->mColors[0][v][clr] * 255);
-                            CopyMemory(&vertexBuffer[vertexOffset], rgba, 4);
+                                rgba[clr] = unsigned char(vertexColor[clr] * 255);
+                            Memory_Copy(&vertexBuffer[vertexOffset], rgba, 4);
                         }
                         break;
                     case Shader::Color1:
@@ -741,15 +791,15 @@ void oimport(path const &out, path const &in) {
                         break;
                     case Shader::Texcoord0:
                         if (d.type == Shader::Float2 && numTexCoords > 0 && mesh->mTextureCoords[0])
-                            CopyMemory(&vertexBuffer[vertexOffset], &mesh->mTextureCoords[0][v], 8);
+                            Memory_Copy(&vertexBuffer[vertexOffset], &mesh->mTextureCoords[0][v], 8);
                         break;
                     case Shader::Texcoord1:
                         if (d.type == Shader::Float2 && numTexCoords > 1 && mesh->mTextureCoords[1])
-                            CopyMemory(&vertexBuffer[vertexOffset], &mesh->mTextureCoords[1][v], 8);
+                            Memory_Copy(&vertexBuffer[vertexOffset], &mesh->mTextureCoords[1][v], 8);
                         break;
                     case Shader::Texcoord2:
                         if (d.type == Shader::Float2 && numTexCoords > 2 && mesh->mTextureCoords[2])
-                            CopyMemory(&vertexBuffer[vertexOffset], &mesh->mTextureCoords[2][v], 8);
+                            Memory_Copy(&vertexBuffer[vertexOffset], &mesh->mTextureCoords[2][v], 8);
                         break;
                     case Shader::BlendIndices:
                         // TODO
@@ -1024,6 +1074,7 @@ void oimport(path const &out, path const &in) {
         nodeCounter++;
     }
     // BBOX
+    //Error("%d %d", bufData.Position(), bufData.Capacity());
     bufData.Align(16);
     symbols.emplace_back("__BBOX:::" + modelName + ".tagged", bufData.Position());
     aiVector3D boundMin = { 0.0f, 0.0f, 0.0f };
@@ -1072,7 +1123,6 @@ void oimport(path const &out, path const &in) {
         relocations[""].push_back(bufData.Position());
         bufData.Put(ln);
     }
-
     vector<unsigned int> modifiablesNameOffsets;
     if (!modifiables.vec.empty()) {
         for (auto &m : modifiables.vec)
@@ -1333,10 +1383,10 @@ void oimport(path const &out, path const &in) {
 
     BinaryBuffer bufElf;
     Elf32_Ehdr header;
-    ZeroMemory(header);
+    Memory_Zero(header);
     static unsigned char elfSig[] = { 0x7F, 0x45, 0x4C, 0x46, 0x01, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
     unsigned int headerBlockSize = GetAligned(sizeof(Elf32_Ehdr), 16);
-    CopyMemory(&header.e_ident, elfSig, sizeof(elfSig));
+    Memory_Copy(&header.e_ident, elfSig, sizeof(elfSig));
     header.e_type = ET_REL;
     header.e_machine = EM_MIPS;
     header.e_version = EV_CURRENT;
@@ -1379,4 +1429,65 @@ void oimport(path const &out, path const &in) {
     if (!options().noMetadata)
         bufElf.Put(Elf32_Shdr(sectionNamesOffets[6], SHT_PROGBITS, 0, 0, sectionOffsets[6], bufMetadata.Size(), 0, 0, 1, 0));
     bufElf.WriteToFile(out);
+
+    if (options().writeFsh) {
+        path fshFilePath;
+        if (!options().fshOutput.empty()) {
+            if (options().processingFolders)
+                fshFilePath = path(options().fshOutput) / (out.stem().string() + ".fsh");
+            else
+                fshFilePath = options().fshOutput;
+        }
+        else {
+            fshFilePath = out;
+            fshFilePath.replace_extension(".fsh");
+        }
+        path fshDir = fshFilePath.parent_path();
+        string fshFileName = fshFilePath.filename().string();
+        path modelDir = in.parent_path();
+        if (!fshDir.empty())
+            create_directories(fshDir);
+        ea::Fsh fsh;
+        ea::Buffer metalBinData;
+        metalBinData.Allocate(64);
+        memset(metalBinData.GetData(), 0, metalBinData.GetSize());
+        strcpy((char *)metalBinData.GetData(), "EAGL64 metal bin attachment for runtime texture management");
+        path inDir = in.parent_path();
+        for (auto const &[k, img] : textures) {
+            path imgPath = img.filepath;
+            if (!exists(imgPath))
+                imgPath = inDir / imgPath;
+            if (exists(imgPath)) {
+                auto &image = fsh.AddImage();
+                image.ReadFromFile(imgPath, options().fshFormat, options().fshLevels, options().fshRescale);
+                ea::FshPixelData *pixelsData = image.FindFirstData(ea::FshData::PIXELDATA)->As<ea::FshPixelData>();
+                image.AddData(new ea::FshMetalBin(metalBinData, 0x10));
+                image.SetTag(img.name);
+                image.AddData(new ea::FshName(img.name));
+                char comment[256];
+                static char idStr[260];
+                sprintf_s(idStr, "0x%.8x", FshHash(fshFileName) + FshHash(img.name));
+                sprintf_s(comment, "TXLY,%s,1,%d,%d,%d,%s", image.GetTag().c_str(), pixelsData->GetNumMipLevels() > 0 ? 1 : 0,
+                    pixelsData->GetWidth(), pixelsData->GetHeight(), idStr);
+                image.AddData(new ea::FshComment(comment));
+            }
+        }
+        fsh.ForAllImages([&](ea::FshImage &image) {
+            auto hotSpot = image.AddData(new ea::FshHotSpot())->As<ea::FshHotSpot>();
+            fsh.ForAllImages([&](ea::FshImage &image2) {
+                char fourcc[4] = { 0, 0, 0, 0 };
+                auto tag = image2.GetTag();
+                for (unsigned int i = 0; i < 4; i++) {
+                    if (tag.size() > i)
+                        fourcc[i] = tag[i];
+                }
+                std::swap(fourcc[0], fourcc[3]);
+                std::swap(fourcc[1], fourcc[2]);
+                hotSpot->Regions().push_back(ea::FshHotSpot::Region(*((unsigned int *)fourcc), 0, 0,
+                    image2.FindFirstData(ea::FshData::PIXELDATA)->As<ea::FshPixelData>()->GetWidth(),
+                    image2.FindFirstData(ea::FshData::PIXELDATA)->As<ea::FshPixelData>()->GetHeight()));
+            });
+        });
+        fsh.Write(fshFilePath);
+    }
 }

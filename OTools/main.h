@@ -13,6 +13,7 @@ using namespace std;
 using namespace std::filesystem;
 
 struct GlobalOptions {
+    bool processingFolders = false;
     // import options
     bool tristrip = false;
     bool embeddedTextures = false;
@@ -22,6 +23,12 @@ struct GlobalOptions {
     aiColor4D defaultVCol = { 0.5f, 0.5f, 0.5f, 1.0f };
     bool hasDefaultVCol = false;
     float vColScale = 0.0f;
+    bool genTexNames = false;
+    bool writeFsh = false;
+    string fshOutput;
+    int fshLevels = 0;
+    unsigned int fshFormat = 0;
+    bool fshRescale = false;
     // export options
     bool noTextures = false;
     bool dummyTextures = false;

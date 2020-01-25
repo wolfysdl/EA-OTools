@@ -669,7 +669,7 @@ public:
                         //D3DXMatrixInverse(&skinMatrices[m], NULL, unkMat);
                         //D3DXMATRIX tmpMat;
                         //D3DXMatrixInverse(&tmpMat, NULL, &skinMatrices[m]);
-                        CopyMemory(&skinMatrices[m], unkMat, 64);
+                        Memory_Copy(&skinMatrices[m], unkMat, 64);
                     }
                     a.buffer = buffers.size();
                     a.componentType = 5126;
@@ -834,7 +834,7 @@ public:
                                                     bool isGlobal = false;
                                                     if (tar) { // local texture
                                                         char texTag[5];
-                                                        CopyMemory(texTag, tar->tag, 4);
+                                                        Memory_Copy(texTag, tar->tag, 4);
                                                         texTag[4] = '\0';
                                                         tex.name = texTag;
                                                     }
@@ -1123,7 +1123,7 @@ public:
                             if (uses2Streams) {
                                 Buffer b2;
                                 VertexSkinData *vsb = new VertexSkinData[numVertices];
-                                ZeroMemory(vsb, numVertices * sizeof(VertexSkinData));
+                                Memory_Zero(vsb, numVertices * sizeof(VertexSkinData));
                                 b2.data = vsb;
                                 if (color1Offset != -1) {
                                     for (unsigned int v = 0; v < numVertices; v++) {
@@ -1394,6 +1394,8 @@ public:
         for (auto const &v : vertexSkinBuffers)
             delete[] v;
         delete[] skinMatrices;
+        for (auto const &e : textures)
+            delete e.second;
 
         ofstream w(outPath, ios::out);
         if (w.is_open())

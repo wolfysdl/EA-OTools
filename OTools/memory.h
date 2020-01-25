@@ -17,11 +17,11 @@ void SetAt(void *object, unsigned int offset, T const &value) {
 
 unsigned int GetNumBytesToAlign(unsigned int offset, unsigned int alignment);
 unsigned int GetAligned(unsigned int offset, unsigned int alignment);
-void FillMemory(void *dst, int val, size_t size);
-void ZeroMemory(void *dst, size_t size);
-void CopyMemory(void *dst, void const *src, size_t size);
+void Memory_Fill(void *dst, int val, size_t size);
+void Memory_Zero(void *dst, size_t size);
+void Memory_Copy(void *dst, void const *src, size_t size);
 
 template<typename T>
-void ZeroMemory(T &obj) {
-    ZeroMemory(&obj, sizeof(T));
+void Memory_Zero(T &obj) {
+    Memory_Zero(&obj, sizeof(T));
 }

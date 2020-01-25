@@ -17,6 +17,7 @@ public:
     ~BinaryBuffer();
     unsigned int Position() const;
     unsigned int Size() const;
+    unsigned int Capacity() const;
     unsigned char *Data() const;
     void MoveTo(unsigned int position);
     void Put(std::string const &str);

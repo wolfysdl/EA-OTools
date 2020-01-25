@@ -4,7 +4,7 @@
 Elf32_Shdr::Elf32_Shdr() {}
 
 Elf32_Shdr::Elf32_Shdr(Elf32_Word name, Elf32_Word type, Elf32_Word flags, Elf32_Addr addr, Elf32_Off offset, Elf32_Word size, Elf32_Word link, Elf32_Word info, Elf32_Word addralign, Elf32_Word entsize) {
-    ZeroMemory(*this);
+    Memory_Zero(*this);
     sh_name = name;
     sh_type = type;
     sh_flags = flags;
@@ -20,7 +20,7 @@ Elf32_Shdr::Elf32_Shdr(Elf32_Word name, Elf32_Word type, Elf32_Word flags, Elf32
 Elf32_Sym::Elf32_Sym() {}
 
 Elf32_Sym::Elf32_Sym(Elf32_Word name, Elf32_Addr value, Elf32_Word size, unsigned char info, unsigned char other, Elf32_Half shndx) {
-    ZeroMemory(*this);
+    Memory_Zero(*this);
     st_name = name;
     st_value = value;
     st_size = size;
@@ -32,7 +32,7 @@ Elf32_Sym::Elf32_Sym(Elf32_Word name, Elf32_Addr value, Elf32_Word size, unsigne
 Elf32_Rel::Elf32_Rel() {}
 
 Elf32_Rel::Elf32_Rel(Elf32_Addr offset, unsigned int info_type, unsigned int info_sym) {
-    ZeroMemory(*this);
+    Memory_Zero(*this);
     r_offset = offset;
     r_info_type = info_type;
     r_info_sym = info_sym;

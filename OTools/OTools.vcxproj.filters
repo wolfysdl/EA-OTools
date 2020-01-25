@@ -18,6 +18,21 @@
     <ClInclude Include="NvTriStrip\VertexCache.h">
       <Filter>NvTriStrip</Filter>
     </ClInclude>
+    <ClInclude Include="Fsh\Buffer.h">
+      <Filter>Fsh</Filter>
+    </ClInclude>
+    <ClInclude Include="Fsh\D3DDevice.h">
+      <Filter>Fsh</Filter>
+    </ClInclude>
+    <ClInclude Include="Fsh\Exception.h">
+      <Filter>Fsh</Filter>
+    </ClInclude>
+    <ClInclude Include="Fsh\File.h">
+      <Filter>Fsh</Filter>
+    </ClInclude>
+    <ClInclude Include="Fsh\Fsh.h">
+      <Filter>Fsh</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dump.cpp" />
@@ -41,10 +56,28 @@
     <ClCompile Include="NvTriStrip\VertexCache.cpp">
       <Filter>NvTriStrip</Filter>
     </ClCompile>
+    <ClCompile Include="Fsh\Buffer.cpp">
+      <Filter>Fsh</Filter>
+    </ClCompile>
+    <ClCompile Include="Fsh\D3DDevice.cpp">
+      <Filter>Fsh</Filter>
+    </ClCompile>
+    <ClCompile Include="Fsh\Exception.cpp">
+      <Filter>Fsh</Filter>
+    </ClCompile>
+    <ClCompile Include="Fsh\File.cpp">
+      <Filter>Fsh</Filter>
+    </ClCompile>
+    <ClCompile Include="Fsh\Fsh.cpp">
+      <Filter>Fsh</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="NvTriStrip">
       <UniqueIdentifier>{e32f25c1-e616-49ee-9131-7ca96662335d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Fsh">
+      <UniqueIdentifier>{0171eb76-e521-43da-be96-b9fe64cda9cc}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
 </Project>
