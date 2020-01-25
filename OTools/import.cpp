@@ -379,10 +379,17 @@ bool IsRootNode(aiNode *node) {
 }
 
 bool ShouldIgnoreThisNode(aiNode *node) {
-    if (!node->mNumMeshes)
-        return true;
     auto l = ToLower(node->mName.C_Str());
     return l.find("[ignore]") != string::npos;
+}
+
+void NodeAddCallback(aiNode *node, vector<Node> &nodes, bool isRoot = false) {
+    if (!isRoot && !ShouldIgnoreThisNode(node)) {
+        if (node->mNumMeshes)
+            nodes.emplace_back(node);
+    }
+    for (unsigned int c = 0; c < node->mNumChildren; c++)
+        NodeAddCallback(node->mChildren[c], nodes);
 }
 
 void ProcessBoundBox(aiVector3D &boundMin, aiVector3D &boundMax, bool &anyVertexProcessed, aiVector3D const &pos) {
@@ -489,6 +496,8 @@ void oimport(path const &out, path const &in) {
     unsigned int sceneLoadingFlags = aiProcess_Triangulate | aiProcess_GenSmoothNormals | aiProcess_SplitLargeMeshes | aiProcess_SortByPType;
     if (!options().swapYZ)
         sceneLoadingFlags |= aiProcess_FlipUVs;
+    if (options().preTransformVertices)
+        sceneLoadingFlags |= aiProcess_PreTransformVertices;
     const aiScene *scene = importer.ReadFile(in.string(), sceneLoadingFlags);
     if (!scene)
         throw runtime_error("Unable to load scene");
@@ -526,16 +535,8 @@ void oimport(path const &out, path const &in) {
     vector<Node> nodes;
     map<string, Tex> textures;
 
-    if (IsRootNode(scene->mRootNode)) {
-        for (unsigned int c = 0; c < scene->mRootNode->mNumChildren; c++) {
-            if (!ShouldIgnoreThisNode(scene->mRootNode->mChildren[c]))
-                nodes.emplace_back(scene->mRootNode->mChildren[c]);
-        }
-    }
-    else {
-        if (!ShouldIgnoreThisNode(scene->mRootNode))
-            nodes.emplace_back(scene->mRootNode);
-    }
+    NodeAddCallback(scene->mRootNode, nodes, IsRootNode(scene->mRootNode));
+
     unsigned int nodeCounter = 0;
     unsigned int meshCounter = 0;
     // generate node names for unnamed nodes

@@ -30,6 +30,7 @@ struct GlobalOptions {
     unsigned int fshFormat = 0;
     bool fshRescale = false;
     vector<string> fshAddTextures;
+    bool preTransformVertices = false;
     // export options
     bool noTextures = false;
     bool dummyTextures = false;

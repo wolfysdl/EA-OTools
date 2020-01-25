@@ -4,7 +4,7 @@
 #include "errormsg.h"
 #include "Fsh/Fsh.h"
 
-const char *OTOOLS_VERSION = "0.131";
+const char *OTOOLS_VERSION = "0.132";
 
 GlobalOptions &options() {
     static GlobalOptions go;
@@ -21,7 +21,7 @@ enum ErrorType {
 };
 
 int main(int argc, char *argv[]) {
-    CommandLine cmd(argc, argv, { "i", "o", "defaultVCol", "vColScale", "fshOutput", "fshLevels", "fshFormat", "fshAddTextures" }, { "keepPrimType", "noTextures", "recursive", "createSubDir", "silent", "onlyFirstTechnique", "dummyTextures", "jpegTextures", "embeddedTextures", "swapYZ", "forceLighting", "noMetadata", "genTexNames", "writeFsh", "fshRescale" });
+    CommandLine cmd(argc, argv, { "i", "o", "defaultVCol", "vColScale", "fshOutput", "fshLevels", "fshFormat", "fshAddTextures" }, { "keepPrimType", "noTextures", "recursive", "createSubDir", "silent", "onlyFirstTechnique", "dummyTextures", "jpegTextures", "embeddedTextures", "swapYZ", "forceLighting", "noMetadata", "genTexNames", "writeFsh", "fshRescale", "preTransformVertices" });
     if (cmd.HasOption("silent"))
         SetErrorDisplayType(ErrorDisplayType::ERR_NONE);
     else {
@@ -158,6 +158,8 @@ int main(int argc, char *argv[]) {
             if (cmd.HasArgument("fshAddTextures"))
                 options().fshAddTextures = Split(cmd.GetArgumentString("fshAddTextures"), ',', true, true);
         }
+        if (cmd.HasOption("preTransformVertices"))
+            options().preTransformVertices = true;
     }
     else if (opType == OperationType::DUMP) {
         if (cmd.HasOption("onlyFirstTechnique"))
