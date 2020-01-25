@@ -1,6 +1,7 @@
 #include "Fsh.h"
 #include "Exception.h"
 #include "d3dx9.h"
+#include "..\utils.h"
 
 ea::D3DDevice *ea::Fsh::GlobalDevice;
 
@@ -157,7 +158,7 @@ unsigned int ea::FshImage::GetPixelD3DFormat(unsigned char format) {
 	case FshPixelData::PIXEL_8888:
 		return D3DFMT_A8R8G8B8;
 	case FshPixelData::PIXEL_888:
-		return D3DFMT_R8G8B8;
+		return D3DFMT_X8R8G8B8;
 	case FshPixelData::PIXEL_4444:
 		return D3DFMT_A4R4G4B4;
 	case FshPixelData::PIXEL_5551:
@@ -178,7 +179,7 @@ unsigned char ea::FshImage::GetPixelFormat(unsigned int format) {
 		return FshPixelData::PIXEL_DXT5;
 	case D3DFMT_A8R8G8B8:
 		return FshPixelData::PIXEL_8888;
-	case D3DFMT_R8G8B8:
+	case D3DFMT_X8R8G8B8:
 		return FshPixelData::PIXEL_888;
 	case D3DFMT_A4R4G4B4:
 		return FshPixelData::PIXEL_4444;
@@ -211,6 +212,11 @@ unsigned int ea::FshImage::GetPixelDataSize(unsigned short width, unsigned short
 	return 0;
 }
 
+#pragma pack(push, 1)
+struct clr_x8r8g8b8 { unsigned char b, g, r, x; };
+struct clr_b8g8r8 { unsigned char b, g, r; };
+#pragma pack(pop)
+
 void ea::FshImage::WriteToFile(std::filesystem::path const &filepath, FileFormat fileFormat) {
     auto pixelDatas = FindAllDatas(FshData::PIXELDATA);
     if (pixelDatas.empty())
@@ -225,6 +231,15 @@ void ea::FshImage::WriteToFile(std::filesystem::path const &filepath, FileFormat
     unsigned char numLevels = imgData->GetNumMipLevels() + 1;
     if (FAILED(Fsh::GlobalDevice->Interface()->CreateTexture(w, h, numLevels, D3DUSAGE_DYNAMIC, format, D3DPOOL_SYSTEMMEM, &texture, NULL)))
         throw Exception("WriteToFile: failed to create direct3d texture");
+	D3DSURFACE_DESC desc;
+	if (FAILED(texture->GetLevelDesc(0, &desc))) {
+		texture->Release();
+		throw Exception("WriteToFile: failed to retrieve texture format");
+	}
+	if (desc.Format != format) {
+		texture->Release();
+		throw Exception(FormatStatic("ReadFromFile: unsupported texture format (input format: %d, result format: %d)", format, desc.Format));
+	}
     unsigned char *pixels = (unsigned char *)imgData->Pixels().GetData();
     for (unsigned int i = 0; i < numLevels; i++) {
         size_t pixelsDataSize = GetPixelDataSize(w, h, imgData->GetFormat());
@@ -233,7 +248,19 @@ void ea::FshImage::WriteToFile(std::filesystem::path const &filepath, FileFormat
             texture->Release();
             throw Exception("WriteToFile: failed to lock texture");
         }
-        memcpy(rect.pBits, pixels, pixelsDataSize);
+		if (format == D3DFMT_X8R8G8B8) {
+			clr_x8r8g8b8 *xrgb = (clr_x8r8g8b8 *)rect.pBits;
+			clr_b8g8r8 *bgr = (clr_b8g8r8 *)pixels;
+			unsigned int numPixels = w * h;
+			for (unsigned int p = 0; p < numPixels; p++) {
+				xrgb[p].r = bgr[p].r;
+				xrgb[p].g = bgr[p].g;
+				xrgb[p].b = bgr[p].b;
+				xrgb[p].x = 255;
+			}
+		}
+		else
+            memcpy(rect.pBits, pixels, pixelsDataSize);
         if (FAILED(texture->UnlockRect(i))) {
             texture->Release();
             throw Exception("WriteToFile: failed to unlock texture");
@@ -279,7 +306,7 @@ void ea::FshImage::ReadFromFile(std::filesystem::path const &filepath, unsigned 
 			d3dformat = (d3dformat == unsigned int(-4)) ? D3DFMT_DXT5 : D3DFMT_A8R8G8B8;
 			break;
 		default:
-			d3dformat = (d3dformat == unsigned int(-4)) ? D3DFMT_DXT1 : D3DFMT_R8G8B8;
+			d3dformat = (d3dformat == unsigned int(-4)) ? D3DFMT_DXT1 : D3DFMT_X8R8G8B8;
 			break;
 		}
 	}
@@ -303,7 +330,7 @@ void ea::FshImage::ReadFromFile(std::filesystem::path const &filepath, unsigned 
     unsigned char format = GetPixelFormat(desc.Format);
     if (format == 0) {
         texture->Release();
-		throw Exception("ReadFromFile: unsupported texture format");
+		throw Exception(FormatStatic("ReadFromFile: unsupported texture format (input format: %d, result format: %d)", d3dformat, desc.Format));
     }
     unsigned char numLevels = (unsigned char)texture->GetLevelCount();
     size_t pixelsSize = 0;
@@ -326,7 +353,18 @@ void ea::FshImage::ReadFromFile(std::filesystem::path const &filepath, unsigned 
             texture->Release();
             throw Exception("ReadFromFile: failed to lock texture");
         }
-        memcpy(pixelsPtr, rect.pBits, pixelsDataSize);
+		if (desc.Format == D3DFMT_X8R8G8B8) {
+			clr_x8r8g8b8 *xrgb = (clr_x8r8g8b8 *)rect.pBits;
+			clr_b8g8r8 *bgr = (clr_b8g8r8 *)pixelsPtr;
+			unsigned int numPixels = w * h;
+			for (unsigned int p = 0; p < numPixels; p++) {
+				bgr[p].r = xrgb[p].r;
+				bgr[p].g = xrgb[p].g;
+				bgr[p].b = xrgb[p].b;
+			}
+		}
+		else
+            memcpy(pixelsPtr, rect.pBits, pixelsDataSize);
         if (FAILED(texture->UnlockRect(i))) {
             texture->Release();
             throw Exception("ReadFromFile: failed to unlock texture");

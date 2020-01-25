@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdio>
 #include <string>
+#include <vector>
 
 std::wstring AtoW(std::string const &str);
 std::string WtoA(std::wstring const &str);
@@ -10,6 +11,10 @@ std::wstring ToUpper(std::wstring const &str);
 std::wstring ToLower(std::wstring const &str);
 void Replace(std::string &str, const std::string &from, const std::string &to);
 void Replace(std::wstring &str, const std::wstring &from, const std::wstring &to);
+void Trim(std::string &str);
+void Trim(std::wstring &str);
+std::vector<std::string> Split(std::string const &line, wchar_t delim, bool trim = true, bool skipEmpty = false, bool quotesHavePriority = true);
+std::vector<std::wstring> Split(std::wstring const &line, wchar_t delim, bool trim = true, bool skipEmpty = false, bool quotesHavePriority = true);
 
 class FormattingUtils {
     static const unsigned int BUF_SIZE = 10;

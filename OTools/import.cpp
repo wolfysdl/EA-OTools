@@ -415,67 +415,70 @@ unsigned int SamplerIndex(unsigned int argType) {
     return 0;
 }
 
-struct TexNameGenerator {
-    map<string, string> texNames;
-    string texNameFormat;
-
-    void SetTexNameFormat(string const &format) {
-        texNameFormat = format;
-    }
-
-    string GenerateName(string const &originalName) {
-        string nameKey = ToLower(originalName);
-        auto it = texNames.find(nameKey);
-        if (it != texNames.end())
-            return (*it).second;
-        string newTexName = Format(texNameFormat, texNames.size());
-        texNames[nameKey] = newTexName;
-        return newTexName;
-    }
-};
-
-bool LoadTextureIntoTexSlot(aiScene const *scene, aiMaterial const *mat, aiTextureType texType, map<string, Tex> &texMap, bool *texPresentFlag, Tex *slot, TexNameGenerator &texNameGen) {
+bool GetTexInfo(aiScene const *scene, aiMaterial const *mat, aiTextureType texType, aiTextureMapMode &mapMode, path &texFilePath, string &texFileName, string &texFileNameLowered, bool &isGlobal) {
+    mapMode = aiTextureMapMode_Wrap;
+    texFilePath.clear();
+    texFileName.clear();
+    isGlobal = false;
     auto texCount = mat->GetTextureCount(texType);
     if (texCount > 0) {
         aiString texPath;
-        aiTextureMapMode mapMode = aiTextureMapMode_Wrap;
         mat->GetTexture(texType, 0, &texPath, nullptr, nullptr, nullptr, nullptr, &mapMode);
-        path texFilePath;
         if (auto texture = scene->GetEmbeddedTexture(texPath.C_Str()))
             texFilePath = texture->mFilename.C_Str();
         else
             texFilePath = texPath.C_Str();
-        string texFileName = texFilePath.stem().string();
+        texFileName = texFilePath.stem().string();
         if (!texFileName.empty()) {
-            string texFileNameLowered = ToLower(texFileName);
+            texFileNameLowered = ToLower(texFileName);
             if (texFileNameLowered.starts_with("global_")) {
                 string globalTexName = texFileName.substr(7);
                 if (globalTexName.empty())
                     return false;
-                *texPresentFlag = true;
-                slot->isGlobal = true;
-                slot->name = globalTexName;
-            }
-            else {
-                if (options().genTexNames)
-                    texFileName = texNameGen.GenerateName(texFileName);
-                if (texFileName.length() > 4)
-                    texFileName = texFileName.substr(0, 4);
-                string texId = ToLower(texFileName);
-                auto texit = texMap.find(texId);
-                if (texit != texMap.end()) {
-                    *texPresentFlag = true;
-                    *slot = (*texit).second;
-                }
-                else {
-                    slot->name = texFileName;
-                    slot->filepath = texFilePath.string();
-                    slot->SetUVAddressingMode(mapMode);
-                    texMap[texId] = *slot;
-                }
+                isGlobal = true;
+                texFileName = globalTexName;
             }
             return true;
         }
+    }
+    return false;
+}
+
+bool LoadTextureIntoTexSlot(aiScene const *scene, aiMaterial const *mat, aiTextureType texType, map<string, Tex> &texMap, bool *texPresentFlag, Tex *slot, map<string, string> &generatedTexNames) {
+    aiTextureMapMode mapMode = aiTextureMapMode_Wrap;
+    path texFilePath;
+    string texFileName;
+    string texFileNameLowered;
+    bool isGlobal = false;
+    if (GetTexInfo(scene, mat, texType, mapMode, texFilePath, texFileName, texFileNameLowered, isGlobal)) {
+        if (isGlobal) {
+            *texPresentFlag = true;
+            slot->isGlobal = true;
+            slot->name = texFileName;
+        }
+        else {
+            if (options().genTexNames) {
+                auto tnit = generatedTexNames.find(texFileNameLowered);
+                if (tnit == generatedTexNames.end())
+                    throw runtime_error("Unable to find generated texture name");
+                texFileName = (*tnit).second;
+            }
+            else if (texFileName.length() > 4)
+                texFileName = texFileName.substr(0, 4);
+            string texId = ToLower(texFileName);
+            auto texit = texMap.find(texId);
+            if (texit != texMap.end()) {
+                *texPresentFlag = true;
+                *slot = (*texit).second;
+            }
+            else {
+                slot->name = texFileName;
+                slot->filepath = texFilePath.string();
+                slot->SetUVAddressingMode(mapMode);
+                texMap[texId] = *slot;
+            }
+        }
+        return true;
     }
     return false;
 }
@@ -522,19 +525,6 @@ void oimport(path const &out, path const &in) {
     unsigned short computationIndex = 2;
     vector<Node> nodes;
     map<string, Tex> textures;
-    TexNameGenerator texNamesGen;
-
-    if (options().genTexNames) {
-        auto potentialTexCount = scene->mNumMaterials * 2;
-        if (potentialTexCount < 10)
-            texNamesGen.SetTexNameFormat("tex%1d");
-        else if (potentialTexCount < 100)
-            texNamesGen.SetTexNameFormat("tx%02d");
-        else if (potentialTexCount < 1000)
-            texNamesGen.SetTexNameFormat("t%03d");
-        else
-            texNamesGen.SetTexNameFormat("%04d");
-    }
 
     if (IsRootNode(scene->mRootNode)) {
         for (unsigned int c = 0; c < scene->mRootNode->mNumChildren; c++) {
@@ -566,6 +556,77 @@ void oimport(path const &out, path const &in) {
                 newname = "sortgroup" + to_string(nextSortgroup++);
             }
             n.name = newname;
+        }
+    }
+    map<string, string> generatedTexNames; // key: lowered original filename, value - 4-byte name
+    if (options().genTexNames) {
+        map<string, pair<string, path>> usedTexNames; // key: lowered original filename, value - original filename and filepath
+        for (auto &n : nodes) {
+            for (unsigned int m = 0; m < n.node->mNumMeshes; m++) {
+                aiMesh *mesh = scene->mMeshes[n.node->mMeshes[m]];
+                aiMaterial *mat = scene->mMaterials[mesh->mMaterialIndex];
+                aiTextureType texTypes[] = { aiTextureType_DIFFUSE, aiTextureType_REFLECTION, aiTextureType_SPECULAR };
+                for (auto texType : texTypes) {
+                    aiTextureMapMode mapMode = aiTextureMapMode_Wrap;
+                    path texFilePath;
+                    string texFileName;
+                    string texFileNameLowered;
+                    bool isGlobal = false;
+                    // TODO [Improvement]: store information for next usage
+                    if (GetTexInfo(scene, mat, texType, mapMode, texFilePath, texFileName, texFileNameLowered, isGlobal) && !isGlobal) {
+                        if (!usedTexNames.contains(texFileNameLowered))
+                            usedTexNames[texFileNameLowered] = { texFileName, texFilePath };
+                    }
+                }
+            }
+        }
+        set<string> newTexNames; // 4-byte names
+        unsigned int numTexturesForNameGen = 0;
+        for (auto const &[k, t] : usedTexNames) {
+            if (t.first.length() <= 4) {
+                generatedTexNames[k] = t.first;
+                newTexNames.insert(ToLower(t.first));
+            }
+            else
+                numTexturesForNameGen++;
+        }
+        if (numTexturesForNameGen > 0) {
+            unsigned int texIdLimit = 0;
+            string texNameFormat;
+            if (numTexturesForNameGen < 10) {
+                texNameFormat = "tex%1d";
+                texIdLimit = 10;
+            }
+            else if (numTexturesForNameGen < 100) {
+                texNameFormat = "tx%02d";
+                texIdLimit = 100;
+            }
+            else if (numTexturesForNameGen < 1'000) {
+                texNameFormat = "t%03d";
+                texIdLimit = 1'000;
+            }
+            else if (numTexturesForNameGen < 10'000) {
+                texNameFormat = "%04d";
+                texIdLimit = 10'000;
+            }
+            else
+                throw runtime_error("Reached textures limit for texture names generator. Either disable getTexNames option or decrease the amount of textures in the file.");
+            unsigned int nextIndexToUse = 0;
+            for (auto const &[k, t] : usedTexNames) {
+                if (t.first.length() > 4) {
+                    while (true) {
+                        if (nextIndexToUse >= texIdLimit)
+                            throw runtime_error("Reached textures limit for texture names generator. Either disable getTexNames option or decrease the amount of textures in the file.");
+                        string newTexName = Format(texNameFormat, nextIndexToUse++);
+                        string newTexNameLowered = ToLower(newTexName);
+                        if (!newTexNames.contains(newTexNameLowered)) {
+                            generatedTexNames[k] = newTexName;
+                            newTexNames.insert(newTexNameLowered);
+                            break;
+                        }
+                    }
+                }
+            }
         }
     }
     for (auto &n : nodes) {
@@ -623,12 +684,11 @@ void oimport(path const &out, path const &in) {
 
             Tex tex[3];
             bool texAlreadyPresent[3] = { false, false, false };
-            bool hasDiffuseTex = LoadTextureIntoTexSlot(scene, mat, aiTextureType_DIFFUSE, textures, &texAlreadyPresent[0], &tex[0], texNamesGen);
-            bool hasReflectionTex = LoadTextureIntoTexSlot(scene, mat, aiTextureType_REFLECTION, textures, &texAlreadyPresent[1], &tex[1], texNamesGen);
+            bool hasDiffuseTex = LoadTextureIntoTexSlot(scene, mat, aiTextureType_DIFFUSE, textures, &texAlreadyPresent[0], &tex[0], generatedTexNames);
+            bool hasReflectionTex = LoadTextureIntoTexSlot(scene, mat, aiTextureType_REFLECTION, textures, &texAlreadyPresent[1], &tex[1], generatedTexNames);
             bool hasSpecularTex = false;
             if (!hasReflectionTex)
-                hasSpecularTex = LoadTextureIntoTexSlot(scene, mat, aiTextureType_SPECULAR, textures, &texAlreadyPresent[1], &tex[1], texNamesGen);
-
+                hasSpecularTex = LoadTextureIntoTexSlot(scene, mat, aiTextureType_SPECULAR, textures, &texAlreadyPresent[1], &tex[1], generatedTexNames);
             bool usesCustomShaderName = false;
             if (!matName.empty()) {
                 auto b_start = matName.find('[');
@@ -1431,6 +1491,7 @@ void oimport(path const &out, path const &in) {
     bufElf.WriteToFile(out);
 
     if (options().writeFsh) {
+        static vector<string> imgExt = { ".png", ".jpg", ".jpeg", ".bmp", ".dds", ".tga" };
         path fshFilePath;
         if (!options().fshOutput.empty()) {
             if (options().processingFolders)
@@ -1453,20 +1514,63 @@ void oimport(path const &out, path const &in) {
         memset(metalBinData.GetData(), 0, metalBinData.GetSize());
         strcpy((char *)metalBinData.GetData(), "EAGL64 metal bin attachment for runtime texture management");
         path inDir = in.parent_path();
-        for (auto const &[k, img] : textures) {
-            path imgPath = img.filepath;
-            if (!exists(imgPath))
-                imgPath = inDir / imgPath;
-            if (exists(imgPath)) {
+        map<string, pair<string, string>> texturesToAdd;
+        for (auto const &[k, img] : textures)
+            texturesToAdd[ToLower(img.name)] = { img.name, img.filepath };
+        for (auto const &a : options().fshAddTextures) {
+            path ap = a;
+            string afilename = ap.stem().string();
+            if (!afilename.empty()) {
+                if (afilename.length() > 4)
+                    afilename = afilename.substr(0, 4);
+                string akey = ToLower(afilename);
+                if (!texturesToAdd.contains(akey))
+                    texturesToAdd[akey] = { afilename, a };
+            }
+        }
+        for (auto const &[k, img] : texturesToAdd) {
+            path imgPath = img.second;
+            bool fileExists = false;
+            bool hasExtension = false;
+            if (imgPath.has_extension()) {
+                string ext = ToLower(imgPath.extension().string());
+                for (auto const &ie : imgExt) {
+                    if (ext == ie) {
+                        hasExtension = true;
+                        break;
+                    }
+                }
+            }
+            if (hasExtension) {
+                fileExists = exists(imgPath);
+                if (!fileExists) {
+                    imgPath = inDir / imgPath;
+                    fileExists = exists(imgPath);
+                }
+            }
+            else {
+                for (auto const &ie : imgExt) {
+                    string filePathWithExt = img.second + ie;
+                    imgPath = filePathWithExt;
+                    fileExists = exists(imgPath);
+                    if (fileExists)
+                        break;
+                    imgPath = inDir / filePathWithExt;
+                    fileExists = exists(imgPath);
+                    if (fileExists)
+                        break;
+                }
+            }
+            if (fileExists) {
                 auto &image = fsh.AddImage();
                 image.ReadFromFile(imgPath, options().fshFormat, options().fshLevels, options().fshRescale);
                 ea::FshPixelData *pixelsData = image.FindFirstData(ea::FshData::PIXELDATA)->As<ea::FshPixelData>();
                 image.AddData(new ea::FshMetalBin(metalBinData, 0x10));
-                image.SetTag(img.name);
-                image.AddData(new ea::FshName(img.name));
+                image.SetTag(img.first);
+                image.AddData(new ea::FshName(img.first));
                 char comment[256];
                 static char idStr[260];
-                sprintf_s(idStr, "0x%.8x", FshHash(fshFileName) + FshHash(img.name));
+                sprintf_s(idStr, "0x%.8x", FshHash(fshFileName) + FshHash(img.first));
                 sprintf_s(comment, "TXLY,%s,1,%d,%d,%d,%s", image.GetTag().c_str(), pixelsData->GetNumMipLevels() > 0 ? 1 : 0,
                     pixelsData->GetWidth(), pixelsData->GetHeight(), idStr);
                 image.AddData(new ea::FshComment(comment));

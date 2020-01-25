@@ -70,6 +70,92 @@ void Replace(std::wstring &str, const std::wstring &from, const std::wstring &to
     }
 }
 
+void Trim(std::string &str) {
+    size_t start = str.find_first_not_of(" \t\r\n");
+    if (start != std::string::npos)
+        str = str.substr(start);
+    size_t end = str.find_last_not_of(" \t\r\n");
+    if (end != std::string::npos)
+        str = str.substr(0, end + 1);
+}
+
+void Trim(std::wstring &str) {
+    size_t start = str.find_first_not_of(L" \t\r\n");
+    if (start != std::wstring::npos)
+        str = str.substr(start);
+    size_t end = str.find_last_not_of(L" \t\r\n");
+    if (end != std::wstring::npos)
+        str = str.substr(0, end + 1);
+}
+
+std::vector<std::string> Split(std::string const &line, wchar_t delim, bool trim, bool skipEmpty, bool quotesHavePriority) {
+    std::vector<std::string> result;
+    std::string currStr;
+    auto AddStr = [&, trim, skipEmpty]() {
+        if (trim)
+            Trim(currStr);
+        if (!skipEmpty || !currStr.empty())
+            result.push_back(currStr);
+        currStr.clear();
+    };
+    bool inQuotes = false;
+    for (size_t i = 0; i < line.length(); i++) {
+        auto c = line[i];
+        if (c == '\r' || (delim != '\n' && c == '\n'))
+            break;
+        if (!inQuotes) {
+            if (quotesHavePriority && c == '"')
+                inQuotes = true;
+            else if (c == delim)
+                AddStr();
+            else
+                currStr += c;
+        }
+        else {
+            if (c == '"')
+                inQuotes = false;
+            else
+                currStr += c;
+        }
+    }
+    AddStr();
+    return result;
+}
+
+std::vector<std::wstring> Split(std::wstring const &line, wchar_t delim, bool trim, bool skipEmpty, bool quotesHavePriority) {
+    std::vector<std::wstring> result;
+    std::wstring currStr;
+    auto AddStr = [&, trim, skipEmpty]() {
+        if (trim)
+            Trim(currStr);
+        if (!skipEmpty || !currStr.empty())
+            result.push_back(currStr);
+        currStr.clear();
+    };
+    bool inQuotes = false;
+    for (size_t i = 0; i < line.length(); i++) {
+        auto c = line[i];
+        if (c == L'\r' || (delim != L'\n' && c == L'\n'))
+            break;
+        if (!inQuotes) {
+            if (quotesHavePriority && c == L'"')
+                inQuotes = true;
+            else if (c == delim)
+                AddStr();
+            else
+                currStr += c;
+        }
+        else {
+            if (c == L'"')
+                inQuotes = false;
+            else
+                currStr += c;
+        }
+    }
+    AddStr();
+    return result;
+}
+
 unsigned int Hash(std::string const &str) {
     unsigned int hash = 0;
     for (auto const &c : str) {

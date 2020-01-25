@@ -29,6 +29,7 @@ struct GlobalOptions {
     int fshLevels = 0;
     unsigned int fshFormat = 0;
     bool fshRescale = false;
+    vector<string> fshAddTextures;
     // export options
     bool noTextures = false;
     bool dummyTextures = false;
