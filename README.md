@@ -4,7 +4,7 @@
 
 **Current progress and limitations**:
 
-* Export of skinned meshes (body, heads, hair) is not implemented
+* Import of skinned meshes (body, heads, hair) is not implemented (only export is possible)
 
 * Only shaders from FIFA Manager 13 are implemented, they are not guaranteed to work with any other games
 
