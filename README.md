@@ -1,5 +1,7 @@
 **otools** - tools for importing/exporting EA Sports model format (.o)
 
+![](https://i.imgur.com/KIF4gzwm.png) ![](https://i.imgur.com/EZOPG6im.png) ![](https://i.imgur.com/ALQGlXzm.png)
+
 **Current progress and limitations**:
 
 * Export of skinned meshes (body, heads, hair) is not implemented
@@ -35,6 +37,8 @@ Additional options:
 
 `-console` - print error messages in console window
 
+`-createSubDir` - create sub-directory for output file
+
 Additional export options:
 
 `-noTextures` - do not attach textures to materials
@@ -53,6 +57,18 @@ Additional import options:
 
 `-forceLighting` - force using shaders for dynamic lighting on models
 
+`-genTexNames` - generate new 4-character names for textures
+
+`-writeFsh` - write model textures to .fsh file
+
+`-fshOutput` - output file/folder for .fsh files (by default, an output folder for model is used)
+
+`-fshLevels <level count>` - levels (mipmaps) configuration for .fsh images. When set to -1 ot 0, the count will be taken from file
+
+`-fshFormat <format>` - pixel format for .fsh images. Supported formats are: `rgb`, `dxt`, `8888`, `888`, `dxt1`, `dxt3`, `dxt5`, `4444`, `5551`, `565`
+
+`-fshRescale` - rescale .fsh images to power-of-two size
+
 **Source code dependencies**
 
 * Visual Studio 2017/2019
@@ -60,3 +76,5 @@ Additional import options:
 * MSVC v141_xp toolset
 
 * assimp (Open Asset Import Library) in static library
+
+* DirectX 9.0c SDK
