@@ -59,7 +59,7 @@ Additional import options:
 
 `-forceLighting` - force using shaders for dynamic lighting on models
 
-`-genTexNames` - generate new 4-character names for textures
+`-genTexNames` - generate new 4-character names for textures which names exceeds the name length limit
 
 `-writeFsh` - write model textures to .fsh file
 
