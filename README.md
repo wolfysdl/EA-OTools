@@ -49,9 +49,9 @@ Additional export options:
 
 Additional import options:
 
-`-defaultVCol <color>` - default vertex color (could be RGB or RGBA in hexadecimal format, for example: `7F7F7FFF`). Default value is `7F7F7FFF`
+`-defaultVCol <color>` - default vertex color (could be RGB or RGBA in hexadecimal format, for example: `7F7F7FFF`). This color will be used when mesh in source model has no vertex colors. Default value is `7F7F7FFF`
 
-`-vColScale <scale>` - vertex color scale (floating-point value from 0.0 to 1.0). Ignored when set to 0.0. Default value is 0.0
+`-vColScale <scale>` - vertex color scale (floating-point value from 0.0 to 1.0). This value is used only when mesh in source model has vertex colors. Ignored when set to 0.0. Default value is 0.0
 
 `-tristrip` - convert geometry to tri-strips
 
