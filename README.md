@@ -8,25 +8,25 @@
 
 * Only shaders from FIFA Manager 13 are implemented, they are not guaranteed to work with any other games
 
-otools is a command-line tool. First argument is operation type (export or import), second argument is input file/folder path. All other arguments are optional.
+otools is a command-line tool. First argument is operation type (export or import), second argument (`-i`) is input file/folder path. All other arguments are optional.
 
 **Usage examples:**
 
 Extract all .o models in "test" folder to .gltf format
 ```
-otools export "test"
+otools export -i "test"
 ```
 Extract test.o to test.gltf
 ```
-otools export "test.o"
+otools export -i "test.o"
 ```
 Import all models (.gltf, .glb, .fbx, .dae, .obj, .3ds) in "test" folder to .o format
 ```
-otools import "test"
+otools import -i "test"
 ```
 Import test.gltf to test.o
 ```
-otools import "test.gltf"
+otools import -i "test.gltf"
 ```
 
 Additional options:
