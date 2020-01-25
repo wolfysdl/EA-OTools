@@ -71,6 +71,8 @@ Additional import options:
 
 `-fshRescale` - rescale .fsh images to power-of-two size
 
+`-fshAddTextures <image names list>` - a list of comma-separated image names which should be additionally packed into .fsh
+
 **Source code dependencies**
 
 * Visual Studio 2017/2019
