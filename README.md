@@ -63,9 +63,9 @@ Additional import options:
 
 `-fshOutput` - output file/folder for .fsh files (by default, an output folder for model is used)
 
-`-fshLevels <level count>` - levels (mipmaps) count for .fsh images. When set to -1 ot 0, the count will be taken from file. When lower than -1 or greater than 13, a full mipmap chain will be generated
+`-fshLevels <level count>` - levels (mipmaps) count for .fsh images. When set to -1 ot 0, the count will be taken from file. When lower than -1 or greater than 13, a full mipmap chain will be generated. Full mipmap chain generation option is used by default
 
-`-fshFormat <format>` - pixel format for .fsh images. Supported formats are: `rgb`, `dxt`, `auto`, `8888`, `888`, `dxt1`, `dxt3`, `dxt5`, `4444`, `5551`, `565`. `auto` option is used to detect format from the file. `rgb` option is used to select `888` or `8888` depending on image transparency. `dxt` option is used to select `dxt1` or `dxt5` depending on image transparency
+`-fshFormat <format>` - pixel format for .fsh images. Supported formats are: `rgb`, `dxt`, `auto`, `8888`, `888`, `dxt1`, `dxt3`, `dxt5`, `4444`, `5551`, `565`. `auto` option is used to detect format from the file. `rgb` option is used to select `888` or `8888` depending on image transparency. `dxt` option is used to select `dxt1` or `dxt5` depending on image transparency. `dxt` option is used by default
 
 `-fshRescale` - rescale .fsh images to power-of-two size
 
