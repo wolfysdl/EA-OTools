@@ -21,7 +21,7 @@ enum ErrorType {
 };
 
 int main(int argc, char *argv[]) {
-    CommandLine cmd(argc, argv, { "i", "o", "defaultVCol", "fshOutput", "fshLevels", "fshFormat" }, { "keepPrimType", "noTextures", "recursive", "createSubDir", "silent", "onlyFirstTechnique", "dummyTextures", "jpegTextures", "embeddedTextures", "swapYZ", "forceLighting", "noMetadata", "genTexNames", "writeFsh", "fshRescale" });
+    CommandLine cmd(argc, argv, { "i", "o", "defaultVCol", "vColScale", "fshOutput", "fshLevels", "fshFormat" }, { "keepPrimType", "noTextures", "recursive", "createSubDir", "silent", "onlyFirstTechnique", "dummyTextures", "jpegTextures", "embeddedTextures", "swapYZ", "forceLighting", "noMetadata", "genTexNames", "writeFsh", "fshRescale" });
     if (cmd.HasOption("silent"))
         SetErrorDisplayType(ErrorDisplayType::ERR_NONE);
     else {
@@ -108,6 +108,8 @@ int main(int argc, char *argv[]) {
                 options().defaultVCol.a = float(a) / 255.0f;
             }
         }
+        if (cmd.HasArgument("vColScale"))
+            options().vColScale = cmd.GetArgumentFloat("vColScale");
         if (cmd.HasOption("genTexNames"))
             options().genTexNames = true;
         if (cmd.HasOption("writeFsh")) {
