@@ -73,6 +73,8 @@ Additional import options:
 
 `-fshAddTextures <image names list>` - a list of comma-separated names of images which should be additionally packed into .fsh
 
+`-preTransformVertices` - pre-transform all vertices to global space
+
 **Source code dependencies**
 
 * Visual Studio 2017/2019
