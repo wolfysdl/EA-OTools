@@ -63,9 +63,9 @@ Additional import options:
 
 `-fshOutput` - output file/folder for .fsh files (by default, an output folder for model is used)
 
-`-fshLevels <level count>` - levels (mipmaps) configuration for .fsh images. When set to -1 ot 0, the count will be taken from file
+`-fshLevels <level count>` - levels (mipmaps) count for .fsh images. When set to -1 ot 0, the count will be taken from file
 
-`-fshFormat <format>` - pixel format for .fsh images. Supported formats are: `rgb`, `dxt`, `8888`, `888`, `dxt1`, `dxt3`, `dxt5`, `4444`, `5551`, `565`
+`-fshFormat <format>` - pixel format for .fsh images. Supported formats are: `rgb`, `dxt`, `auto`, `8888`, `888`, `dxt1`, `dxt3`, `dxt5`, `4444`, `5551`, `565`
 
 `-fshRescale` - rescale .fsh images to power-of-two size
 
