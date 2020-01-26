@@ -1493,6 +1493,7 @@ void oimport(path const &out, path const &in) {
 
     if (options().writeFsh) {
         static vector<string> imgExt = { ".png", ".jpg", ".jpeg", ".bmp", ".dds", ".tga" };
+        static set<string> defaultTexturesToIgnore = { "rwa0", "rwa1", "rwa2", "rwa3", "rwh0", "rwh1", "rwh2", "rwh3", "rwn0", "rwn1", "rwn2", "rwn3", "abna", "abnb", "abnc", "afla", "aflb", "aflc", "hbna", "hbnb", "hbnc", "hfla", "hflb", "hflc", "adba", "adbb", "adbc" };
         path fshFilePath;
         if (!options().fshOutput.empty()) {
             if (options().processingFolders)
@@ -1516,8 +1517,16 @@ void oimport(path const &out, path const &in) {
         strcpy((char *)metalBinData.GetData(), "EAGL64 metal bin attachment for runtime texture management");
         path inDir = in.parent_path();
         map<string, pair<string, string>> texturesToAdd;
-        for (auto const &[k, img] : textures)
-            texturesToAdd[ToLower(img.name)] = { img.name, img.filepath };
+        for (auto const &[k, img] : textures) {
+            auto imgLoweredName = ToLower(img.name);
+            bool ignoreThisTexture = false;
+            if (!options().fshDisableTextureIgnore) {
+                if (defaultTexturesToIgnore.contains(imgLoweredName) || options().fshIgnoreTextures.contains(imgLoweredName))
+                    ignoreThisTexture = true;
+            }
+            if (!ignoreThisTexture)
+                texturesToAdd[imgLoweredName] = { img.name, img.filepath };
+        }
         for (auto const &a : options().fshAddTextures) {
             path ap = a;
             string afilename = ap.stem().string();

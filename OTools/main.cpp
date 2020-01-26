@@ -4,7 +4,7 @@
 #include "errormsg.h"
 #include "Fsh/Fsh.h"
 
-const char *OTOOLS_VERSION = "0.132";
+const char *OTOOLS_VERSION = "0.133";
 
 GlobalOptions &options() {
     static GlobalOptions go;
@@ -21,7 +21,7 @@ enum ErrorType {
 };
 
 int main(int argc, char *argv[]) {
-    CommandLine cmd(argc, argv, { "i", "o", "defaultVCol", "vColScale", "fshOutput", "fshLevels", "fshFormat", "fshAddTextures" }, { "keepPrimType", "noTextures", "recursive", "createSubDir", "silent", "onlyFirstTechnique", "dummyTextures", "jpegTextures", "embeddedTextures", "swapYZ", "forceLighting", "noMetadata", "genTexNames", "writeFsh", "fshRescale", "preTransformVertices" });
+    CommandLine cmd(argc, argv, { "i", "o", "defaultVCol", "vColScale", "fshOutput", "fshLevels", "fshFormat", "fshAddTextures", "fshIgnoreTextures" }, { "keepPrimType", "noTextures", "recursive", "createSubDir", "silent", "onlyFirstTechnique", "dummyTextures", "jpegTextures", "embeddedTextures", "swapYZ", "forceLighting", "noMetadata", "genTexNames", "writeFsh", "fshRescale", "fshDisableTextureIgnore", "preTransformVertices" });
     if (cmd.HasOption("silent"))
         SetErrorDisplayType(ErrorDisplayType::ERR_NONE);
     else {
@@ -157,6 +157,17 @@ int main(int argc, char *argv[]) {
                 options().fshRescale = true;
             if (cmd.HasArgument("fshAddTextures"))
                 options().fshAddTextures = Split(cmd.GetArgumentString("fshAddTextures"), ',', true, true);
+            if (cmd.HasOption("fshDisableTextureIgnore"))
+                options().fshDisableTextureIgnore = true;
+            else {
+                if (cmd.HasArgument("fshIgnoreTextures")) {
+                    auto ignoredTexturesList = Split(cmd.GetArgumentString("fshIgnoreTextures"), ',', true, true);
+                    if (!ignoredTexturesList.empty()) {
+                        for (auto const &it : ignoredTexturesList)
+                            options().fshIgnoreTextures.insert(ToLower(it));
+                    }
+                }
+            }
         }
         if (cmd.HasOption("preTransformVertices"))
             options().preTransformVertices = true;
