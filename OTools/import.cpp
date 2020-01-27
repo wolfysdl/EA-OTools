@@ -54,6 +54,29 @@ struct GlobalArg {
     }
 };
 
+void GetMatColorAndAlphaProperties(aiMaterial *mat, aiColor3D &matColor, float &alpha, AlphaMode &alphaMode, int &blendFunc) {
+    matColor.r = 255;
+    matColor.g = 255;
+    matColor.b = 255;
+    mat->Get(AI_MATKEY_COLOR_DIFFUSE, matColor);
+    alpha = 1.0f;
+    mat->Get(AI_MATKEY_OPACITY, alpha);
+    blendFunc = 0;
+    mat->Get(AI_MATKEY_BLEND_FUNC, blendFunc);
+    aiString alphaModeAiStr;
+    mat->Get(AI_MATKEY_GLTF_ALPHAMODE, alphaModeAiStr);
+    string alphaModeStr = alphaModeAiStr.C_Str();
+    alphaMode = ALPHA_NOT_SET;
+    if (!alphaModeStr.empty()) {
+        if (alphaModeStr == "OPAQUE")
+            alphaMode = ALPHA_OPAQUE;
+        else if (alphaModeStr == "MASK")
+            alphaMode = ALPHA_MASK;
+        else if (alphaModeStr == "BLEND")
+            alphaMode = ALPHA_BLEND;
+    }
+}
+
 struct Node {
     string name;
     aiNode *node = nullptr;
@@ -61,12 +84,47 @@ struct Node {
     aiVector3D boundMin = { 0.0f, 0.0f, 0.0f };
     aiVector3D boundMax = { 0.0f, 0.0f, 0.0f };
     bool anyVertexProcessed = false;
+    static aiScene const *scene;
 
     Node(aiNode *_node) {
         node = _node;
         name = _node->mName.C_Str();
     }
+
+    static bool SortByName(Node const &a, Node const &b) {
+        return a.name <= b.name;
+    }
+
+    bool HasTransparency() const {
+        bool result = false;
+        for (unsigned int i = 0; i < node->mNumMeshes; i++) {
+            aiMesh *mesh = scene->mMeshes[node->mMeshes[i]];
+            aiMaterial *mat = scene->mMaterials[mesh->mMaterialIndex];
+            aiColor3D matColor(255, 255, 255);
+            float matAlpha = 1;
+            AlphaMode alphaMode = ALPHA_NOT_SET;
+            int blendFunc = 0;
+            GetMatColorAndAlphaProperties(mat, matColor, matAlpha, alphaMode, blendFunc);
+            if (matAlpha != 1 || alphaMode == ALPHA_BLEND || blendFunc == 1)
+                return true;
+        }
+        return false;
+    }
+
+    static bool SortByAlpha(Node const &a, Node const &b) {
+        return a.HasTransparency() <= b.HasTransparency();
+    }
+
+    static bool SortByNameAndAlpha(Node const &a, Node const &b) {
+        bool atp = a.HasTransparency();
+        bool btp = b.HasTransparency();
+        if (atp == btp)
+            return SortByName(a, b);
+        return atp <= btp;
+    }
 };
+
+aiScene const *Node::scene = nullptr;
 
 struct Tex {
     enum Mode {
@@ -493,6 +551,8 @@ bool LoadTextureIntoTexSlot(aiScene const *scene, aiMaterial const *mat, aiTextu
 void oimport(path const &out, path const &in) {
     Assimp::Importer importer;
     importer.SetPropertyInteger(AI_CONFIG_PP_SBP_REMOVE, aiPrimitiveType_POINT | aiPrimitiveType_LINE);
+    if (options().scale > 0.0f && options().scale != 1.0f)
+        importer.SetPropertyFloat(AI_CONFIG_GLOBAL_SCALE_FACTOR_KEY, options().scale);
     unsigned int sceneLoadingFlags = aiProcess_Triangulate | aiProcess_GenSmoothNormals | aiProcess_SplitLargeMeshes | aiProcess_SortByPType;
     if (!options().swapYZ)
         sceneLoadingFlags |= aiProcess_FlipUVs;
@@ -505,9 +565,9 @@ void oimport(path const &out, path const &in) {
         throw runtime_error("Unable to load a complete scene");
     if (!scene->mRootNode)
         throw runtime_error("Unable to find scene root node");
+    Node::scene = scene;
 
     // TODO: axis detection
-    // TODO: node (vertices) pre-transform
 
     static aiMatrix4x4 identityMatrix = { 1, 0, 0, 0,  0, 1, 0, 0,  0, 0, 1, 0,  0, 0, 0, 1 };
     Vector4D vecZeroOneTwoThree = { 0, 1, 2, 3 };
@@ -559,6 +619,15 @@ void oimport(path const &out, path const &in) {
             n.name = newname;
         }
     }
+    if (options().sortByName) {
+        if (options().sortByAlpha)
+            sort(nodes.begin(), nodes.end(), Node::SortByNameAndAlpha);
+        else
+            sort(nodes.begin(), nodes.end(), Node::SortByName);
+    }
+    else if (options().sortByAlpha)
+        sort(nodes.begin(), nodes.end(), Node::SortByAlpha);
+
     map<string, string> generatedTexNames; // key: lowered original filename, value - 4-byte name
     if (options().genTexNames) {
         map<string, pair<string, path>> usedTexNames; // key: lowered original filename, value - original filename and filepath
@@ -637,10 +706,11 @@ void oimport(path const &out, path const &in) {
             string matName = mat->GetName().C_Str();
             Shader *shader = nullptr;
 
-            aiColor3D matColor(1, 1, 1);
-            mat->Get(AI_MATKEY_COLOR_DIFFUSE, matColor);
+            aiColor3D matColor(255, 255, 255);
             float matAlpha = 1;
-            mat->Get(AI_MATKEY_OPACITY, matAlpha);
+            AlphaMode alphaMode = ALPHA_NOT_SET;
+            int blendFunc = 0;
+            GetMatColorAndAlphaProperties(mat, matColor, matAlpha, alphaMode, blendFunc);
             aiColor3D matSpecColor(1, 1, 1);
             mat->Get(AI_MATKEY_COLOR_SPECULAR, matSpecColor);
             int isWireframe = 0;
@@ -651,26 +721,12 @@ void oimport(path const &out, path const &in) {
             isTwoSided = isTwoSided != 0;
             int shadingMode = aiShadingMode_Gouraud;
             mat->Get(AI_MATKEY_SHADING_MODEL, shadingMode);
-            int blendFunc = 0;
-            mat->Get(AI_MATKEY_BLEND_FUNC, blendFunc);
             float shininess = 0.0f;
             mat->Get(AI_MATKEY_SHININESS, shininess);
             float shininessStrength = 0.0f;
             mat->Get(AI_MATKEY_SHININESS_STRENGTH, shininessStrength);
             bool isUnlit = false;
             mat->Get(AI_MATKEY_GLTF_UNLIT, isUnlit);
-            aiString alphaModeAiStr;
-            mat->Get(AI_MATKEY_GLTF_ALPHAMODE, alphaModeAiStr);
-            string alphaModeStr = alphaModeAiStr.C_Str();
-            AlphaMode alphaMode = ALPHA_NOT_SET;
-            if (!alphaModeStr.empty()) {
-                if (alphaModeStr == "OPAQUE")
-                    alphaMode = ALPHA_OPAQUE;
-                else if (alphaModeStr == "MASK")
-                    alphaMode = ALPHA_MASK;
-                else if (alphaModeStr == "BLEND")
-                    alphaMode = ALPHA_BLEND;
-            }
             float alphaCutoff = 0.0f;
             mat->Get(AI_MATKEY_GLTF_ALPHACUTOFF, alphaCutoff);
             float roughnessFactor = 1.0f;
@@ -681,7 +737,7 @@ void oimport(path const &out, path const &in) {
             bool hasMatColor = matColor.r != 1 || matColor.g != 1 || matColor.b != 1;
             bool hasMatAlpha = matAlpha != 1;
             bool usesAlphaBlending = blendFunc != 0 || hasMatAlpha || alphaMode == ALPHA_BLEND;
-            bool isMetallic = roughnessFactor <= 0.5f && metallicFactor >= 0.5f;
+            bool isMetallic = false; // roughnessFactor <= 0.5f && metallicFactor >= 0.5f;
 
             Tex tex[3];
             bool texAlreadyPresent[3] = { false, false, false };
@@ -756,6 +812,7 @@ void oimport(path const &out, path const &in) {
                 }
                 else {
                     tex[1].name = "spec";
+                    tex[1].filepath = "spec";
                     textures["spec"] = tex[1];
                 }
                 hasSpecularTex = true;
@@ -822,6 +879,7 @@ void oimport(path const &out, path const &in) {
                             aiColor4D vertexColor;
                             if (numColors > 0 && mesh->HasVertexColors(0) && mesh->mColors[0]) {
                                 vertexColor = mesh->mColors[0][v];
+                                swap(vertexColor.r, vertexColor.b);
                                 if (options().vColScale != 0.0f) {
                                     vertexColor.r *= options().vColScale;
                                     vertexColor.g *= options().vColScale;
@@ -834,13 +892,15 @@ void oimport(path const &out, path const &in) {
                                 else
                                     vertexColor = DEFAULT_COLOR;
                             }
-                            if (hasMatColor) {
-                                vertexColor.r *= matColor.r;
-                                vertexColor.g *= matColor.g;
-                                vertexColor.b *= matColor.b;
+                            if (!options().ignoreMatColor) {
+                                if (hasMatColor) {
+                                    vertexColor.r *= matColor.r;
+                                    vertexColor.g *= matColor.g;
+                                    vertexColor.b *= matColor.b;
+                                }
+                                if (hasMatAlpha)
+                                    vertexColor.a *= matAlpha;
                             }
-                            if (hasMatAlpha)
-                                vertexColor.a *= matAlpha;
                             unsigned char rgba[4];
                             for (unsigned int clr = 0; clr < 4; clr++)
                                 rgba[clr] = unsigned char(vertexColor[clr] * 255);
@@ -1029,6 +1089,7 @@ void oimport(path const &out, path const &in) {
                                     bufData.Align(16);
                                     tex[s].offset = bufData.Position();
                                     globalArgs.emplace_back(bufData.Position(), 1);
+                                    symbols.emplace_back("__EAGL::TAR:::" + tex[s].name + "_" + to_string(Hash(modelName + "_" + tex[s].name)), bufData.Position());
                                     TAR tar;
                                     strncpy(tar.tag, tex[s].name.c_str(), 4);
                                     bufData.Put(tar);

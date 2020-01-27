@@ -282,7 +282,7 @@ void ea::FshImage::ReadFromFile(std::filesystem::path const &filepath, unsigned 
 	D3DXIMAGE_INFO imageInfo;
 	if (FAILED(D3DXGetImageInfoFromFileW(filepath.c_str(), &imageInfo)))
 		throw Exception("ReadFromFile: unable to get image info from file");
-	if (d3dformat == unsigned int(-4) || d3dformat == unsigned int(-5)) {
+	if (d3dformat == unsigned int(-4) || d3dformat == unsigned int(-5) || d3dformat == unsigned int(-6)) {
 		switch (imageInfo.Format) {
 		case D3DFMT_A1:
 		case D3DFMT_A4L4:
@@ -303,10 +303,24 @@ void ea::FshImage::ReadFromFile(std::filesystem::path const &filepath, unsigned 
 		case D3DFMT_A16B16G16R16:
 		case D3DFMT_A16B16G16R16F:
 		case D3DFMT_A32B32G32R32F:
-			d3dformat = (d3dformat == unsigned int(-4)) ? D3DFMT_DXT5 : D3DFMT_A8R8G8B8;
+		    {
+			    if (d3dformat == unsigned int(-4))
+					d3dformat = D3DFMT_DXT5;
+				else if (d3dformat == unsigned int(-6))
+					d3dformat = D3DFMT_A4R4G4B4;
+				else
+					d3dformat = D3DFMT_A8R8G8B8;
+		    }
 			break;
 		default:
-			d3dformat = (d3dformat == unsigned int(-4)) ? D3DFMT_DXT1 : D3DFMT_X8R8G8B8;
+			{
+			    if (d3dformat == unsigned int(-4))
+					d3dformat = D3DFMT_DXT1;
+				else if (d3dformat == unsigned int(-6))
+					d3dformat = D3DFMT_R5G6B5;
+				else
+					d3dformat = D3DFMT_A8R8G8B8;
+		    }
 			break;
 		}
 	}

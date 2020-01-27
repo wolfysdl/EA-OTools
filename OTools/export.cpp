@@ -1102,15 +1102,13 @@ public:
                                     a.min = boundMin;
                                     a.max = boundMax;
                                 }
-                                //else if (d.usage == Shader::Color0) {
-                                //    unsigned char *clr = (unsigned char *)(unsigned int(vertexBuffer) + a.offset);
-                                //    for (unsigned int vert = 0; vert < numVertices; vert++) {
-                                //        clr[0] *= 2;
-                                //        clr[1] *= 2;
-                                //        clr[2] *= 2;
-                                //        clr = (unsigned char *)(unsigned int(clr) + a.stride);
-                                //    }
-                                //}
+                                else if (d.usage == Shader::Color0) {
+                                    unsigned char *clr = (unsigned char *)(unsigned int(vertexBuffer) + a.offset);
+                                    for (unsigned int vert = 0; vert < numVertices; vert++) {
+                                        swap(clr[0], clr[2]);
+                                        clr = (unsigned char *)(unsigned int(clr) + a.stride);
+                                    }
+                                }
                                 accessors.push_back(a);
                             }
                             closeScope();

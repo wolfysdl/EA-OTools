@@ -15,6 +15,7 @@ using namespace std::filesystem;
 struct GlobalOptions {
     bool processingFolders = false;
     // import options
+    float scale = 1.0f;
     bool tristrip = false;
     bool embeddedTextures = false;
     bool swapYZ = false;
@@ -33,6 +34,9 @@ struct GlobalOptions {
     bool fshDisableTextureIgnore = false;
     set<string> fshIgnoreTextures;
     bool preTransformVertices = false;
+    bool sortByName = false;
+    bool sortByAlpha = false;
+    bool ignoreMatColor = false;
     // export options
     bool noTextures = false;
     bool dummyTextures = false;

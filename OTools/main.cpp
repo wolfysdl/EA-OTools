@@ -4,7 +4,7 @@
 #include "errormsg.h"
 #include "Fsh/Fsh.h"
 
-const char *OTOOLS_VERSION = "0.133";
+const char *OTOOLS_VERSION = "0.137";
 
 GlobalOptions &options() {
     static GlobalOptions go;
@@ -21,7 +21,10 @@ enum ErrorType {
 };
 
 int main(int argc, char *argv[]) {
-    CommandLine cmd(argc, argv, { "i", "o", "defaultVCol", "vColScale", "fshOutput", "fshLevels", "fshFormat", "fshAddTextures", "fshIgnoreTextures" }, { "keepPrimType", "noTextures", "recursive", "createSubDir", "silent", "onlyFirstTechnique", "dummyTextures", "jpegTextures", "embeddedTextures", "swapYZ", "forceLighting", "noMetadata", "genTexNames", "writeFsh", "fshRescale", "fshDisableTextureIgnore", "preTransformVertices" });
+    CommandLine cmd(argc, argv, { "i", "o", "scale", "defaultVCol", "vColScale", "fshOutput", "fshLevels", "fshFormat", "fshAddTextures", "fshIgnoreTextures" },
+        { "keepPrimType", "noTextures", "recursive", "createSubDir", "silent", "onlyFirstTechnique", "dummyTextures", "jpegTextures", "embeddedTextures", 
+        "swapYZ", "forceLighting", "noMetadata", "genTexNames", "writeFsh", "fshRescale", "fshDisableTextureIgnore", "preTransformVertices", "sortByName", 
+        "sortByAlpha", "ignoreMatColor" });
     if (cmd.HasOption("silent"))
         SetErrorDisplayType(ErrorDisplayType::ERR_NONE);
     else {
@@ -86,6 +89,8 @@ int main(int argc, char *argv[]) {
     else if (opType == OperationType::IMPORT) {
         if (cmd.HasOption("noMetadata"))
             options().noMetadata = true;
+        if (cmd.HasArgument("scale"))
+            options().scale = cmd.GetArgumentFloat("scale");
         if (cmd.HasOption("tristrip"))
             options().tristrip = true;
         if (cmd.HasOption("embeddedTextures"))
@@ -131,8 +136,10 @@ int main(int argc, char *argv[]) {
                 if (!format.empty()) {
                     if (format == "dxt")
                         options().fshFormat = unsigned int(-4);
-                    else if (format == "rgb")
+                    else if (format == "rgb" || format == "rgba" || format == "rgb32")
                         options().fshFormat = unsigned int(-5);
+                    else if (format == "rgb16" || format == "rgba16")
+                        options().fshFormat = unsigned int(-6);
                     else if (format == "auto")
                         options().fshFormat = unsigned int(-3);
                     else if (format == "dxt1")
@@ -171,6 +178,12 @@ int main(int argc, char *argv[]) {
         }
         if (cmd.HasOption("preTransformVertices"))
             options().preTransformVertices = true;
+        if (cmd.HasOption("sortByName"))
+            options().sortByName = true;
+        if (cmd.HasOption("sortByAlpha"))
+            options().sortByAlpha = true;
+        if (cmd.HasOption("ignoreMatColor"))
+            options().ignoreMatColor = true;
     }
     else if (opType == OperationType::DUMP) {
         if (cmd.HasOption("onlyFirstTechnique"))
