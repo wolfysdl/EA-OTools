@@ -49,6 +49,8 @@ Additional export options:
 
 Additional import options:
 
+`-scale <scaling>` - scale model by given floating-point factor
+
 `-defaultVCol <color>` - default vertex color (could be RGB or RGBA in hexadecimal format, for example: `7F7F7FFF`). This color will be used when mesh in source model has no vertex colors. Default value is `7F7F7FFF`
 
 `-vColScale <scale>` - vertex color scale (floating-point value from 0.0 to 1.0). This value is used only when mesh in source model has vertex colors. Ignored when set to 0.0. Default value is 0.0
@@ -67,7 +69,7 @@ Additional import options:
 
 `-fshLevels <level count>` - levels (mipmaps) count for .fsh images. When set to -1 ot 0, the count will be taken from file. When lower than -1 or greater than 13, a full mipmap chain will be generated. Full mipmap chain generation option is used by default
 
-`-fshFormat <format>` - pixel format for .fsh images. Supported formats are: `rgb`, `dxt`, `auto`, `8888`, `888`, `dxt1`, `dxt3`, `dxt5`, `4444`, `5551`, `565`. `auto` option is used to detect format from the file. `rgb` option is used to select `888` or `8888` depending on image transparency. `dxt` option is used to select `dxt1` or `dxt5` depending on image transparency. `dxt` option is used by default
+`-fshFormat <format>` - pixel format for .fsh images. Supported formats are: `rgb` (also `rgba`, `rgb32`, `rgba32`), `rgb16` (also `rgba16`), `dxt`, `auto`, `8888`, `888`, `dxt1`, `dxt3`, `dxt5`, `4444`, `5551`, `565`. `auto` option is used to detect format from the file. `rgb` options are used to select format depending on image transparency. `dxt` option is used to select `dxt1` or `dxt5` depending on image transparency. `dxt` option is used by default
 
 `-fshRescale` - rescale .fsh images to power-of-two size
 
@@ -78,6 +80,12 @@ Additional import options:
 `-fshIgnoreTextures <image names list>` - a list of comma-separated names of images which should be additionally ignored when writing to .fsh
 
 `-preTransformVertices` - pre-transform all vertices to global space
+
+`-sortByName` - sort nodes by their names
+
+`-sortByAlpha` - sort nodes by transparency. Can be also used with `-sortByName`
+
+`-ignoreMatColor` - ignore material color (by default, material color will be multiplied with vertex color and stored as vertex color)
 
 **Source code dependencies**
 
