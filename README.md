@@ -39,6 +39,8 @@ Additional options:
 
 `-createSubDir` - create sub-directory for output file
 
+`-recursive` - scan subfolders (when input is directory)
+
 Additional export options:
 
 `-noTextures` - do not attach textures to materials (a temporary fix for inbuilt .gltf preview in Windows which can't display models with images in external files)
