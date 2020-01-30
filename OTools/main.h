@@ -41,6 +41,7 @@ struct GlobalOptions {
     bool noTextures = false;
     bool dummyTextures = false;
     bool jpegTextures = false;
+    bool noMeshJoin = false;
     // dump options
     bool onlyFirstTechnique = false;
 };

@@ -71,6 +71,7 @@
     <ClInclude Include="NvTriStrip\NvTriStripObjects.h" />
     <ClInclude Include="NvTriStrip\VertexCache.h" />
     <ClInclude Include="shaders.h" />
+    <ClInclude Include="target.h" />
     <ClInclude Include="utils.h" />
   </ItemGroup>
   <ItemGroup>
@@ -93,6 +94,7 @@
     <ClCompile Include="NvTriStrip\NvTriStripObjects.cpp" />
     <ClCompile Include="NvTriStrip\VertexCache.cpp" />
     <ClCompile Include="shaders.cpp" />
+    <ClCompile Include="target.cpp" />
     <ClCompile Include="utils.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

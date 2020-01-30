@@ -13,15 +13,19 @@ enum ShaderCommand {
     DRAW_PRIM = 16,
     DRAW_INDEXED_PRIM_NO_Z_WRITE = 17,
     DRAW_INDEXED_PRIM = 18,
+    SET_VERTEX_BONE_WEIGHTS = 28,
     SET_VERTEX_SHADER_CONSTANT_L_30 = 30,
     SET_VERTEX_SHADER_CONSTANT_L_31 = 31,
     SET_SAMPLER = 32,
     SET_GEO_PRIM_STATE = 33,
     SET_VERTEX_SHADER_TRANSPOSED_MATRIX = 35,
+    SET_ANIMATION_BUFFER = 40,
     SET_VERTEX_SHADER_CONSTANT_L_46 = 46,
     DRAW_INDEXED_PRIM_AND_END = 65,
     SETUP_RENDER = 69,
-    SET_PIXEL_SHADER_CONTANT_G = 73
+    SET_PIXEL_SHADER_CONTANT_G_72 = 72,
+    SET_PIXEL_SHADER_CONTANT_G_73 = 73,
+    SET_STREAM_SOURCE_SKINNED = 75
 };
 
 struct Shader {
@@ -43,6 +47,7 @@ struct Shader {
         VertexCount,
         IndexData,
         IndexCount,
+        VertexSkinData,
         GeometryInfo,
         ModelMatrix,
         ViewMatrix,
@@ -77,6 +82,9 @@ struct Shader {
         RMGrass_PSConstants,
         RMGrass_VSConstants,
         RMGrass_CameraPosition,
+        EAGLAnimationBuffer,
+        ViewVector,
+        RimLightCol
     };
 
     struct Command {
@@ -106,6 +114,7 @@ struct Shader {
     Shader(char const *_name, unsigned int _numTechniques, std::vector<VertexDeclElement> const &_declaration, std::vector<Command> _commands, std::vector<GlobalArgument> _globalArguments);
     unsigned int VertexSize() const;
     int ComputationCommandIndex() const;
+    bool HasAttribute(DataUsage attribute) const;
 };
 
 extern Shader *Shaders;

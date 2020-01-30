@@ -335,14 +335,23 @@ class exporter {
     };
 
     struct Material {
-        unsigned int id = 0;
         string shader;
         Texture *textures[3] = { nullptr, nullptr, nullptr };
         bool doubleSided = true;
         string alphaMode;
-        float alphaCutoff = 0.0f;
         float metallicFactor = 0.0f;
         float roughnessFactor = 1.0f;
+
+        bool Compare(Material &m) const {
+            return shader == m.shader &&
+                textures[0] == m.textures[0] &&
+                textures[1] == m.textures[1] &&
+                textures[2] == m.textures[2] &&
+                doubleSided == m.doubleSided &&
+                alphaMode == m.alphaMode &&
+                metallicFactor == m.metallicFactor &&
+                roughnessFactor == m.roughnessFactor;
+        }
     };
 
     struct GeoPrimState {
@@ -592,7 +601,7 @@ public:
                     auto const &bone = bones[b];
                     if (bone->mIndex < skelNodes.size()) {
                         skelNodes[bone->mIndex].index = bone->mIndex;
-                        skelNodes[bone->mIndex].name = boneNames[b];
+                        skelNodes[bone->mIndex].name = boneNames[b] + " [" + to_string(bone->mIndex) + "]";
                     }
                 }
                 sort(skelNodes.begin(), skelNodes.end(), [](SkeletonNode const &a, SkeletonNode const &b) {
@@ -733,7 +742,6 @@ public:
                         string shaderName;
                         int color1Offset = -1;
                         Material mat;
-                        mat.id = materials.size();
                         //Error("%X", rmCodeOffset);
                         auto it = symbolRelocations.find(rmCodeOffset);
                         if (it != symbolRelocations.end() && (*it).second.st_info == 0x10) {
@@ -1134,6 +1142,9 @@ public:
                                         vsb[v].weights.y = skinVertexDataBuffer[boneIndex].packedData.y;
                                         vsb[v].weights.z = skinVertexDataBuffer[boneIndex].packedData.z;
                                         vsb[v].weights.w = 0.0f;
+                                        *(unsigned char *)(&vsb[v].weights.x) = 0;
+                                        *(unsigned char *)(&vsb[v].weights.y) = 0;
+                                        *(unsigned char *)(&vsb[v].weights.z) = 0;
                                         //Error(L"%d %d-%d-%d %.2f %.2f %.2f", boneIndex, vsb[v].indices[0], vsb[v].indices[1], vsb[v].indices[2],
                                         //    vsb[v].weights.x, vsb[v].weights.y, vsb[v].weights.z);
                                     }
@@ -1165,8 +1176,22 @@ public:
                             buffers.push_back(b);
                         }
                         writeFieldInt("mode", geoPrimMode);
-                        writeFieldInt("material", materials.size());
-                        materials.push_back(mat);
+                        unsigned int materialId = 0;
+                        bool materialFound = false;
+                        if (!options().noMeshJoin) {
+                            for (unsigned int mid = 0; mid < materials.size(); mid++) {
+                                if (materials[mid].Compare(mat)) {
+                                    materialId = mid;
+                                    materialFound = true;
+                                    break;
+                                }
+                            }
+                        }
+                        if (!materialFound) {
+                            materialId = materials.size();
+                            materials.push_back(mat);
+                        }
+                        writeFieldInt("material", materialId);
                         closeScope();
                     }
                     modelLayers += numPrimitives;
@@ -1262,7 +1287,7 @@ public:
                 openArray("materials");
                 for (unsigned int i = 0; i < materials.size(); i++) {
                     openScope();
-                    writeFieldString("name", string("material") + Format("%02d", materials[i].id) + " [" + materials[i].shader + "]");
+                    writeFieldString("name", string("material") + Format("%02d", i) + " [" + materials[i].shader + "]");
                     if (materials[i].doubleSided)
                         writeFieldBool("doubleSided", true);
                     if (!materials[i].alphaMode.empty())

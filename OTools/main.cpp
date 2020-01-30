@@ -4,7 +4,7 @@
 #include "errormsg.h"
 #include "Fsh/Fsh.h"
 
-const char *OTOOLS_VERSION = "0.137";
+const char *OTOOLS_VERSION = "0.138";
 
 GlobalOptions &options() {
     static GlobalOptions go;
@@ -24,7 +24,7 @@ int main(int argc, char *argv[]) {
     CommandLine cmd(argc, argv, { "i", "o", "scale", "defaultVCol", "vColScale", "fshOutput", "fshLevels", "fshFormat", "fshAddTextures", "fshIgnoreTextures" },
         { "keepPrimType", "noTextures", "recursive", "createSubDir", "silent", "onlyFirstTechnique", "dummyTextures", "jpegTextures", "embeddedTextures", 
         "swapYZ", "forceLighting", "noMetadata", "genTexNames", "writeFsh", "fshRescale", "fshDisableTextureIgnore", "preTransformVertices", "sortByName", 
-        "sortByAlpha", "ignoreMatColor" });
+        "sortByAlpha", "ignoreMatColor", "noMeshJoin" });
     if (cmd.HasOption("silent"))
         SetErrorDisplayType(ErrorDisplayType::ERR_NONE);
     else {
@@ -85,6 +85,8 @@ int main(int argc, char *argv[]) {
             options().dummyTextures = true;
         if (cmd.HasOption("jpegTextures"))
             options().jpegTextures = true;
+        if (cmd.HasOption("noMeshJoin"))
+            options().noMeshJoin = true;
     }
     else if (opType == OperationType::IMPORT) {
         if (cmd.HasOption("noMetadata"))

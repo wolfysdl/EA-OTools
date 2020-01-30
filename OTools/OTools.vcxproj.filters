@@ -33,6 +33,7 @@
     <ClInclude Include="Fsh\Fsh.h">
       <Filter>Fsh</Filter>
     </ClInclude>
+    <ClInclude Include="target.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dump.cpp" />
@@ -71,6 +72,7 @@
     <ClCompile Include="Fsh\Fsh.cpp">
       <Filter>Fsh</Filter>
     </ClCompile>
+    <ClCompile Include="target.cpp" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="NvTriStrip">

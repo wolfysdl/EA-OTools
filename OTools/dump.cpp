@@ -28,6 +28,7 @@ unsigned int Writer::mSpacing = 0;
 const unsigned int SPACING = 4;
 map<unsigned int, Symbol> symbolRelocations;
 map<string, unsigned int> codeTechniques;
+void *currentData = nullptr;
 
 void Writer::openScope(string const &title, unsigned int offset, string const &comment) {
     mResult += spacing() + title;
@@ -178,6 +179,8 @@ string CommandName(unsigned int id) {
         return "DRAW_INDEXED_PRIM_NO_Z_WRITE";
     case 18:
         return "DRAW_INDEXED_PRIM";
+    case 28:
+        return "SET_VERTEX_BONE_WEIGHTS";
     case 30:
         return "SET_VERTEX_SHADER_CONSTANT_L_30";
     case 31:
@@ -188,14 +191,20 @@ string CommandName(unsigned int id) {
         return "SET_GEO_PRIM_STATE";
     case 35:
         return "SET_VERTEX_SHADER_TRANSPOSED_MATRIX";
+    case 40:
+        return "SET_ANIMATION_BUFFER";
     case 46:
         return "SET_VERTEX_SHADER_CONSTANT_L_46";
     case 65:
         return "DRAW_INDEXED_PRIM_AND_END";
     case 69:
         return "SETUP_RENDER";
+    case 72:
+        return "SET_PIXEL_SHADER_CONTANT_G_72";
     case 73:
-        return "SET_PIXEL_SHADER_CONTANT_G";
+        return "SET_PIXEL_SHADER_CONTANT_G_73";
+    case 75:
+        return "SET_STREAM_SOURCE_SKINNED";
     }
     return Format("COMMAND_%02d", id);
 }
@@ -727,7 +736,20 @@ unsigned int WriteIndexBuffer(void *baseObj, string const &name, unsigned char *
 unsigned int WriteBoneWeightsBuffer(void *baseObj, string const &name, unsigned char *data, unsigned int offset) {
     Writer::openScope("BoneWeightsBuffer " + name, offset); // TODO: write references
     unsigned int numBoneWeights = GetAt<unsigned int>(baseObj, 0);
+    struct boneweight { union boneref { float weight; unsigned char boneIndex; }; boneref bones[4]; };
+    boneweight *weights = At<boneweight>(currentData, GetAt<unsigned int>(baseObj, 4));
     Writer::writeLine(to_string(numBoneWeights) + " bone weights [...]");
+    for (unsigned int i = 0; i < numBoneWeights; i++) {
+        string line;
+        for (unsigned int b = 0; b < 4; b++) {
+            float weight = weights[i].bones[b].weight;
+            *(unsigned char *)(&weight) = 0;
+            line += Format("bone %2d %.4f", weights[i].bones[b].boneIndex, weight);
+            if (b != 3)
+                line += "   ";
+        }
+        Writer::writeLine(line);
+    }
     Writer::closeScope();
     return numBoneWeights * 16;
 }
@@ -841,6 +863,7 @@ void InitAnalyzer() {
 
 void AnalyzeFile(string const &filename, unsigned char *fileData, unsigned int fileDataSize, vector<Symbol> const &symbols, vector<Relocation> const &references) {
     Writer::mResult.clear();
+    currentData = fileData;
     class Object {
     public:
         string mType;

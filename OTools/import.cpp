@@ -13,6 +13,8 @@
 #include "NvTriStrip/NvTriStrip.h"
 #include "Fsh\Fsh.h"
 
+// TODO: SET_SAMPLER 2nd argument for global textures
+
 struct Vector4D {
     float x = 0.0f;
     float y = 0.0f;
@@ -415,6 +417,64 @@ struct IrradLight {
     }
 };
 
+union VertexBoneInfo {
+    float fValue;
+    unsigned int uiValue;
+    unsigned char ucValue;
+};
+
+struct VertexWeightInfo {
+    VertexBoneInfo bones[3];
+    unsigned int numBones;
+
+    VertexWeightInfo() {
+        Memory_Zero(*this);
+    }
+};
+
+bool operator<(VertexBoneInfo const &a, VertexBoneInfo const &b) {
+    return a.uiValue > b.uiValue;
+}
+
+bool operator>(VertexBoneInfo const &a, VertexBoneInfo const &b) {
+    return a.uiValue < b.uiValue;
+}
+
+bool operator<(VertexWeightInfo const &a, VertexWeightInfo const &b) {
+    if (a.numBones > b.numBones)
+        return true;
+    if (b.numBones > a.numBones)
+        return false;
+    for (unsigned i = 0; i < 3; i++) {
+        if (a.bones[i] > b.bones[i])
+            return true;
+        if (b.bones[i] > a.bones[i])
+            return false;
+    }
+    return false;
+}
+
+struct BoneInfo {
+    unsigned char index = 0;
+    aiBone *bone = nullptr;
+    string name;
+
+    BoneInfo() {}
+
+    BoneInfo(unsigned char _index, aiBone *_bone, string _name) {
+        index = _index;
+        bone = _bone;
+        name = _name;
+    }
+};
+
+struct MeshInfo {
+    map<VertexWeightInfo, vector<unsigned int>> weightsMap;
+    map<unsigned int, unsigned int> verticesMap; // original vertex index > new vertex index
+    unsigned int startFace = 0;
+    unsigned int numFaces = 0;
+};
+
 unsigned int FshHash (string const &name) {
     unsigned int hash = 0;
     for (unsigned char c : name) {
@@ -427,22 +487,27 @@ unsigned int FshHash (string const &name) {
     return hash;
 };
 
-bool IsRootNode(aiNode *node) {
-    string nodeName = node->mName.C_Str();
-    return nodeName == "<3DSRoot>" ||
-        nodeName == "RootNode" ||
-        nodeName == "ROOT" ||
-        nodeName == "Scene" ||
-        nodeName == "ID2";
-}
-
 bool ShouldIgnoreThisNode(aiNode *node) {
     auto l = ToLower(node->mName.C_Str());
     return l.find("[ignore]") != string::npos;
 }
 
-void NodeAddCallback(aiNode *node, vector<Node> &nodes, bool isRoot = false) {
-    if (!isRoot && !ShouldIgnoreThisNode(node)) {
+bool IsSkeletonNode(aiNode *node) {
+    if (!ShouldIgnoreThisNode(node)) {
+        string nodeName = node->mName.C_Str();
+        if (nodeName.length() >= 8) {
+            nodeName = ToLower(nodeName);
+            if (nodeName.starts_with("skeleton")) {
+                auto c = nodeName.c_str()[8];
+                return c == '\0' || c == '.' || c == '_'; // 'Skeleton', 'Skeleton.001', 'Skeleton_001'
+            }
+        }
+    }
+    return false;
+}
+
+void NodeAddCallback(aiNode *node, vector<Node> &nodes) {
+    if (!ShouldIgnoreThisNode(node)) {
         if (node->mNumMeshes)
             nodes.emplace_back(node);
     }
@@ -551,9 +616,12 @@ bool LoadTextureIntoTexSlot(aiScene const *scene, aiMaterial const *mat, aiTextu
 void oimport(path const &out, path const &in) {
     Assimp::Importer importer;
     importer.SetPropertyInteger(AI_CONFIG_PP_SBP_REMOVE, aiPrimitiveType_POINT | aiPrimitiveType_LINE);
+    //importer.SetPropertyInteger(AI_CONFIG_IMPORT_REMOVE_EMPTY_BONES, 0);
     if (options().scale > 0.0f && options().scale != 1.0f)
         importer.SetPropertyFloat(AI_CONFIG_GLOBAL_SCALE_FACTOR_KEY, options().scale);
-    unsigned int sceneLoadingFlags = aiProcess_Triangulate | aiProcess_GenSmoothNormals | aiProcess_SplitLargeMeshes | aiProcess_SortByPType;
+    importer.SetPropertyInteger(AI_CONFIG_PP_LBW_MAX_WEIGHTS, 3);
+    unsigned int sceneLoadingFlags = aiProcess_Triangulate | aiProcess_GenSmoothNormals | aiProcess_GenUVCoords | aiProcess_SplitLargeMeshes |
+        aiProcess_SortByPType | aiProcess_PopulateArmatureData | aiProcess_LimitBoneWeights;
     if (!options().swapYZ)
         sceneLoadingFlags |= aiProcess_FlipUVs;
     if (options().preTransformVertices)
@@ -566,6 +634,7 @@ void oimport(path const &out, path const &in) {
     if (!scene->mRootNode)
         throw runtime_error("Unable to find scene root node");
     Node::scene = scene;
+    const unsigned int MAX_BONE_WEIGHTS_PER_MESH = 100;
 
     // TODO: axis detection
 
@@ -574,7 +643,7 @@ void oimport(path const &out, path const &in) {
     Vector4D vec1111 = { 1, 1, 1, 1 };
     Vector4D vecEnvMapConstants = { 1.0f, 0.25f, 0.5f, 0.75f };
     bool flipAxis = options().swapYZ;
-    bool isSkinned = false;
+    bool hasSkeleton = false;
     bool hasLights = scene->HasLights() || options().forceLighting;
     const unsigned int ZERO = 0;
     const unsigned int ONE = 1;
@@ -593,9 +662,10 @@ void oimport(path const &out, path const &in) {
     unsigned int numVariations = 1;
     unsigned short computationIndex = 2;
     vector<Node> nodes;
+    map<string, BoneInfo> bones; // name -> [index, aiBone]
     map<string, Tex> textures;
 
-    NodeAddCallback(scene->mRootNode, nodes, IsRootNode(scene->mRootNode));
+    NodeAddCallback(scene->mRootNode, nodes);
 
     unsigned int nodeCounter = 0;
     unsigned int meshCounter = 0;
@@ -705,6 +775,8 @@ void oimport(path const &out, path const &in) {
             aiMaterial *mat = scene->mMaterials[mesh->mMaterialIndex];
             string matName = mat->GetName().C_Str();
             Shader *shader = nullptr;
+            bool meshHasBones = mesh->HasBones();
+            bool isMeshSkinned = false;
 
             aiColor3D matColor(255, 255, 255);
             float matAlpha = 1;
@@ -760,42 +832,57 @@ void oimport(path const &out, path const &in) {
             }
 
             if (!shader) {
-                // TODO: handle skin shaders
-                if (hasDiffuseTex) {
-                    if (tex[0].IsAdboardsTexture())
-                        shader = FindShader("XFadeScrollTexture");
-                    else {
-                        if (usesAlphaBlending) {
-                            if (!isUnlit && (hasReflectionTex || hasSpecularTex || isMetallic))
-                                shader = FindShader("IrradLitTextureEnvmapTransparent2x");
-                            else {
-                                if (blendFunc == aiBlendMode::aiBlendMode_Additive)
-                                    shader = FindShader("ClipTextureAddNodepthwrite");
-                                else
-                                    shader = FindShader("ClipTextureAlphablend");
-                            }
-                        }
-                        else { // no alpha blending
-                            if (isUnlit)
-                                shader = FindShader("Texture2x");
-                            else {
-                                if (hasReflectionTex || hasSpecularTex || isMetallic)
-                                    shader = FindShader("LitTextureIrradEnvmap");
+                if (hasDiffuseTex && tex[0].IsAdboardsTexture())
+                    shader = FindShader("XFadeScrollTexture");
+                else {
+                    if (!meshHasBones) {
+                        if (hasDiffuseTex) {
+                            if (usesAlphaBlending) {
+                                if (!isUnlit && (hasReflectionTex || hasSpecularTex || isMetallic))
+                                    shader = FindShader("IrradLitTextureEnvmapTransparent2x");
                                 else {
-                                    if (hasLights)
-                                        shader = FindShader("LitTexture2x");
+                                    if (blendFunc == aiBlendMode::aiBlendMode_Additive)
+                                        shader = FindShader("ClipTextureAddNodepthwrite");
                                     else
-                                        shader = FindShader("Texture2x");
+                                        shader = FindShader("ClipTextureAlphablend");
+                                }
+                            }
+                            else { // no alpha blending
+                                if (isUnlit)
+                                    shader = FindShader("Texture2x");
+                                else {
+                                    if (hasReflectionTex || hasSpecularTex || isMetallic)
+                                        shader = FindShader("LitTextureIrradEnvmap");
+                                    else {
+                                        if (hasLights)
+                                            shader = FindShader("LitTexture2x");
+                                        else
+                                            shader = FindShader("Texture2x");
+                                    }
                                 }
                             }
                         }
+                        else {
+                            if (hasLights && !isUnlit)
+                                shader = FindShader("IrradLitGouraud2x");
+                            else
+                                shader = FindShader("Gouraud");
+                        }
                     }
-                }
-                else {
-                    if (hasLights && !isUnlit)
-                        shader = FindShader("IrradLitGouraud2x");
-                    else
-                        shader = FindShader("Gouraud");
+                    else { // mesh is skinned
+                        if (hasDiffuseTex) {
+                            if (usesAlphaBlending)
+                                shader = FindShader("LitTexture2Alpha2x_Skin");
+                            else { // no alpha blending
+                                if (hasReflectionTex || hasSpecularTex || isMetallic)
+                                    shader = FindShader("LitTextureIrradSpecMap_Skin");
+                                else
+                                    shader = FindShader("LitTexture2x_Skin");
+                            }
+                        }
+                        else
+                            shader = FindShader("Gouraud_Skin");
+                    }
                 }
             }
 
@@ -803,7 +890,7 @@ void oimport(path const &out, path const &in) {
                 shader = &Shaders[0];
 
             if (!hasReflectionTex && !hasSpecularTex &&
-                (shader->nameLowered == "littextureirradenvmap" || shader->nameLowered == "irradlittextureenvmaptransparent2x"))
+                (shader->nameLowered == "littextureirradenvmap" || shader->nameLowered == "irradlittextureenvmaptransparent2x")) // TODO: check skin?
             {
                 auto texit = textures.find("spec");
                 if (texit != textures.end()) {
@@ -818,259 +905,431 @@ void oimport(path const &out, path const &in) {
                 hasSpecularTex = true;
             }
 
-            unsigned int numVertices = mesh->mNumVertices;
-            unsigned int numIndices = mesh->mNumFaces * 3;
-            unsigned int numPrimitives = mesh->mNumFaces;
+            isMeshSkinned = shader->HasAttribute(Shader::BlendWeight) && shader->HasAttribute(Shader::BlendIndices) && shader->HasAttribute(Shader::Color1);
+            bool useSkinning = isMeshSkinned && meshHasBones;
+
+            vector<VertexWeightInfo> allMeshesVertexWeights;
+
+            if (useSkinning) {
+                if (!hasSkeleton)
+                    hasSkeleton = true;
+                if (bones.empty()) {
+                    if (mesh->mNumBones > 255)
+                        throw runtime_error("Failed to load bones array: using more than 255 bones in skeleton is not allowed");
+                    unsigned char maxBoneIndex = 0;
+                    set<unsigned char> usedBoneIndices;
+                    for (unsigned int b = 0; b < mesh->mNumBones; b++) {
+                        unsigned int boneIndex = 0;
+                        string boneName;
+                        string bname = mesh->mBones[b]->mNode->mName.C_Str();
+                        auto idbp = bname.find('[');
+                        if (idbp != string::npos) {
+                            auto idbe = bname.find(']', idbp + 1);
+                            if (idbe != string::npos) {
+                                string idstr = bname.substr(idbp + 1, idbe - idbp - 1);
+                                if (!idstr.empty()) {
+                                    try {
+                                        boneIndex = stoi(idstr);
+                                    }
+                                    catch (...) {
+                                        throw runtime_error("Failed to get bone index: index is incorrect");
+                                    }
+                                    if (boneIndex > 255)
+                                        throw runtime_error("Failed to load bones array: bone with index greater than 255 is not allowed");
+                                }
+                                else
+                                    throw runtime_error("Failed to get bone index: index is incorrect");
+                            }
+                            else
+                                throw runtime_error("Failed to get bone index: index format is incorrect");
+                        }
+                        else
+                            throw runtime_error("Failed to get bone index: index is not present");
+                        if (!usedBoneIndices.contains(boneIndex))
+                            usedBoneIndices.insert(boneIndex);
+                        else
+                            throw runtime_error("Failed to load bones array: duplicated bone index in bones array");
+                        boneName = bname.substr(0, idbp);
+                        Trim(boneName);
+                        bones[bname] = { unsigned char(boneIndex), mesh->mBones[b], boneName };
+                        if (maxBoneIndex < boneIndex)
+                            maxBoneIndex = boneIndex;
+                    }
+                    if (!bones.empty()) {
+                        if (bones.size() != (maxBoneIndex + 1))
+                            throw runtime_error(Format("Failed to load bones array: bones array size (%d) does not match the highest bone index (%d)", bones.size(), maxBoneIndex));
+                    }
+                }
+                // Find weights for all vertices
+                allMeshesVertexWeights.resize(mesh->mNumVertices);
+                for (unsigned int b = 0; b < mesh->mNumBones; b++) {
+                    aiBone *bone = mesh->mBones[b];
+                    auto bit = bones.find(bone->mNode->mName.C_Str());
+                    if (bit != bones.end()) {
+                        for (unsigned int w = 0; w < bone->mNumWeights; w++) {
+                            if (bone->mWeights[w].mWeight > 0) {
+                                auto &vw = allMeshesVertexWeights[bone->mWeights[w].mVertexId];
+                                if (vw.numBones == 3)
+                                    throw runtime_error("More than 3 bone weights on vertex");
+                                vw.bones[vw.numBones].fValue = bone->mWeights[w].mWeight;
+                                vw.bones[vw.numBones].ucValue = (*bit).second.index;
+                                vw.numBones++;
+                            }
+                        }
+                    }
+                    else
+                        throw runtime_error("Unable to find bone in bones array");
+                }
+                // Sort weights in vertices
+                for (unsigned int v = 0; v < mesh->mNumVertices; v++) {
+                    if (allMeshesVertexWeights[v].numBones > 1)
+                        sort(&allMeshesVertexWeights[v].bones[0], &allMeshesVertexWeights[v].bones[allMeshesVertexWeights[v].numBones]);
+                }
+            }
+
             unsigned int vertexSize = shader->VertexSize();
             const unsigned int indexSize = 2;
-            unsigned int vertexBufferSize = vertexSize * numVertices;
-            unsigned int indexBufferSize = indexSize * numIndices;
-            unsigned int vertexBufferOffset = 0;
-            unsigned int indexBufferOffset = 0;
-            unsigned char *vertexBuffer = new unsigned char[vertexBufferSize];
-            Memory_Zero(vertexBuffer, vertexBufferSize);
-            unsigned short *indexBuffer = new unsigned short[numIndices];
-            Memory_Zero(indexBuffer, indexBufferSize);
             unsigned int numColors = mesh->GetNumColorChannels();
             unsigned int numTexCoords = mesh->GetNumUVChannels();
 
-            for (unsigned int f = 0; f < numPrimitives; f++) {
-                indexBuffer[f * 3 + 0] = mesh->mFaces[f].mIndices[0];
-                indexBuffer[f * 3 + 1] = mesh->mFaces[f].mIndices[1];
-                indexBuffer[f * 3 + 2] = mesh->mFaces[f].mIndices[2];
-            }
-            // generate tristrips
-            if (options().tristrip) {
-                SetListsOnly(true);
-                SetCacheSize(CACHESIZE_GEFORCE1_2);
-                PrimitiveGroup *prims = nullptr;
-                unsigned short numprims = 0;
-                GenerateStrips(indexBuffer, numIndices, &prims, &numprims);
-                delete[] indexBuffer;
-                indexBuffer = prims[0].indices;
-                numIndices = prims[0].numIndices;
-                numPrimitives = numIndices - 2;
-                indexBufferSize = indexSize * numIndices;
-            }
-            unsigned int vertexDataOffset = 0;
-            for (unsigned int v = 0; v < numVertices; v++) {
-                unsigned int vertexOffset = vertexDataOffset;
-                for (auto const &d : shader->declaration) {
-                    switch (d.usage) {
-                    case Shader::Position:
-                        if (d.type == Shader::Float3 && mesh->mVertices) {
-                            aiVector3D vecPos = mesh->mVertices[v];
-                            if (flipAxis)
-                                swap(vecPos.y, vecPos.z);
-                            Memory_Copy(&vertexBuffer[vertexOffset], &vecPos, 12);
-                            ProcessBoundBox(n.boundMin, n.boundMax, n.anyVertexProcessed, vecPos);
-                        }
-                        break;
-                    case Shader::Normal:
-                        if (d.type == Shader::Float3 && mesh->mNormals) {
-                            aiVector3D vecNormal = mesh->mNormals[v];
-                            if (flipAxis)
-                                swap(vecNormal.y, vecNormal.z);
-                            Memory_Copy(&vertexBuffer[vertexOffset], &vecNormal, 12);
-                        }
-                        break;
-                    case Shader::Color0:
-                        if (d.type == Shader::D3DColor || d.type == Shader::UByte4) {
-                            aiColor4D vertexColor;
-                            if (numColors > 0 && mesh->HasVertexColors(0) && mesh->mColors[0]) {
-                                vertexColor = mesh->mColors[0][v];
-                                swap(vertexColor.r, vertexColor.b);
-                                if (options().vColScale != 0.0f) {
-                                    vertexColor.r *= options().vColScale;
-                                    vertexColor.g *= options().vColScale;
-                                    vertexColor.b *= options().vColScale;
+            unsigned int totalNumIndices = mesh->mNumFaces * 3;
+            unsigned int totalNumFaces = mesh->mNumFaces;
+            unsigned int totalIndexBufferSize = indexSize * totalNumIndices;
+            vector<unsigned short> allMeshesIndexBuffer(totalNumIndices);
+            Memory_Zero(allMeshesIndexBuffer.data(), totalIndexBufferSize);
+
+            vector<MeshInfo> meshes;
+
+            meshes.push_back(MeshInfo());
+            meshes.back().startFace = 0;
+            for (unsigned int f = 0; f < mesh->mNumFaces; f++) {
+                unsigned int *tri = mesh->mFaces[f].mIndices;
+                if (useSkinning) {
+                    unsigned int numBoneWeights = meshes.back().weightsMap.size();
+                    if ((numBoneWeights + 3) > MAX_BONE_WEIGHTS_PER_MESH) {
+                        unsigned int maxNumBoneWeightsToAdd = MAX_BONE_WEIGHTS_PER_MESH - numBoneWeights;
+                        unsigned int numWeightsToAdd = 0;
+                        for (unsigned int ind = 0; ind < 3; ind++) {
+                            if (!meshes.back().weightsMap.contains(allMeshesVertexWeights[tri[ind]])) {
+                                numWeightsToAdd++;
+                                if (numWeightsToAdd > maxNumBoneWeightsToAdd) {
+                                    meshes.back().numFaces = f - meshes.back().startFace;
+                                    meshes.push_back(MeshInfo());
+                                    meshes.back().startFace = f;
+                                    break;
                                 }
                             }
-                            else {
-                                if (options().hasDefaultVCol)
-                                    vertexColor = options().defaultVCol;
-                                else
-                                    vertexColor = DEFAULT_COLOR;
-                            }
-                            if (!options().ignoreMatColor) {
-                                if (hasMatColor) {
-                                    vertexColor.r *= matColor.r;
-                                    vertexColor.g *= matColor.g;
-                                    vertexColor.b *= matColor.b;
-                                }
-                                if (hasMatAlpha)
-                                    vertexColor.a *= matAlpha;
-                            }
-                            unsigned char rgba[4];
-                            for (unsigned int clr = 0; clr < 4; clr++)
-                                rgba[clr] = unsigned char(vertexColor[clr] * 255);
-                            Memory_Copy(&vertexBuffer[vertexOffset], rgba, 4);
                         }
-                        break;
-                    case Shader::Color1:
-                        // skinning info - TODO
-                        break;
-                    case Shader::Texcoord0:
-                        if (d.type == Shader::Float2 && numTexCoords > 0 && mesh->mTextureCoords[0])
-                            Memory_Copy(&vertexBuffer[vertexOffset], &mesh->mTextureCoords[0][v], 8);
-                        break;
-                    case Shader::Texcoord1:
-                        if (d.type == Shader::Float2 && numTexCoords > 1 && mesh->mTextureCoords[1])
-                            Memory_Copy(&vertexBuffer[vertexOffset], &mesh->mTextureCoords[1][v], 8);
-                        break;
-                    case Shader::Texcoord2:
-                        if (d.type == Shader::Float2 && numTexCoords > 2 && mesh->mTextureCoords[2])
-                            Memory_Copy(&vertexBuffer[vertexOffset], &mesh->mTextureCoords[2][v], 8);
-                        break;
-                    case Shader::BlendIndices:
-                        // TODO
-                        break;
-                    case Shader::BlendWeight:
-                        // TODO
-                        break;
                     }
-                    vertexOffset += d.Size();
+                    for (unsigned int ind = 0; ind < 3; ind++) {
+                        unsigned int vertId = tri[ind];
+                        meshes.back().weightsMap[allMeshesVertexWeights[tri[ind]]].push_back(vertId);
+                        meshes.back().verticesMap[vertId] = 0;
+                    }
                 }
-                vertexDataOffset += vertexSize;
+                allMeshesIndexBuffer[f * 3 + 0] = tri[0];
+                allMeshesIndexBuffer[f * 3 + 1] = tri[1];
+                allMeshesIndexBuffer[f * 3 + 2] = tri[2];
             }
-            vector<GlobalArg> globalArgs;
-            for (auto const &arg : shader->globalArguments) {
-                switch (arg.type) {
-                case Shader::GeometryInfo:
-                    globalArgs.emplace_back(bufData.Position());
-                    bufData.Put(numIndices);
-                    bufData.Put(numVertices);
-                    bufData.Put(numPrimitives);
-                    bufData.Put(ZERO);
-                    bufData.Put(ZERO);
-                    break;
-                case Shader::ComputationIndex:
+            meshes.back().numFaces = totalNumFaces - meshes.back().startFace;
+
+            //Error("%d meshes");
+            
+            for (auto &m : meshes) {
+                unsigned int numVertices = m.verticesMap.size();
+                unsigned int vertIndex = 0;
+                for (auto &e : m.verticesMap)
+                    e.second = vertIndex++;
+                unsigned int vertexBufferSize = vertexSize * numVertices;
+                vector<unsigned char> vertexBuffer(vertexBufferSize);
+                Memory_Zero(vertexBuffer.data(), vertexBufferSize);
+                unsigned int vertexBufferOffset = 0;
+                unsigned int indexBufferOffset = 0;
+                unsigned int startIndex = m.startFace * 3;
+                unsigned int numFaces = m.numFaces;
+                unsigned int numIndices = numFaces * 3;
+                unsigned int indexBufferSize = numIndices * indexSize;
+                vector<unsigned short> indexBuffer(numIndices);
+                for (unsigned int ind = 0; ind < numIndices; ind++)
+                    indexBuffer[ind] = m.verticesMap[allMeshesIndexBuffer[startIndex + ind]];
+
+                // generate tristrips
+                if (options().tristrip) {
+                    SetListsOnly(true);
+                    SetCacheSize(CACHESIZE_GEFORCE3);
+                    PrimitiveGroup *prims = nullptr;
+                    unsigned short numprims = 0;
+                    GenerateStrips(indexBuffer.data(), numIndices, &prims, &numprims);
+                    numIndices = prims[0].numIndices;
+                    numFaces = numIndices - 2;
+                    indexBufferSize = indexSize * numIndices;
+                    indexBuffer.resize(numIndices);
+                    Memory_Copy(indexBuffer.data(), prims[0].indices, indexBufferSize);
+                    delete[] prims;
+                }
+
+                vector<VertexWeightInfo> skinVertexWeights;
+                vector<unsigned int> skinVertexWeightsIndices;
+
+                if (useSkinning && !m.weightsMap.empty()) {
+                    skinVertexWeights.resize(m.weightsMap.size());
+                    skinVertexWeightsIndices.resize(numVertices);
+                    unsigned int weightInfoIndex = 0;
+                    for (auto const &[w, vertIndices] : m.weightsMap) {
+                        skinVertexWeights[weightInfoIndex] = w;
+                        skinVertexWeights[weightInfoIndex].numBones = 0;
+                        for (auto const vertIndex : vertIndices)
+                            skinVertexWeightsIndices[m.verticesMap[vertIndex]] = weightInfoIndex;
+                        weightInfoIndex++;
+                    }
+                }
+
+                unsigned int vertexDataOffset = 0;
+                for (auto const &[v, vi] : m.verticesMap) {
+                    unsigned int vertexOffset = vertexDataOffset;
+                    for (auto const &d : shader->declaration) {
+                        switch (d.usage) {
+                        case Shader::Position:
+                            if (d.type == Shader::Float3 && mesh->mVertices) {
+                                aiVector3D vecPos = mesh->mVertices[v];
+                                if (flipAxis)
+                                    swap(vecPos.y, vecPos.z);
+                                Memory_Copy(&vertexBuffer.data()[vertexOffset], &vecPos, 12);
+                                ProcessBoundBox(n.boundMin, n.boundMax, n.anyVertexProcessed, vecPos);
+                            }
+                            break;
+                        case Shader::Normal:
+                            if (d.type == Shader::Float3 && mesh->mNormals) {
+                                aiVector3D vecNormal = mesh->mNormals[v];
+                                if (flipAxis)
+                                    swap(vecNormal.y, vecNormal.z);
+                                Memory_Copy(&vertexBuffer.data()[vertexOffset], &vecNormal, 12);
+                            }
+                            break;
+                        case Shader::Color0:
+                            if (d.type == Shader::D3DColor || d.type == Shader::UByte4) {
+                                aiColor4D vertexColor;
+                                if (numColors > 0 && mesh->HasVertexColors(0) && mesh->mColors[0]) {
+                                    vertexColor = mesh->mColors[0][v];
+                                    swap(vertexColor.r, vertexColor.b);
+                                    if (options().vColScale != 0.0f) {
+                                        vertexColor.r *= options().vColScale;
+                                        vertexColor.g *= options().vColScale;
+                                        vertexColor.b *= options().vColScale;
+                                    }
+                                }
+                                else {
+                                    if (options().hasDefaultVCol)
+                                        vertexColor = options().defaultVCol;
+                                    else
+                                        vertexColor = DEFAULT_COLOR;
+                                }
+                                if (!options().ignoreMatColor) {
+                                    if (hasMatColor) {
+                                        vertexColor.r *= matColor.r;
+                                        vertexColor.g *= matColor.g;
+                                        vertexColor.b *= matColor.b;
+                                    }
+                                    if (hasMatAlpha)
+                                        vertexColor.a *= matAlpha;
+                                }
+                                unsigned char rgba[4];
+                                for (unsigned int clr = 0; clr < 4; clr++)
+                                    rgba[clr] = unsigned char(vertexColor[clr] * 255);
+                                Memory_Copy(&vertexBuffer.data()[vertexOffset], rgba, 4);
+                            }
+                            break;
+                        case Shader::Color1:
+                            if (useSkinning)
+                                Memory_Copy(&vertexBuffer.data()[vertexOffset], &skinVertexWeightsIndices.data()[vi], 4);
+                            break;
+                        case Shader::Texcoord0:
+                            if (d.type == Shader::Float2) {
+                                unsigned int channel = 0;
+                                if (numTexCoords > channel && mesh->mTextureCoords[channel])
+                                    Memory_Copy(&vertexBuffer.data()[vertexOffset], &mesh->mTextureCoords[channel][v], 8);
+                            }
+                            break;
+                        case Shader::Texcoord1:
+                            if (d.type == Shader::Float2) {
+                                unsigned int channel = 1;
+                                if (numTexCoords <= channel || !mesh->mTextureCoords[channel])
+                                    channel = 0;
+                                if (numTexCoords > channel && mesh->mTextureCoords[channel])
+                                    Memory_Copy(&vertexBuffer.data()[vertexOffset], &mesh->mTextureCoords[channel][v], 8);
+                            }
+                            break;
+                        case Shader::Texcoord2:
+                            if (d.type == Shader::Float2) {
+                                unsigned int channel = 2;
+                                if (numTexCoords <= channel || !mesh->mTextureCoords[channel])
+                                    channel = 0;
+                                if (numTexCoords > channel && mesh->mTextureCoords[channel])
+                                    Memory_Copy(&vertexBuffer.data()[vertexOffset], &mesh->mTextureCoords[channel][v], 8);
+                            }
+                            break;
+                        case Shader::BlendIndices:
+                            break;
+                        case Shader::BlendWeight:
+                            break;
+                        }
+                        vertexOffset += d.Size();
+                    }
+                    vertexDataOffset += vertexSize;
+                }
+
+                vector<GlobalArg> globalArgs;
+                for (auto const &arg : shader->globalArguments) {
+                    switch (arg.type) {
+                    case Shader::GeometryInfo:
+                        globalArgs.emplace_back(bufData.Position());
+                        bufData.Put(numIndices);
+                        bufData.Put(numVertices);
+                        bufData.Put(numFaces);
+                        bufData.Put(ZERO);
+                        bufData.Put(ZERO);
+                        break;
+                    case Shader::ComputationIndex:
                     {
                         ComputationIndex idx;
                         globalArgs.emplace_back(modifiables.GetArg("ComputationIndex::CompIdx", bufData, idx, true));
                     }
                     break;
-                case Shader::VertexData:
-                    vertexBufferOffset = bufData.Position();
-                    globalArgs.emplace_back(bufData.Position(), numVertices);
-                    bufData.Put(vertexBuffer, vertexBufferSize);
-                    bufData.Put(ONE);
-                    break;
-                case Shader::IndexData:
-                    indexBufferOffset = bufData.Position();
-                    globalArgs.emplace_back(bufData.Position(), numIndices);
-                    bufData.Put(indexBuffer, indexBufferSize);
-                    bufData.Put(ONE);
-                    break;
-                case Shader::ModelMatrix:
-                    globalArgs.emplace_back("__const MATRIX4:::EAGL::ViewPort::gpModelMatrix");
-                    break;
-                case Shader::ViewMatrix:
-                    globalArgs.emplace_back("__const MATRIX4:::EAGL::ViewPort::gpViewMatrix");
-                    break;
-                case Shader::ProjectionMatrix:
-                    globalArgs.emplace_back("__const MATRIX4:::EAGL::ViewPort::gpProjectionMatrix");
-                    break;
-                case Shader::ModelViewProjectionMatrix:
-                    globalArgs.emplace_back("__const MATRIX4:::EAGL::ViewPort::gpModelViewProjectionMatrix");
-                    break;
-                case Shader::ModelViewMatrix:
-                    globalArgs.emplace_back("__const MATRIX4:::EAGL::ViewPort::gpModelViewMatrix");
-                    break;
-                case Shader::ZeroOneTwoThree:
-                    globalArgs.emplace_back("__COORD4:::&EAGL::RenderMethodConstants::gZeroOneTwoThree");
-                    break;
-                case Shader::ZeroOneTwoThreeLocal:
-                    globalArgs.emplace_back(bufData.Position());
-                    bufData.Put(vecZeroOneTwoThree);
-                    bufData.Put(ZERO);
-                    break;
-                case Shader::EnvMapConstants:
-                    globalArgs.emplace_back("__COORD4:::&EAGL::RenderMethodConstants::gEnvMapConstants");
-                    break;
-                case Shader::EnvMapConstantsLocal:
-                    globalArgs.emplace_back(bufData.Position());
-                    bufData.Put(vecEnvMapConstants);
-                    bufData.Put(ZERO);
-                    break;
-                case Shader::EnvmapColour:
-                    globalArgs.emplace_back("__COORD4:::EnvmapColour");
-                    break;
-                case Shader::FogParameters:
-                    globalArgs.emplace_back("__COORD4:::&EAGL::RenderMethodConstants::gFogParameters");
-                    break;
-                case Shader::FogParameters0:
-                    globalArgs.emplace_back("__COORD4:::SGR::Fog::Parameters0");
-                    break;
-                case Shader::FogParameters1:
-                    globalArgs.emplace_back("__COORD4:::SGR::Fog::Parameters1");
-                    break;
-                case Shader::FogParameters2:
-                    globalArgs.emplace_back("__COORD4:::SGR::Fog::Parameters2");
-                    break;
-                case Shader::FogParameters3:
-                    globalArgs.emplace_back("__COORD4:::SGR::Fog::Parameters3");
-                    break;
-                case Shader::BaseColour:
+                    case Shader::VertexData:
+                        vertexBufferOffset = bufData.Position();
+                        globalArgs.emplace_back(bufData.Position(), numVertices);
+                        bufData.Put(vertexBuffer.data(), vertexBufferSize);
+                        bufData.Put(ONE);
+                        break;
+                    case Shader::IndexData:
+                        indexBufferOffset = bufData.Position();
+                        globalArgs.emplace_back(bufData.Position(), numIndices);
+                        bufData.Put(indexBuffer.data(), indexBufferSize);
+                        bufData.Put(ONE);
+                        break;
+                    case Shader::VertexSkinData:
+                        globalArgs.emplace_back(bufData.Position(), skinVertexWeights.size());
+                        bufData.Put(skinVertexWeights.data(), skinVertexWeights.size() * sizeof(VertexWeightInfo));
+                        bufData.Put(ZERO);
+                        break;
+                    case Shader::ModelMatrix:
+                        globalArgs.emplace_back("__const MATRIX4:::EAGL::ViewPort::gpModelMatrix");
+                        break;
+                    case Shader::ViewMatrix:
+                        globalArgs.emplace_back("__const MATRIX4:::EAGL::ViewPort::gpViewMatrix");
+                        break;
+                    case Shader::ProjectionMatrix:
+                        globalArgs.emplace_back("__const MATRIX4:::EAGL::ViewPort::gpProjectionMatrix");
+                        break;
+                    case Shader::ModelViewProjectionMatrix:
+                        globalArgs.emplace_back("__const MATRIX4:::EAGL::ViewPort::gpModelViewProjectionMatrix");
+                        break;
+                    case Shader::ModelViewMatrix:
+                        globalArgs.emplace_back("__const MATRIX4:::EAGL::ViewPort::gpModelViewMatrix");
+                        break;
+                    case Shader::ZeroOneTwoThree:
+                        globalArgs.emplace_back("__COORD4:::&EAGL::RenderMethodConstants::gZeroOneTwoThree");
+                        break;
+                    case Shader::ZeroOneTwoThreeLocal:
+                        globalArgs.emplace_back(bufData.Position());
+                        bufData.Put(vecZeroOneTwoThree);
+                        bufData.Put(ZERO);
+                        break;
+                    case Shader::EnvMapConstants:
+                        globalArgs.emplace_back("__COORD4:::&EAGL::RenderMethodConstants::gEnvMapConstants");
+                        break;
+                    case Shader::EnvMapConstantsLocal:
+                        globalArgs.emplace_back(bufData.Position());
+                        bufData.Put(vecEnvMapConstants);
+                        bufData.Put(ZERO);
+                        break;
+                    case Shader::EnvmapColour:
+                        globalArgs.emplace_back("__COORD4:::EnvmapColour");
+                        break;
+                    case Shader::FogParameters:
+                        globalArgs.emplace_back("__COORD4:::&EAGL::RenderMethodConstants::gFogParameters");
+                        break;
+                    case Shader::FogParameters0:
+                        globalArgs.emplace_back("__COORD4:::SGR::Fog::Parameters0");
+                        break;
+                    case Shader::FogParameters1:
+                        globalArgs.emplace_back("__COORD4:::SGR::Fog::Parameters1");
+                        break;
+                    case Shader::FogParameters2:
+                        globalArgs.emplace_back("__COORD4:::SGR::Fog::Parameters2");
+                        break;
+                    case Shader::FogParameters3:
+                        globalArgs.emplace_back("__COORD4:::SGR::Fog::Parameters3");
+                        break;
+                    case Shader::BaseColour:
                     {
                         globalArgs.emplace_back(modifiables.GetArg("Coordinate4::BaseColour", bufData, vec1111, true));
                     }
                     break;
-                case Shader::ShadowColour:
-                    globalArgs.emplace_back("__COORD4:::gShadowColour");
-                    break;
-                case Shader::ShadowColour2:
-                    globalArgs.emplace_back("__COORD4:::gShadowColour2");
-                    break;
-                case Shader::RMGrass_PSConstants:
-                    globalArgs.emplace_back("__COORD4:::RMGrass::PSConstants");
-                    break;
-                case Shader::RMGrass_VSConstants:
-                    globalArgs.emplace_back("__COORD4:::RMGrass::VSConstants");
-                    break;
-                case Shader::RMGrass_CameraPosition:
-                    globalArgs.emplace_back("__COORD4:::RMGrass::CameraPosition");
-                    break;
-                case Shader::UVOffset0:
+                    case Shader::ShadowColour:
+                        globalArgs.emplace_back("__COORD4:::gShadowColour");
+                        break;
+                    case Shader::ShadowColour2:
+                        globalArgs.emplace_back("__COORD4:::gShadowColour2");
+                        break;
+                    case Shader::RMGrass_PSConstants:
+                        globalArgs.emplace_back("__COORD4:::RMGrass::PSConstants");
+                        break;
+                    case Shader::RMGrass_VSConstants:
+                        globalArgs.emplace_back("__COORD4:::RMGrass::VSConstants");
+                        break;
+                    case Shader::RMGrass_CameraPosition:
+                        globalArgs.emplace_back("__COORD4:::RMGrass::CameraPosition");
+                        break;
+                    case Shader::EAGLAnimationBuffer:
+                        globalArgs.emplace_back("__const MATRIX4:::EAGLAnimationBuffer", MAX_BONE_WEIGHTS_PER_MESH);
+                        break;
+                    case Shader::ViewVector:
+                        globalArgs.emplace_back("__COORD4:::ViewVector");
+                        break;
+                    case Shader::RimLightCol:
+                        globalArgs.emplace_back("__COORD4:::SGR::Rim::RimLightCol");
+                        break;
+                    case Shader::UVOffset0:
                     {
                         Vector4D uvOffset0;
                         globalArgs.emplace_back(modifiables.GetArg("Coordinate4::$LAYERNAME$::UVOffset0", bufData, uvOffset0, false, false, n.name));
                     }
                     break;
-                case Shader::UVOffset1:
+                    case Shader::UVOffset1:
                     {
                         Vector4D uvOffset1;
                         globalArgs.emplace_back(modifiables.GetArg("Coordinate4::$LAYERNAME$::UVOffset1", bufData, uvOffset1, false, false, n.name));
                     }
                     break;
-                case Shader::XFade:
+                    case Shader::XFade:
                     {
                         Vector4D xFade;
                         globalArgs.emplace_back(modifiables.GetArg("Coordinate4::$LAYERNAME$::XFade", bufData, xFade, false, false, n.name));
                     }
                     break;
-                case Shader::Light:
+                    case Shader::Light:
                     {
                         Light lightBlock;
                         globalArgs.emplace_back(modifiables.GetArg("Light::LightBlock", bufData, lightBlock, true, true));
                     }
                     break;
-                case Shader::IrradLight:
+                    case Shader::IrradLight:
                     {
                         IrradLight irradBlock;
                         globalArgs.emplace_back(modifiables.GetArg("IrradLight::IrradBlock", bufData, irradBlock, true, true));
                     }
                     break;
-                case Shader::RuntimeGeoPrimState:
-                case Shader::RuntimeGeoPrimState2:
+                    case Shader::RuntimeGeoPrimState:
+                    case Shader::RuntimeGeoPrimState2:
                     {
                         string geoPrimStateFormat = "__EAGL::GeoPrimState:::RUNTIME_ALLOC::UID=" + to_string(uid) + ";" + arg.format + "SetPrimitiveType=EAGL::" + (options().tristrip ? "PT_TRIANGLESTRIP" : "PT_TRIANGLELIST");
                         globalArgs.emplace_back(modifiables.GetArg((arg.type == Shader::RuntimeGeoPrimState ? "GeoPrimState::State" : "State::GeoPrimState"), geoPrimStateFormat, sizeof(GeoPrimState)));
                     }
                     break;
-                case Shader::Sampler0:
-                case Shader::Sampler1:
-                case Shader::Sampler2:
+                    case Shader::Sampler0:
+                    case Shader::Sampler1:
+                    case Shader::Sampler2:
                     {
                         unsigned int s = SamplerIndex(arg.type);
                         if (tex[s].isGlobal)
@@ -1099,99 +1358,96 @@ void oimport(path const &out, path const &in) {
                         }
                     }
                     break;
-                case Shader::GeoPrimState:
+                    case Shader::GeoPrimState:
                     {
                         GeoPrimState state;
                         state.nPrimitiveType = options().tristrip ? 5 : 4;
                         globalArgs.emplace_back(modifiables.GetArg("State::State", bufData, state, true));
                     }
                     break;
-                }
-            }
-            unsigned int geoPrimDataBufferOffset = bufData.Position();
-            symbols.emplace_back("__geoprimdatabuffer_" + to_string(meshCounter) + "_" + modelName + ".tagged", bufData.Position());
-            bufData.Put(ZERO);
-            unsigned int codeBlockOffset = bufData.Position();
-            if (shader->commands.size() && shader->commands.size() > shader->numTechniques) {
-                unsigned int codeSize = shader->commands.size() / shader->numTechniques;
-                for (unsigned int c = 0; c < shader->commands.size(); c++) {
-                    unsigned int numArgs = shader->commands[c].arguments.size();
-                    unsigned int commandSize = numArgs + 1;
-                    bufData.Put(unsigned short(commandSize));
-                    bufData.Put(unsigned short(shader->commands[c].id));
-                    for (unsigned int a = 0; a < numArgs; a++) {
-                        int arg = shader->commands[c].arguments[a];
-                        if (arg == Shader::VertexData) {
-                            relocations[""].push_back(bufData.Position());
-                            bufData.Put(vertexBufferOffset);
-                        }
-                        else if (arg == Shader::VertexCount)
-                            bufData.Put(numVertices);
-                        else if (arg == Shader::IndexData) {
-                            relocations[""].push_back(bufData.Position());
-                            bufData.Put(indexBufferOffset);
-                        }
-                        else if (arg == Shader::IndexCount)
-                            bufData.Put(numIndices);
-                        else
-                            bufData.Put(arg);
                     }
-                    if (((c + 1) % codeSize) == 0)
-                        bufData.Put(ZERO);
                 }
-            }
-            else {
-                for (unsigned int t = 0; t < shader->numTechniques; t++)
-                    bufData.Put(ZERO);
-            }
-            bufData.Put(ZERO);
-            // ShaderName
-            unsigned int shaderNameOffset = bufData.Position();
-            bufData.Put(shader->name);
-            // RenderMethod
-            bufData.Align(16);
-            unsigned int renderMethodOffset = bufData.Position();
-            symbols.emplace_back("__RenderMethod:::__GPRenderMethod_" + modelName + ".tagged_" + to_string(meshCounter), bufData.Position());
-            relocations[""].push_back(bufData.Position());
-            bufData.Put(codeBlockOffset);
-            bufData.Put(ZERO);
-            relocations[shader->name + "__EAGLMicroCode"].push_back(bufData.Position());
-            bufData.Put(ZERO);
-            bufData.Put(ZERO);
-            relocations["ParentRM_" + shader->name].push_back(bufData.Position());
-            bufData.Put(ZERO);
-            bufData.Put(ZERO);
-            bufData.Put(ZERO);
-            bufData.Put(MINONE);
-            bufData.Put(ZERO);
-            relocations[""].push_back(bufData.Position());
-            bufData.Put(geoPrimDataBufferOffset);
-            bufData.Put(shader->ComputationCommandIndex());
-            relocations[""].push_back(bufData.Position());
-            bufData.Put(shaderNameOffset);
-            bufData.Put(ZERO);
-            static unsigned char EASig[] = { 0xEA, 0xEF, 0xCD, 0xAB };
-            bufData.Put(EASig, std::size(EASig));
-            // RenderDescriptor
-            n.renderDescriptorsOffsets.push_back(bufData.Position());
-            relocations[""].push_back(bufData.Position());
-            bufData.Put(renderMethodOffset);
-            for (auto const &ga : globalArgs) {
-                bufData.Put(ga.count);
-                if (!ga.name.empty()) {
-                    relocations[ga.name].push_back(bufData.Position());
-                    bufData.Put(ZERO);
+                unsigned int geoPrimDataBufferOffset = bufData.Position();
+                symbols.emplace_back("__geoprimdatabuffer_" + to_string(meshCounter) + "_" + modelName + ".tagged", bufData.Position());
+                bufData.Put(ZERO);
+                unsigned int codeBlockOffset = bufData.Position();
+                if (shader->commands.size() && shader->commands.size() > shader->numTechniques) {
+                    unsigned int codeSize = shader->commands.size() / shader->numTechniques;
+                    for (unsigned int c = 0; c < shader->commands.size(); c++) {
+                        unsigned int numArgs = shader->commands[c].arguments.size();
+                        unsigned int commandSize = numArgs + 1;
+                        bufData.Put(unsigned short(commandSize));
+                        bufData.Put(unsigned short(shader->commands[c].id));
+                        for (unsigned int a = 0; a < numArgs; a++) {
+                            int arg = shader->commands[c].arguments[a];
+                            if (arg == Shader::VertexData) {
+                                relocations[""].push_back(bufData.Position());
+                                bufData.Put(vertexBufferOffset);
+                            }
+                            else if (arg == Shader::VertexCount)
+                                bufData.Put(numVertices);
+                            else if (arg == Shader::IndexData) {
+                                relocations[""].push_back(bufData.Position());
+                                bufData.Put(indexBufferOffset);
+                            }
+                            else if (arg == Shader::IndexCount)
+                                bufData.Put(numIndices);
+                            else
+                                bufData.Put(arg);
+                        }
+                        if (((c + 1) % codeSize) == 0)
+                            bufData.Put(ZERO);
+                    }
                 }
                 else {
-                    relocations[""].push_back(bufData.Position());
-                    bufData.Put(ga.offset);
+                    for (unsigned int t = 0; t < shader->numTechniques; t++)
+                        bufData.Put(ZERO);
                 }
+                bufData.Put(ZERO);
+                // ShaderName
+                unsigned int shaderNameOffset = bufData.Position();
+                bufData.Put(shader->name);
+                // RenderMethod
+                bufData.Align(16);
+                unsigned int renderMethodOffset = bufData.Position();
+                symbols.emplace_back("__RenderMethod:::__GPRenderMethod_" + modelName + ".tagged_" + to_string(meshCounter), bufData.Position());
+                relocations[""].push_back(bufData.Position());
+                bufData.Put(codeBlockOffset);
+                bufData.Put(ZERO);
+                relocations[shader->name + "__EAGLMicroCode"].push_back(bufData.Position());
+                bufData.Put(ZERO);
+                bufData.Put(ZERO);
+                relocations["ParentRM_" + shader->name].push_back(bufData.Position());
+                bufData.Put(ZERO);
+                bufData.Put(ZERO);
+                bufData.Put(ZERO);
+                bufData.Put(MINONE);
+                bufData.Put(ZERO);
+                relocations[""].push_back(bufData.Position());
+                bufData.Put(geoPrimDataBufferOffset);
+                bufData.Put(shader->ComputationCommandIndex());
+                relocations[""].push_back(bufData.Position());
+                bufData.Put(shaderNameOffset);
+                bufData.Put(ZERO);
+                static unsigned char EASig[] = { 0xEA, 0xEF, 0xCD, 0xAB };
+                bufData.Put(EASig, std::size(EASig));
+                // RenderDescriptor
+                n.renderDescriptorsOffsets.push_back(bufData.Position());
+                relocations[""].push_back(bufData.Position());
+                bufData.Put(renderMethodOffset);
+                for (auto const &ga : globalArgs) {
+                    bufData.Put(ga.count);
+                    if (!ga.name.empty()) {
+                        relocations[ga.name].push_back(bufData.Position());
+                        bufData.Put(ZERO);
+                    }
+                    else {
+                        relocations[""].push_back(bufData.Position());
+                        bufData.Put(ga.offset);
+                    }
+                }
+                meshCounter++;
             }
-
-            delete[] vertexBuffer;
-            delete[] indexBuffer;
-
-            meshCounter++;
         }
         nodeCounter++;
     }
@@ -1211,12 +1467,53 @@ void oimport(path const &out, path const &in) {
     bufData.Put(boundMin);
     bufData.Put(boundMax);
     // Skeleton
-    if (false) {
+    if (hasSkeleton) {
         bufData.Align(16);
-        // bones
-        // TODO
+        vector<BoneInfo> vecBones;
+        if (!bones.empty()) {
+            vecBones.resize(bones.size());
+            for (auto const &[name, info] : bones)
+                vecBones[info.index] = info;
+            // bones
+            for (auto const &b : vecBones) {
+                symbols.emplace_back("__Bone:::" + modelName + "." + b.name, bufData.Position());
+                bufData.Put(unsigned int(b.index));
+                bufData.Put(ZERO);
+                bufData.Put(ZERO);
+                bufData.Put(ZERO);
+            }
+        }
         // skeleton
-        // TODO
+        symbols.emplace_back("__Skeleton:::" + modelName, bufData.Position());
+        bufData.Put(unsigned short(ANIM_VERSION));
+        bufData.Put(unsigned short(510));
+        bufData.Put(unsigned short(ANIM_VERSION));
+        bufData.Put(unsigned short(ZERO));
+        bufData.Put(vecBones.size());
+        bufData.Put(ZERO);
+        for (auto const &b : vecBones) {
+            auto bnode = b.bone->mNode;
+            aiVector3D scaling, position;
+            aiQuaternion rotation;
+            bnode->mTransformation.Decompose(scaling, rotation, position);
+            bufData.Put(scaling);
+            int parentId = -1;
+            if (bnode->mParent) {
+                auto pit = bones.find(bnode->mParent->mName.C_Str());
+                if (pit != bones.end())
+                    parentId = (*pit).second.index;
+            }
+            bufData.Put(parentId);
+            bufData.Put(rotation.x);
+            bufData.Put(rotation.y);
+            bufData.Put(rotation.z);
+            bufData.Put(rotation.w);
+            bufData.Put(position);
+            bufData.Put(ZERO);
+            auto mat = b.bone->mOffsetMatrix;
+            mat.Transpose();
+            bufData.Put(mat);
+        }
     }
     static unsigned char TTARSig[] = { 'T', 'T', 'A', 'R' };
     bufData.Put(TTARSig, std::size(TTARSig));
@@ -1310,7 +1607,7 @@ void oimport(path const &out, path const &in) {
     bufData.Align(4);
     unsigned int modelMorphVerticesInfoOffset = bufData.Position();
     bufData.Align(16);
-    // TODO
+    // TODO: Morph data
     bufData.Put(ZERO);
     bufData.Put(ZERO);
 
@@ -1407,7 +1704,7 @@ void oimport(path const &out, path const &in) {
         bufData.Put(modelLayersOffset);
         bufData.Put(ZERO);
         bufData.Put(ZERO);
-        bufData.Put(isSkinned ? ANIM_VERSION : ZERO);
+        bufData.Put(hasSkeleton ? ANIM_VERSION : ZERO);
         bufData.Put(ZERO);
     }
     bufData.Align(16);
@@ -1574,7 +1871,7 @@ void oimport(path const &out, path const &in) {
         ea::Fsh fsh;
         ea::Buffer metalBinData;
         metalBinData.Allocate(64);
-        memset(metalBinData.GetData(), 0, metalBinData.GetSize());
+        Memory_Zero(metalBinData.GetData(), metalBinData.GetSize());
         strcpy((char *)metalBinData.GetData(), "EAGL64 metal bin attachment for runtime texture management");
         path inDir = in.parent_path();
         map<string, pair<string, string>> texturesToAdd;
