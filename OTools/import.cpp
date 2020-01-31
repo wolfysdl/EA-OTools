@@ -13,8 +13,6 @@
 #include "NvTriStrip/NvTriStrip.h"
 #include "Fsh\Fsh.h"
 
-// TODO: SET_SAMPLER 2nd argument for global textures
-
 struct Vector4D {
     float x = 0.0f;
     float y = 0.0f;
@@ -634,7 +632,7 @@ void oimport(path const &out, path const &in) {
     if (!scene->mRootNode)
         throw runtime_error("Unable to find scene root node");
     Node::scene = scene;
-    const unsigned int MAX_BONE_WEIGHTS_PER_MESH = 100;
+    const unsigned int MAX_BONE_WEIGHTS_PER_MESH = 128;
 
     // TODO: axis detection
 
@@ -769,6 +767,7 @@ void oimport(path const &out, path const &in) {
             }
         }
     }
+
     for (auto &n : nodes) {
         for (unsigned int m = 0; m < n.node->mNumMeshes; m++) {
             aiMesh *mesh = scene->mMeshes[n.node->mMeshes[m]];
@@ -872,10 +871,10 @@ void oimport(path const &out, path const &in) {
                     else { // mesh is skinned
                         if (hasDiffuseTex) {
                             if (usesAlphaBlending)
-                                shader = FindShader("LitTexture2Alpha2x_Skin");
+                                shader = FindShader("LitTexture2x_Skin");  //FindShader("LitTexture2Alpha2x_Skin");
                             else { // no alpha blending
                                 if (hasReflectionTex || hasSpecularTex || isMetallic)
-                                    shader = FindShader("LitTextureIrradSpecMap_Skin");
+                                    shader = FindShader("LitTexture2x_Skin"); // FindShader("LitTextureIrradSpecMap_Skin");
                                 else
                                     shader = FindShader("LitTexture2x_Skin");
                             }
@@ -1002,6 +1001,7 @@ void oimport(path const &out, path const &in) {
 
             meshes.push_back(MeshInfo());
             meshes.back().startFace = 0;
+
             for (unsigned int f = 0; f < mesh->mNumFaces; f++) {
                 unsigned int *tri = mesh->mFaces[f].mIndices;
                 if (useSkinning) {
@@ -1021,12 +1021,11 @@ void oimport(path const &out, path const &in) {
                             }
                         }
                     }
-                    for (unsigned int ind = 0; ind < 3; ind++) {
-                        unsigned int vertId = tri[ind];
-                        meshes.back().weightsMap[allMeshesVertexWeights[tri[ind]]].push_back(vertId);
-                        meshes.back().verticesMap[vertId] = 0;
-                    }
+                    for (unsigned int ind = 0; ind < 3; ind++)
+                        meshes.back().weightsMap[allMeshesVertexWeights[tri[ind]]].push_back(tri[ind]);
                 }
+                for (unsigned int ind = 0; ind < 3; ind++)
+                    meshes.back().verticesMap[tri[ind]] = 0;
                 allMeshesIndexBuffer[f * 3 + 0] = tri[0];
                 allMeshesIndexBuffer[f * 3 + 1] = tri[1];
                 allMeshesIndexBuffer[f * 3 + 2] = tri[2];
@@ -1052,6 +1051,9 @@ void oimport(path const &out, path const &in) {
                 vector<unsigned short> indexBuffer(numIndices);
                 for (unsigned int ind = 0; ind < numIndices; ind++)
                     indexBuffer[ind] = m.verticesMap[allMeshesIndexBuffer[startIndex + ind]];
+                unsigned int vertexWeightsNumBones3 = 0;
+                unsigned int vertexWeightsNumBones2 = 0;
+                unsigned int vertexWeightsNumBones1 = 0;
 
                 // generate tristrips
                 if (options().tristrip) {
@@ -1077,13 +1079,18 @@ void oimport(path const &out, path const &in) {
                     unsigned int weightInfoIndex = 0;
                     for (auto const &[w, vertIndices] : m.weightsMap) {
                         skinVertexWeights[weightInfoIndex] = w;
+                        if (skinVertexWeights[weightInfoIndex].numBones == 3)
+                            vertexWeightsNumBones3++;
+                        else if (skinVertexWeights[weightInfoIndex].numBones == 2)
+                            vertexWeightsNumBones2++;
+                        else if (skinVertexWeights[weightInfoIndex].numBones == 1)
+                            vertexWeightsNumBones1++;
                         skinVertexWeights[weightInfoIndex].numBones = 0;
                         for (auto const vertIndex : vertIndices)
                             skinVertexWeightsIndices[m.verticesMap[vertIndex]] = weightInfoIndex;
                         weightInfoIndex++;
                     }
                 }
-
                 unsigned int vertexDataOffset = 0;
                 for (auto const &[v, vi] : m.verticesMap) {
                     unsigned int vertexOffset = vertexDataOffset;
@@ -1177,7 +1184,6 @@ void oimport(path const &out, path const &in) {
                     }
                     vertexDataOffset += vertexSize;
                 }
-
                 vector<GlobalArg> globalArgs;
                 for (auto const &arg : shader->globalArguments) {
                     switch (arg.type) {
@@ -1392,6 +1398,18 @@ void oimport(path const &out, path const &in) {
                             }
                             else if (arg == Shader::IndexCount)
                                 bufData.Put(numIndices);
+                            else if (arg == Shader::Sampler0Size)
+                                bufData.Put(unsigned int(tex[0].isGlobal ? 0 : 48));
+                            else if (arg == Shader::Sampler1Size)
+                                bufData.Put(unsigned int(tex[1].isGlobal ? 0 : 48));
+                            else if (arg == Shader::Sampler2Size)
+                                bufData.Put(unsigned int(tex[2].isGlobal ? 0 : 48));
+                            else if (arg == Shader::VertexWeights3Bones)
+                                bufData.Put(vertexWeightsNumBones3);
+                            else if (arg == Shader::VertexWeights2Bones)
+                                bufData.Put(vertexWeightsNumBones2);
+                            else if (arg == Shader::VertexWeights1Bone)
+                                bufData.Put(vertexWeightsNumBones1);
                             else
                                 bufData.Put(arg);
                         }

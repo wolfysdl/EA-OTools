@@ -61,6 +61,9 @@ struct Shader {
         Sampler0,
         Sampler1,
         Sampler2,
+        Sampler0Size,
+        Sampler1Size,
+        Sampler2Size,
         GeoPrimState,
         RuntimeGeoPrimState,
         RuntimeGeoPrimState2,
@@ -84,7 +87,10 @@ struct Shader {
         RMGrass_CameraPosition,
         EAGLAnimationBuffer,
         ViewVector,
-        RimLightCol
+        RimLightCol,
+        VertexWeights3Bones,
+        VertexWeights2Bones,
+        VertexWeights1Bone
     };
 
     struct Command {
