@@ -49,6 +49,8 @@ Additional export options:
 
 `-jpegTextures` - dummy textures will be written in .jpeg instead of .png
 
+`-noMeshJoin` - do not merge same materials to one material
+
 Additional import options:
 
 `-scale <scaling>` - scale model by given floating-point factor
@@ -56,6 +58,8 @@ Additional import options:
 `-defaultVCol <color>` - default vertex color (could be RGB or RGBA in hexadecimal format, for example: `7F7F7FFF`). This color will be used when mesh in source model has no vertex colors. Default value is `7F7F7FFF`
 
 `-vColScale <scale>` - vertex color scale (floating-point value from 0.0 to 1.0). This value is used only when mesh in source model has vertex colors. Ignored when set to 0.0. Default value is 0.0
+
+`-setVCol <color>` - replace vertex color with new color. `defaultVCol` and `vColScale` are ignored when this option is used
 
 `-tristrip` - convert geometry to tri-strips
 
