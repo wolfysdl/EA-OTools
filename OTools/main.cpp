@@ -4,7 +4,7 @@
 #include "errormsg.h"
 #include "Fsh/Fsh.h"
 
-const char *OTOOLS_VERSION = "0.139";
+const char *OTOOLS_VERSION = "0.140";
 
 GlobalOptions &options() {
     static GlobalOptions go;
@@ -21,7 +21,8 @@ enum ErrorType {
 };
 
 int main(int argc, char *argv[]) {
-    CommandLine cmd(argc, argv, { "i", "o", "scale", "defaultVCol", "vColScale", "fshOutput", "fshLevels", "fshFormat", "fshAddTextures", "fshIgnoreTextures" },
+    CommandLine cmd(argc, argv, { "i", "o", "scale", "defaultVCol", "setVCol", "vColScale", "fshOutput", "fshLevels", "fshFormat", "fshAddTextures",
+        "fshIgnoreTextures" },
         { "tristrip", "noTextures", "recursive", "createSubDir", "silent", "onlyFirstTechnique", "dummyTextures", "jpegTextures", "embeddedTextures", 
         "swapYZ", "forceLighting", "noMetadata", "genTexNames", "writeFsh", "fshRescale", "fshDisableTextureIgnore", "preTransformVertices", "sortByName", 
         "sortByAlpha", "ignoreMatColor", "noMeshJoin" });
@@ -101,22 +102,38 @@ int main(int argc, char *argv[]) {
             options().swapYZ = true;
         if (cmd.HasOption("forceLighting"))
             options().forceLighting = true;
-        if (cmd.HasArgument("defaultVCol")) {
-            string defaultVCol = cmd.GetArgumentString("defaultVCol");
+        if (cmd.HasArgument("setVCol")) {
+            string setVCol = cmd.GetArgumentString("setVCol");
             unsigned int r = 255, g = 255, b = 255, a = 255;
-            if (defaultVCol.length() == 6)
-                options().hasDefaultVCol = (sscanf(defaultVCol.c_str(), "%2X%2X%2X", &r, &g, &b) == 3);
-            else if (defaultVCol.length() == 8)
-                options().hasDefaultVCol = (sscanf(defaultVCol.c_str(), "%2X%2X%2X%2X", &r, &g, &b, &a) == 4);
-            if (options().hasDefaultVCol) {
-                options().defaultVCol.r = float(r) / 255.0f;
-                options().defaultVCol.g = float(g) / 255.0f;
-                options().defaultVCol.b = float(b) / 255.0f;
-                options().defaultVCol.a = float(a) / 255.0f;
+            if (setVCol.length() == 6)
+                options().hasSetVCol = (sscanf(setVCol.c_str(), "%2X%2X%2X", &r, &g, &b) == 3);
+            else if (setVCol.length() == 8)
+                options().hasSetVCol = (sscanf(setVCol.c_str(), "%2X%2X%2X%2X", &r, &g, &b, &a) == 4);
+            if (options().hasSetVCol) {
+                options().setVCol.r = float(r) / 255.0f;
+                options().setVCol.g = float(g) / 255.0f;
+                options().setVCol.b = float(b) / 255.0f;
+                options().setVCol.a = float(a) / 255.0f;
             }
         }
-        if (cmd.HasArgument("vColScale"))
-            options().vColScale = cmd.GetArgumentFloat("vColScale");
+        else {
+            if (cmd.HasArgument("defaultVCol")) {
+                string defaultVCol = cmd.GetArgumentString("defaultVCol");
+                unsigned int r = 255, g = 255, b = 255, a = 255;
+                if (defaultVCol.length() == 6)
+                    options().hasDefaultVCol = (sscanf(defaultVCol.c_str(), "%2X%2X%2X", &r, &g, &b) == 3);
+                else if (defaultVCol.length() == 8)
+                    options().hasDefaultVCol = (sscanf(defaultVCol.c_str(), "%2X%2X%2X%2X", &r, &g, &b, &a) == 4);
+                if (options().hasDefaultVCol) {
+                    options().defaultVCol.r = float(r) / 255.0f;
+                    options().defaultVCol.g = float(g) / 255.0f;
+                    options().defaultVCol.b = float(b) / 255.0f;
+                    options().defaultVCol.a = float(a) / 255.0f;
+                }
+            }
+            if (cmd.HasArgument("vColScale"))
+                options().vColScale = cmd.GetArgumentFloat("vColScale");
+        }
         if (cmd.HasOption("genTexNames"))
             options().genTexNames = true;
         if (cmd.HasOption("writeFsh")) {

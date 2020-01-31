@@ -1116,20 +1116,24 @@ void oimport(path const &out, path const &in) {
                         case Shader::Color0:
                             if (d.type == Shader::D3DColor || d.type == Shader::UByte4) {
                                 aiColor4D vertexColor;
-                                if (numColors > 0 && mesh->HasVertexColors(0) && mesh->mColors[0]) {
-                                    vertexColor = mesh->mColors[0][v];
-                                    swap(vertexColor.r, vertexColor.b);
-                                    if (options().vColScale != 0.0f) {
-                                        vertexColor.r *= options().vColScale;
-                                        vertexColor.g *= options().vColScale;
-                                        vertexColor.b *= options().vColScale;
-                                    }
-                                }
+                                if (options().hasSetVCol)
+                                    vertexColor = options().setVCol;
                                 else {
-                                    if (options().hasDefaultVCol)
-                                        vertexColor = options().defaultVCol;
-                                    else
-                                        vertexColor = DEFAULT_COLOR;
+                                    if (numColors > 0 && mesh->HasVertexColors(0) && mesh->mColors[0]) {
+                                        vertexColor = mesh->mColors[0][v];
+                                        swap(vertexColor.r, vertexColor.b);
+                                        if (options().vColScale != 0.0f) {
+                                            vertexColor.r *= options().vColScale;
+                                            vertexColor.g *= options().vColScale;
+                                            vertexColor.b *= options().vColScale;
+                                        }
+                                    }
+                                    else {
+                                        if (options().hasDefaultVCol)
+                                            vertexColor = options().defaultVCol;
+                                        else
+                                            vertexColor = DEFAULT_COLOR;
+                                    }
                                 }
                                 if (!options().ignoreMatColor) {
                                     if (hasMatColor) {

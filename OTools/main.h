@@ -23,6 +23,8 @@ struct GlobalOptions {
     bool noMetadata = false;
     aiColor4D defaultVCol = { 0.5f, 0.5f, 0.5f, 1.0f };
     bool hasDefaultVCol = false;
+    aiColor4D setVCol = { 0.0f, 0.0f, 0.0f, 1.0f };
+    bool hasSetVCol = false;
     float vColScale = 0.0f;
     bool genTexNames = false;
     bool writeFsh = false;
