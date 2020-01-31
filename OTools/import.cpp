@@ -1296,6 +1296,18 @@ void oimport(path const &out, path const &in) {
                     case Shader::RimLightCol:
                         globalArgs.emplace_back("__COORD4:::SGR::Rim::RimLightCol");
                         break;
+                    case Shader::SubSurfFactor:
+                        globalArgs.emplace_back("__COORD4:::SGR::SubSurf::SubSurfFactor");
+                        break;
+                    case Shader::SpecLightVec:
+                        globalArgs.emplace_back("__COORD4:::SGR::Specular::SpecLightVec");
+                        break;
+                    case Shader::SpecLightCol:
+                        globalArgs.emplace_back("__COORD4:::SGR::Specular::SpecLightCol");
+                        break;
+                    case Shader::HalfVector:
+                        globalArgs.emplace_back("__COORD4:::SGR::Specular::HalfVector");
+                        break;
                     case Shader::UVOffset0:
                     {
                         Vector4D uvOffset0;

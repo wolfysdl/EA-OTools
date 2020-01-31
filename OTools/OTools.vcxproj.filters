@@ -34,6 +34,9 @@
       <Filter>Fsh</Filter>
     </ClInclude>
     <ClInclude Include="target.h" />
+    <ClInclude Include="Rx3\Rx3Container.h">
+      <Filter>Rx3</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dump.cpp" />
@@ -73,6 +76,9 @@
       <Filter>Fsh</Filter>
     </ClCompile>
     <ClCompile Include="target.cpp" />
+    <ClCompile Include="Rx3\Rx3Container.cpp">
+      <Filter>Rx3</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="NvTriStrip">
@@ -80,6 +86,9 @@
     </Filter>
     <Filter Include="Fsh">
       <UniqueIdentifier>{0171eb76-e521-43da-be96-b9fe64cda9cc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Rx3">
+      <UniqueIdentifier>{21c07bf9-9df1-492c-a7cd-6ced9432ba56}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
 </Project>

@@ -4,7 +4,7 @@
 #include "errormsg.h"
 #include "Fsh/Fsh.h"
 
-const char *OTOOLS_VERSION = "0.138";
+const char *OTOOLS_VERSION = "0.139";
 
 GlobalOptions &options() {
     static GlobalOptions go;
@@ -22,7 +22,7 @@ enum ErrorType {
 
 int main(int argc, char *argv[]) {
     CommandLine cmd(argc, argv, { "i", "o", "scale", "defaultVCol", "vColScale", "fshOutput", "fshLevels", "fshFormat", "fshAddTextures", "fshIgnoreTextures" },
-        { "keepPrimType", "noTextures", "recursive", "createSubDir", "silent", "onlyFirstTechnique", "dummyTextures", "jpegTextures", "embeddedTextures", 
+        { "tristrip", "noTextures", "recursive", "createSubDir", "silent", "onlyFirstTechnique", "dummyTextures", "jpegTextures", "embeddedTextures", 
         "swapYZ", "forceLighting", "noMetadata", "genTexNames", "writeFsh", "fshRescale", "fshDisableTextureIgnore", "preTransformVertices", "sortByName", 
         "sortByAlpha", "ignoreMatColor", "noMeshJoin" });
     if (cmd.HasOption("silent"))

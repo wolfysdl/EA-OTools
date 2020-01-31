@@ -90,7 +90,11 @@ struct Shader {
         RimLightCol,
         VertexWeights3Bones,
         VertexWeights2Bones,
-        VertexWeights1Bone
+        VertexWeights1Bone,
+        SubSurfFactor,
+        SpecLightVec,
+        SpecLightCol,
+        HalfVector
     };
 
     struct Command {
