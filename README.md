@@ -4,8 +4,6 @@
 
 **Current progress and limitations**:
 
-* Import of skinned meshes (body, heads, hair) to the game is not implemented (only export is possible)
-
 * Only shaders from FIFA Manager 13 are implemented, they are not guaranteed to work with any other games
 
 otools is a command-line tool. First argument is operation type (export or import), second argument (`-i`) is input file/folder path. All other arguments are optional.
