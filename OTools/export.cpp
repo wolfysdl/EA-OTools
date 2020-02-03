@@ -1,163 +1,13 @@
 #include "main.h"
 #include <fstream>
 #include "binbuf.h"
+#include "jsonwriter.h"
 
 class exporter {
-    string mResult;
-    unsigned int mCurrentSpacing = 0;
-    bool mJustOpened = true;
-    bool mJustClosed = false;
-
     struct FileSymbol : public Elf32_Sym {
         unsigned int id = 0;
         string name;
     };
-
-    string spacing() {
-        if (mCurrentSpacing > 0)
-            return string(mCurrentSpacing * 4, L' ');
-        return string();
-    };
-
-    void startScope() {
-        mResult.clear();
-        mCurrentSpacing = 0;
-        mJustOpened = true;
-        mJustClosed = false;
-        mResult += "{";
-        mCurrentSpacing++;
-    }
-
-    void endScope() {
-        mResult += "\n}\n";
-    }
-
-    void openScope(string const &title = string()) {
-        if (!mJustOpened)
-            mResult += ",";
-        mResult += "\n" + spacing();
-        if (!title.empty())
-            mResult += "\"" + title + "\" : ";
-        mResult += "{";
-        mJustOpened = true;
-        mCurrentSpacing++;
-    };
-
-    void openArray(string const &title = string()) {
-        if (!mJustOpened)
-            mResult += ",";
-        mResult += "\n" + spacing();
-        if (!title.empty())
-            mResult += "\"" + title + "\" : ";
-        mResult += "[";
-        mJustOpened = true;
-        mCurrentSpacing++;
-    };
-
-    void closeScope(bool isLast = false) {
-        mJustOpened = false;
-        mCurrentSpacing--;
-        mResult += "\n" + spacing() + "}";
-    };
-
-    void closeArray(bool isLast = false) {
-        mJustOpened = false;
-        mCurrentSpacing--;
-        mResult += "\n" + spacing() + "]";
-    };
-
-    void writeValueString(string const &value) {
-        mResult += (mJustOpened ? "\n" : ",\n") + spacing() + "\"" + value + "\"";
-        mJustOpened = false;
-    };
-
-    void writeValueInt(int value) {
-        mResult += (mJustOpened ? "\n" : ",\n") + spacing() + to_string(value);
-        mJustOpened = false;
-    };
-
-    void writeValueFloat(float value) {
-        mResult += (mJustOpened ? "\n" : ",\n") + spacing() + Format("%.15g", value);
-        mJustOpened = false;
-    };
-
-    void writeValueDouble(double value) {
-        mResult += (mJustOpened ? "\n" : ",\n") + spacing() + to_string(value);
-        mJustOpened = false;
-    };
-
-    void writeValuebool(bool value) {
-        mResult += (mJustOpened ? "\n" : ",\n") + spacing() + (value ? "true" : "false");
-        mJustOpened = false;
-    };
-
-    void writeFieldString(string const &name, string const &value) {
-        mResult += (mJustOpened ? "\n" : ",\n") + spacing() + "\"" + name + "\" : \"" + value + "\"";
-        mJustOpened = false;
-    };
-
-    void writeFieldInt(string const &name, int value) {
-        mResult += (mJustOpened ? "\n" : ",\n") + spacing() + "\"" + name + "\" : " + to_string(value);
-        mJustOpened = false;
-    };
-
-    void writeFieldFloat(string const &name, float value) {
-        mResult += (mJustOpened ? "\n" : ",\n") + spacing() + "\"" + name + "\" : " + Format("%.15g", value);
-        mJustOpened = false;
-    };
-
-    void writeFieldDouble(string const &name, double value) {
-        mResult += (mJustOpened ? "\n" : ",\n") + spacing() + "\"" + name + "\" : " + to_string(value);
-        mJustOpened = false;
-    };
-
-    void writeFieldBool(string const &name, bool value) {
-        mResult += (mJustOpened ? "\n" : ",\n") + spacing() + "\"" + name + "\" : " + (value ? "true" : "false");
-        mJustOpened = false;
-    };
-
-    string base64_encode(unsigned char const *bytes_to_encode, unsigned int in_len) {
-        static const string base64_chars =
-            "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-            "abcdefghijklmnopqrstuvwxyz"
-            "0123456789+/";
-        string ret;
-        int i = 0;
-        int j = 0;
-        unsigned char char_array_3[3];
-        unsigned char char_array_4[4];
-
-        while (in_len--) {
-            char_array_3[i++] = *(bytes_to_encode++);
-            if (i == 3) {
-                char_array_4[0] = (char_array_3[0] & 0xfc) >> 2;
-                char_array_4[1] = ((char_array_3[0] & 0x03) << 4) + ((char_array_3[1] & 0xf0) >> 4);
-                char_array_4[2] = ((char_array_3[1] & 0x0f) << 2) + ((char_array_3[2] & 0xc0) >> 6);
-                char_array_4[3] = char_array_3[2] & 0x3f;
-
-                for (i = 0; (i < 4); i++)
-                    ret += base64_chars[char_array_4[i]];
-                i = 0;
-            }
-        }
-        if (i)
-        {
-            for (j = i; j < 3; j++)
-                char_array_3[j] = '\0';
-
-            char_array_4[0] = (char_array_3[0] & 0xfc) >> 2;
-            char_array_4[1] = ((char_array_3[0] & 0x03) << 4) + ((char_array_3[1] & 0xf0) >> 4);
-            char_array_4[2] = ((char_array_3[1] & 0x0f) << 2) + ((char_array_3[2] & 0xc0) >> 6);
-
-            for (j = 0; (j < i + 1); j++)
-                ret += base64_chars[char_array_4[j]];
-
-            while ((i++ < 3))
-                ret += '=';
-
-        }
-        return ret;
-    }
 
     bool compareCommands(unsigned int a, unsigned int b) {
         if ((a == 31 || a == 46) && (b == 31 || b == 46))
@@ -556,36 +406,37 @@ public:
             model = models[0];
         }
 
-        startScope();
-        openScope("asset");
-        writeFieldString("generator", string("otools version ") + OTOOLS_VERSION);
-        writeFieldString("version", "2.0");
-        closeScope();
-        writeFieldInt("scene", 0);
+        JsonWriter j(outPath);
+        j.startScope();
+        j.openScope("asset");
+        j.writeFieldString("generator", string("otools version ") + OTOOLS_VERSION);
+        j.writeFieldString("version", "2.0");
+        j.closeScope();
+        j.writeFieldInt("scene", 0);
         if ((model && model->mNumLayers && model->mLayers) || skeleton) {
             // scenes
-            openArray("scenes");
-            openScope();
+            j.openArray("scenes");
+            j.openScope();
             if (model && model->mName)
-                writeFieldString("name", model->mName);
-            openArray("nodes");
+                j.writeFieldString("name", model->mName);
+            j.openArray("nodes");
             unsigned int numNodes = (model ? model->mNumLayers : 0) + (skeleton ? 1 : 0);
             for (unsigned int i = 0; i < numNodes; i++)
-                writeValueInt(i);
-            closeArray();
-            closeScope();
-            closeArray();
+                j.writeValueInt(i);
+            j.closeArray();
+            j.closeScope();
+            j.closeArray();
             // nodes
-            openArray("nodes");
+            j.openArray("nodes");
             if (model) {
                 for (unsigned int i = 0; i < model->mNumLayers; i++) {
-                    openScope();
-                    writeFieldInt("mesh", i);
+                    j.openScope();
+                    j.writeFieldInt("mesh", i);
                     if (skeleton)
-                        writeFieldInt("skin", 0);
+                        j.writeFieldInt("skin", 0);
                     if (model->mLayerNames[i])
-                        writeFieldString("name", model->mLayerNames[i]);
-                    closeScope();
+                        j.writeFieldString("name", model->mLayerNames[i]);
+                    j.closeScope();
                 }
             }
             if (skeleton) {
@@ -617,60 +468,60 @@ public:
                     }
                 }
                 unsigned int nodeIndex = model ? model->mNumLayers : 0;
-                openScope();
-                writeFieldString("name", "Skeleton");
+                j.openScope();
+                j.writeFieldString("name", "Skeleton");
                 vector<unsigned int> skelRootNodes;
                 for (unsigned int i = 0; i < skelNodes.size(); i++) {
                     if (!skelNodes[i].parent)
                         skelRootNodes.push_back(skelNodes[i].index);
                 }
                 if (skelRootNodes.size() > 0) {
-                    openArray("children");
+                    j.openArray("children");
                     for (unsigned int i = 0; i < skelRootNodes.size(); i++)
-                        writeValueInt(nodeIndex + 1 + skelRootNodes[i]);
-                    closeArray();
+                        j.writeValueInt(nodeIndex + 1 + skelRootNodes[i]);
+                    j.closeArray();
                 }
-                closeScope();
+                j.closeScope();
                 for (unsigned int i = 0; i < skelNodes.size(); i++) {
-                    openScope();
-                    writeFieldString("name", skelNodes[i].name);
-                    openArray("rotation");
-                    writeValueFloat(boneStates[i].unknown2.x);
-                    writeValueFloat(boneStates[i].unknown2.y);
-                    writeValueFloat(boneStates[i].unknown2.z);
-                    writeValueFloat(boneStates[i].unknown2.w);
-                    closeArray();
-                    openArray("translation");
-                    writeValueFloat(boneStates[i].unknown3);
-                    writeValueFloat(boneStates[i].unknown4);
-                    writeValueFloat(boneStates[i].unknown5);
-                    closeArray();
-                    //openArray("matrix");
+                    j.openScope();
+                    j.writeFieldString("name", skelNodes[i].name);
+                    j.openArray("rotation");
+                    j.writeValueFloat(boneStates[i].unknown2.x);
+                    j.writeValueFloat(boneStates[i].unknown2.y);
+                    j.writeValueFloat(boneStates[i].unknown2.z);
+                    j.writeValueFloat(boneStates[i].unknown2.w);
+                    j.closeArray();
+                    j.openArray("translation");
+                    j.writeValueFloat(boneStates[i].unknown3);
+                    j.writeValueFloat(boneStates[i].unknown4);
+                    j.writeValueFloat(boneStates[i].unknown5);
+                    j.closeArray();
+                    //j.openArray("matrix");
                     //D3DXMATRIX *unkMat = At<D3DXMATRIX>(skeleton, 0x10 + 0x30 + sizeof(BoneState) * i);
                     //D3DXMATRIX mat = *unkMat;
                     //D3DXMatrixInverse(&mat, NULL, unkMat);
                     //for (unsigned int m = 0; m < 16; m++) {
-                    //    writeValueFloat(GetAt<float>(&mat, m * 4));
+                    //    j.writeValueFloat(GetAt<float>(&mat, m * 4));
                     //}
-                    //closeArray();
+                    //j.closeArray();
                     if (skelNodes[i].children.size() > 0) {
-                        openArray("children");
+                        j.openArray("children");
                         for (unsigned int c = 0; c < skelNodes[i].children.size(); c++)
-                            writeValueInt(nodeIndex + 1 + skelNodes[i].children[c]->index);
-                        closeArray();
+                            j.writeValueInt(nodeIndex + 1 + skelNodes[i].children[c]->index);
+                        j.closeArray();
                     }
-                    closeScope();
+                    j.closeScope();
                 }
             }
-            closeArray();
+            j.closeArray();
             vector<Buffer> buffers;
             vector<Accessor> accessors;
             // skins
             if (skeleton) {
-                openArray("skins");
-                openScope();
+                j.openArray("skins");
+                j.openScope();
                 if (bones.size() > 0) {
-                    writeFieldInt("inverseBindMatrices", accessors.size());
+                    j.writeFieldInt("inverseBindMatrices", accessors.size());
                     Accessor a;
                     skinMatrices = new Matrix4x4[bones.size()];
                     for (unsigned int m = 0; m < bones.size(); m++) {
@@ -697,29 +548,29 @@ public:
                     buffers.push_back(b);
                 }
                 unsigned int skelRootNodeIndex = model ? model->mNumLayers : 0;
-                writeFieldInt("skeleton", skelRootNodeIndex);
+                j.writeFieldInt("skeleton", skelRootNodeIndex);
                 if (bones.size() > 0) {
-                    openArray("joints");
+                    j.openArray("joints");
                     for (unsigned int i = 0; i < bones.size(); i++)
-                        writeValueInt(skelRootNodeIndex + 1 + i);
-                    closeArray();
+                        j.writeValueInt(skelRootNodeIndex + 1 + i);
+                    j.closeArray();
                 }
-                closeScope();
-                closeArray();
+                j.closeScope();
+                j.closeArray();
             }
             // meshes
 
             // TODO: embedded textures export (check for embedded textures symbols)
 
             if (model && model->mNumLayers) {
-                openArray("meshes");
+                j.openArray("meshes");
                 unsigned int *modelLayers = (unsigned int *)(model->mLayers);
                 modelLayers++;
                 for (unsigned int i = 0; i < model->mNumLayers; i++) {
-                    openScope();
+                    j.openScope();
                     if (model->mLayerNames[i])
-                        writeFieldString("name", model->mLayerNames[i]);
-                    openArray("primitives");
+                        j.writeFieldString("name", model->mLayerNames[i]);
+                    j.openArray("primitives");
                     unsigned int numPrimitives = *modelLayers;
                     modelLayers++;
                     for (unsigned int p = 0; p < numPrimitives; p++) {
@@ -998,9 +849,9 @@ public:
                                 //}
                             }
                         }
-                        openScope();
+                        j.openScope();
                         if (vertexBuffer) {
-                            openScope("attributes");
+                            j.openScope("attributes");
                             unsigned int attrOffset = 0;
                             bool hasBlendIndices = false;
                             bool hasBlendWeights = false;
@@ -1015,37 +866,37 @@ public:
                             for (auto const &d : shader.declaration) {
                                 switch (d.usage) {
                                 case Shader::Position:
-                                    writeFieldInt("POSITION", accessors.size());
+                                    j.writeFieldInt("POSITION", accessors.size());
                                     break;
                                 case Shader::Normal:
-                                    writeFieldInt("NORMAL", accessors.size());
+                                    j.writeFieldInt("NORMAL", accessors.size());
                                     break;
                                 case Shader::Texcoord0:
-                                    writeFieldInt("TEXCOORD_0", accessors.size());
+                                    j.writeFieldInt("TEXCOORD_0", accessors.size());
                                     break;
                                 case Shader::Texcoord1:
-                                    writeFieldInt("TEXCOORD_1", accessors.size());
+                                    j.writeFieldInt("TEXCOORD_1", accessors.size());
                                     break;
                                 case Shader::Texcoord2:
-                                    writeFieldInt("TEXCOORD_2", accessors.size());
+                                    j.writeFieldInt("TEXCOORD_2", accessors.size());
                                     break;
                                 case Shader::Color0:
-                                    writeFieldInt("COLOR_0", accessors.size());
+                                    j.writeFieldInt("COLOR_0", accessors.size());
                                     break;
                                 case Shader::Color1:
-                                    //writeFieldInt("COLOR_1", accessors.size());
+                                    //j.writeFieldInt("COLOR_1", accessors.size());
                                     color1Offset = attrOffset;
                                     attrOffset += 4;
                                     continue;
                                 case Shader::BlendIndices:
-                                    writeFieldInt("JOINTS_0", accessors.size());
+                                    j.writeFieldInt("JOINTS_0", accessors.size());
                                     if (uses2Streams) {
                                         attrOffset = 0;
                                         streamNumber = 1;
                                     }
                                     break;
                                 case Shader::BlendWeight:
-                                    writeFieldInt("WEIGHTS_0", accessors.size());
+                                    j.writeFieldInt("WEIGHTS_0", accessors.size());
                                     break;
                                 }
                                 Accessor a;
@@ -1119,7 +970,7 @@ public:
                                 }
                                 accessors.push_back(a);
                             }
-                            closeScope();
+                            j.closeScope();
                             Buffer b;
                             b.data = vertexBuffer;
                             b.length = vertexSize * numVertices;
@@ -1166,7 +1017,7 @@ public:
                             a.type = "SCALAR";
                             a.stride = 2;
                             a.bufferType = Buffer::Index;
-                            writeFieldInt("indices", accessors.size());
+                            j.writeFieldInt("indices", accessors.size());
                             accessors.push_back(a);
                             Buffer b;
                             b.data = indexBuffer;
@@ -1175,7 +1026,7 @@ public:
                             b.stride = 2;
                             buffers.push_back(b);
                         }
-                        writeFieldInt("mode", geoPrimMode);
+                        j.writeFieldInt("mode", geoPrimMode);
                         unsigned int materialId = 0;
                         bool materialFound = false;
                         if (!options().noMeshJoin) {
@@ -1191,53 +1042,53 @@ public:
                             materialId = materials.size();
                             materials.push_back(mat);
                         }
-                        writeFieldInt("material", materialId);
-                        closeScope();
+                        j.writeFieldInt("material", materialId);
+                        j.closeScope();
                     }
                     modelLayers += numPrimitives;
-                    closeArray();
-                    closeScope();
+                    j.closeArray();
+                    j.closeScope();
                 }
-                closeArray();
+                j.closeArray();
             }
             
             vector<Texture *> vecTextures;
             if (!textures.empty()) {
                 // samplers
-                openArray("samplers");
+                j.openArray("samplers");
                 for (auto const &[k, t] : textures) {
-                    openScope();
-                    writeFieldString("name", t->name);
-                    writeFieldInt("magFilter", t->magFilter);
-                    writeFieldInt("minFilter", t->minFilter);
+                    j.openScope();
+                    j.writeFieldString("name", t->name);
+                    j.writeFieldInt("magFilter", t->magFilter);
+                    j.writeFieldInt("minFilter", t->minFilter);
                     //if (t->wrapU != 10497)
-                        writeFieldInt("wrapS", t->wrapU);
+                        j.writeFieldInt("wrapS", t->wrapU);
                     //if (t->wrapV != 10497)
-                        writeFieldInt("wrapT", t->wrapV);
-                    closeScope();
+                        j.writeFieldInt("wrapT", t->wrapV);
+                    j.closeScope();
                     vecTextures.push_back(t);
                 }
-                closeArray();
+                j.closeArray();
                 // textures
-                openArray("textures");
+                j.openArray("textures");
                 unsigned int i = 0;
                 for (auto const &[k, t] : textures) {
-                    openScope();
-                    writeFieldString("name", t->name);
-                    writeFieldInt("sampler", i);
-                    writeFieldInt("source", i);
-                    closeScope();
+                    j.openScope();
+                    j.writeFieldString("name", t->name);
+                    j.writeFieldInt("sampler", i);
+                    j.writeFieldInt("source", i);
+                    j.closeScope();
                     i++;
                 }
-                closeArray();
+                j.closeArray();
                 // images
-                openArray("images");
+                j.openArray("images");
                 for (auto const &[k, t] : textures) {
-                    openScope();
-                    writeFieldString("name", t->name);
-                    writeFieldString("mimeType", t->mimeType);
-                    writeFieldString("uri", t->source);
-                    closeScope();
+                    j.openScope();
+                    j.writeFieldString("name", t->name);
+                    j.writeFieldString("mimeType", t->mimeType);
+                    j.writeFieldString("uri", t->source);
+                    j.closeScope();
 
                     if (options().dummyTextures) {
                         if (!options().jpegTextures) {
@@ -1279,22 +1130,22 @@ public:
                         }
                     }
                 }
-                closeArray();
+                j.closeArray();
             }
             // materials
             bool hasSpecOrEnvMap = false;
             if (!materials.empty()) {
-                openArray("materials");
+                j.openArray("materials");
                 for (unsigned int i = 0; i < materials.size(); i++) {
-                    openScope();
-                    writeFieldString("name", string("material") + Format("%02d", i) + " [" + materials[i].shader + "]");
+                    j.openScope();
+                    j.writeFieldString("name", string("material") + Format("%02d", i) + " [" + materials[i].shader + "]");
                     if (materials[i].doubleSided)
-                        writeFieldBool("doubleSided", true);
+                        j.writeFieldBool("doubleSided", true);
                     if (!materials[i].alphaMode.empty())
-                        writeFieldString("alphaMode", "BLEND");
-                    openScope("pbrMetallicRoughness");
-                    writeFieldFloat("metallicFactor", materials[i].metallicFactor);
-                    writeFieldFloat("roughnessFactor", materials[i].roughnessFactor);
+                        j.writeFieldString("alphaMode", "BLEND");
+                    j.openScope("pbrMetallicRoughness");
+                    j.writeFieldFloat("metallicFactor", materials[i].metallicFactor);
+                    j.writeFieldFloat("roughnessFactor", materials[i].roughnessFactor);
                     if (!options().noTextures) {
                         int diffuseTexId = -1, specTexId = -1;
                         if (materials[i].textures[0]) {
@@ -1314,117 +1165,111 @@ public:
                             }
                         }
                         if (specTexId != -1) {
-                            closeScope();
-                            openScope("extensions");
-                            openScope("KHR_materials_pbrSpecularGlossiness");
+                            j.closeScope();
+                            j.openScope("extensions");
+                            j.openScope("KHR_materials_pbrSpecularGlossiness");
                             if (diffuseTexId != -1) {
-                                openScope("diffuseTexture");
-                                writeFieldInt("index", diffuseTexId);
-                                //writeFieldInt("texCoord", 0);
-                                closeScope();
+                                j.openScope("diffuseTexture");
+                                j.writeFieldInt("index", diffuseTexId);
+                                //j.writeFieldInt("texCoord", 0);
+                                j.closeScope();
                             }
-                            openScope("specularGlossinessTexture");
-                            writeFieldInt("index", specTexId);
-                            //writeFieldInt("texCoord", 0);
-                            closeScope();
-                            closeScope();
-                            closeScope();
+                            j.openScope("specularGlossinessTexture");
+                            j.writeFieldInt("index", specTexId);
+                            //j.writeFieldInt("texCoord", 0);
+                            j.closeScope();
+                            j.closeScope();
+                            j.closeScope();
                             if (!hasSpecOrEnvMap)
                                 hasSpecOrEnvMap = true;
                         }
                         else if (diffuseTexId != -1) {
-                            openScope("baseColorTexture");
-                            writeFieldInt("index", diffuseTexId);
-                            //writeFieldInt("texCoord", 0);
-                            closeScope();
-                            closeScope();
+                            j.openScope("baseColorTexture");
+                            j.writeFieldInt("index", diffuseTexId);
+                            //j.writeFieldInt("texCoord", 0);
+                            j.closeScope();
+                            j.closeScope();
                         }
                         else
-                            closeScope();
+                            j.closeScope();
                     }
                     else
-                        closeScope();
-                    closeScope();
+                        j.closeScope();
+                    j.closeScope();
                 }
-                closeArray();
+                j.closeArray();
             }
             // extensions
             if (hasSpecOrEnvMap) {
-                openArray("extensionsUsed");
-                writeValueString("KHR_materials_pbrSpecularGlossiness");
-                closeArray();
-                openArray("extensionsRequired");
-                writeValueString("KHR_materials_pbrSpecularGlossiness");
-                closeArray();
+                j.openArray("extensionsUsed");
+                j.writeValueString("KHR_materials_pbrSpecularGlossiness");
+                j.closeArray();
+                j.openArray("extensionsRequired");
+                j.writeValueString("KHR_materials_pbrSpecularGlossiness");
+                j.closeArray();
             }
             // accessors
             if (accessors.size() > 0) {
-                openArray("accessors");
+                j.openArray("accessors");
                 
                 for (auto const &a : accessors) {
-                    openScope();
-                    writeFieldInt("bufferView", a.buffer);
-                    writeFieldInt("componentType", a.componentType);
-                    writeFieldInt("count", a.count);
-                    writeFieldString("type", a.type);
-                    writeFieldInt("byteOffset", a.offset);
+                    j.openScope();
+                    j.writeFieldInt("bufferView", a.buffer);
+                    j.writeFieldInt("componentType", a.componentType);
+                    j.writeFieldInt("count", a.count);
+                    j.writeFieldString("type", a.type);
+                    j.writeFieldInt("byteOffset", a.offset);
                     if (a.normalized)
-                        writeFieldBool("normalized", true);
+                        j.writeFieldBool("normalized", true);
                     if (a.usesMinMax) {
-                        openArray("min");
-                        writeValueFloat(a.min.x);
-                        writeValueFloat(a.min.y);
-                        writeValueFloat(a.min.z);
-                        closeArray();
-                        openArray("max");
-                        writeValueFloat(a.max.x);
-                        writeValueFloat(a.max.y);
-                        writeValueFloat(a.max.z);
-                        closeArray();
+                        j.openArray("min");
+                        j.writeValueFloat(a.min.x);
+                        j.writeValueFloat(a.min.y);
+                        j.writeValueFloat(a.min.z);
+                        j.closeArray();
+                        j.openArray("max");
+                        j.writeValueFloat(a.max.x);
+                        j.writeValueFloat(a.max.y);
+                        j.writeValueFloat(a.max.z);
+                        j.closeArray();
                     }
-                    closeScope();
+                    j.closeScope();
                 }
-                closeArray();
+                j.closeArray();
             }
             // bufferViews
             if (buffers.size() > 0) {
                 unsigned int i = 0;
-                openArray("bufferViews");
+                j.openArray("bufferViews");
                 for (auto const &b : buffers) {
-                    openScope();
-                    writeFieldInt("buffer", i++);
-                    writeFieldInt("byteLength", b.length);
+                    j.openScope();
+                    j.writeFieldInt("buffer", i++);
+                    j.writeFieldInt("byteLength", b.length);
                     if (b.type == Buffer::Vertex || b.type == Buffer::VertexSkin)
-                        writeFieldInt("byteStride", b.stride);
+                        j.writeFieldInt("byteStride", b.stride);
                     else if (b.type == Buffer::Index)
-                        writeFieldInt("target", 34963);
-                    closeScope();
+                        j.writeFieldInt("target", 34963);
+                    j.closeScope();
                 }
-                closeArray();
+                j.closeArray();
                 // buffers
-                openArray("buffers");
+                j.openArray("buffers");
                 for (auto const &b : buffers) {
-                    openScope();
-                    writeFieldInt("byteLength", b.length);
-                    writeFieldString("uri", "data:application/octet-stream;base64," + base64_encode((unsigned char *)b.data, b.length));
-                    closeScope();
+                    j.openScope();
+                    j.writeFieldInt("byteLength", b.length);
+                    j.writeFieldString("uri", "data:application/octet-stream;base64," + j.base64_encode((unsigned char *)b.data, b.length));
+                    j.closeScope();
                 }
-                closeArray();
+                j.closeArray();
             }
         }
-        endScope();
+        j.endScope();
 
         for (auto const &v : vertexSkinBuffers)
             delete[] v;
         delete[] skinMatrices;
         for (auto const &e : textures)
             delete e.second;
-
-        ofstream w(outPath, ios::out);
-        if (w.is_open())
-            w << mResult;
-        //else
-        //    Error(L"failed to open %s", outPath.c_str());
     }
 
     void convert_o_to_gltf(path const &inPath, path const &outPath) {

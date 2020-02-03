@@ -1899,7 +1899,6 @@ void oimport(path const &out, path const &in) {
         }
         path fshDir = fshFilePath.parent_path();
         string fshFileName = fshFilePath.filename().string();
-        path modelDir = in.parent_path();
         if (!fshDir.empty())
             create_directories(fshDir);
         ea::Fsh fsh;
@@ -1932,6 +1931,7 @@ void oimport(path const &out, path const &in) {
         }
         for (auto const &[k, img] : texturesToAdd) {
             path imgPath = img.second;
+            path finalImgPath = imgPath;
             bool fileExists = false;
             bool hasExtension = false;
             if (imgPath.has_extension()) {
@@ -1946,26 +1946,30 @@ void oimport(path const &out, path const &in) {
             if (hasExtension) {
                 fileExists = exists(imgPath);
                 if (!fileExists) {
-                    imgPath = inDir / imgPath;
-                    fileExists = exists(imgPath);
+                    finalImgPath = inDir / imgPath;
+                    fileExists = exists(finalImgPath);
+                    if (!fileExists) {
+                        imgPath.replace_extension();
+                        hasExtension = false;
+                    }
                 }
             }
-            else {
+            if (!fileExists && !hasExtension) {
                 for (auto const &ie : imgExt) {
-                    string filePathWithExt = img.second + ie;
-                    imgPath = filePathWithExt;
-                    fileExists = exists(imgPath);
+                    string filePathWithExt = imgPath.string() + ie;
+                    finalImgPath = filePathWithExt;
+                    fileExists = exists(finalImgPath);
                     if (fileExists)
                         break;
-                    imgPath = inDir / filePathWithExt;
-                    fileExists = exists(imgPath);
+                    finalImgPath = inDir / filePathWithExt;
+                    fileExists = exists(finalImgPath);
                     if (fileExists)
                         break;
                 }
             }
             if (fileExists) {
                 auto &image = fsh.AddImage();
-                image.ReadFromFile(imgPath, options().fshFormat, options().fshLevels, options().fshRescale);
+                image.ReadFromFile(finalImgPath, options().fshFormat, options().fshLevels, options().fshRescale);
                 ea::FshPixelData *pixelsData = image.FindFirstData(ea::FshData::PIXELDATA)->As<ea::FshPixelData>();
                 image.AddData(new ea::FshMetalBin(metalBinData, 0x10));
                 image.SetTag(img.first);

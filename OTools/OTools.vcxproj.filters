@@ -21,9 +21,6 @@
     <ClInclude Include="Fsh\Buffer.h">
       <Filter>Fsh</Filter>
     </ClInclude>
-    <ClInclude Include="Fsh\D3DDevice.h">
-      <Filter>Fsh</Filter>
-    </ClInclude>
     <ClInclude Include="Fsh\Exception.h">
       <Filter>Fsh</Filter>
     </ClInclude>
@@ -37,6 +34,19 @@
     <ClInclude Include="Rx3\Rx3Container.h">
       <Filter>Rx3</Filter>
     </ClInclude>
+    <ClInclude Include="D3DDevice\D3DDevice.h">
+      <Filter>D3DDevice</Filter>
+    </ClInclude>
+    <ClInclude Include="Rx3\ExtractNames.h">
+      <Filter>Rx3</Filter>
+    </ClInclude>
+    <ClInclude Include="Rx3\ExtractTextures.h">
+      <Filter>Rx3</Filter>
+    </ClInclude>
+    <ClInclude Include="Rx3\ExtractModel.h">
+      <Filter>Rx3</Filter>
+    </ClInclude>
+    <ClInclude Include="jsonwriter.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dump.cpp" />
@@ -63,9 +73,6 @@
     <ClCompile Include="Fsh\Buffer.cpp">
       <Filter>Fsh</Filter>
     </ClCompile>
-    <ClCompile Include="Fsh\D3DDevice.cpp">
-      <Filter>Fsh</Filter>
-    </ClCompile>
     <ClCompile Include="Fsh\Exception.cpp">
       <Filter>Fsh</Filter>
     </ClCompile>
@@ -79,6 +86,20 @@
     <ClCompile Include="Rx3\Rx3Container.cpp">
       <Filter>Rx3</Filter>
     </ClCompile>
+    <ClCompile Include="D3DDevice\D3DDevice.cpp">
+      <Filter>D3DDevice</Filter>
+    </ClCompile>
+    <ClCompile Include="Rx3\ExtractNames.cpp">
+      <Filter>Rx3</Filter>
+    </ClCompile>
+    <ClCompile Include="Rx3\ExtractTextures.cpp">
+      <Filter>Rx3</Filter>
+    </ClCompile>
+    <ClCompile Include="rx3export.cpp" />
+    <ClCompile Include="Rx3\ExtractModel.cpp">
+      <Filter>Rx3</Filter>
+    </ClCompile>
+    <ClCompile Include="jsonwriter.cpp" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="NvTriStrip">
@@ -89,6 +110,9 @@
     </Filter>
     <Filter Include="Rx3">
       <UniqueIdentifier>{21c07bf9-9df1-492c-a7cd-6ced9432ba56}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="D3DDevice">
+      <UniqueIdentifier>{88226ef0-ebc6-4c4b-a968-a4ab04b3e0f6}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
 </Project>

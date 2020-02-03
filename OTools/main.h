@@ -52,6 +52,7 @@ GlobalOptions &options();
 
 struct GlobalVars {
     map<string, pair<unsigned char, string>> maxColorValue;
+    map<string, map<vector<unsigned char>, vector<string>>> shaders;
 };
 
 GlobalVars &globalVars();
@@ -62,3 +63,4 @@ void odump(path const &out, path const &in);
 void oexport(path const &out, path const &in);
 void oimport(path const &out, path const &in);
 void oinfo(path const &out, path const &in);
+void rx3export(path const &out, path const &in);

@@ -2,7 +2,7 @@
 #include "Buffer.h"
 #include "File.h"
 #include "Exception.h"
-#include "D3DDevice.h"
+#include "..\D3DDevice\D3DDevice.h"
 #include <string>
 #include <vector>
 #include <algorithm>

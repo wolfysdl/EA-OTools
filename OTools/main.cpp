@@ -4,7 +4,7 @@
 #include "errormsg.h"
 #include "Fsh/Fsh.h"
 
-const char *OTOOLS_VERSION = "0.140";
+const char *OTOOLS_VERSION = "0.141";
 
 GlobalOptions &options() {
     static GlobalOptions go;
@@ -35,7 +35,7 @@ int main(int argc, char *argv[]) {
             SetErrorDisplayType(ErrorDisplayType::ERR_CONSOLE);
     }
     enum OperationType {
-        UNKNOWN, DUMP, EXPORT, IMPORT, INFO
+        UNKNOWN, DUMP, EXPORT, IMPORT, INFO, RX3EXPORT
     } opType = OperationType::UNKNOWN;
     void (*callback)(path const &, path const &) = nullptr;
     string targetExt;
@@ -64,6 +64,11 @@ int main(int argc, char *argv[]) {
             opType = OperationType::INFO;
             callback = oinfo;
             inExt = { ".o" };
+        }
+        else if (opTypeStr == "rx3export") {
+            opType = OperationType::RX3EXPORT;
+            callback = rx3export;
+            inExt = { ".rx3" };
         }
     }
     if (opType == OperationType::UNKNOWN) {
@@ -140,7 +145,7 @@ int main(int argc, char *argv[]) {
             options().writeFsh = true;
             if (cmd.HasArgument("fshOutput"))
                 options().fshOutput = cmd.GetArgumentString("fshOutput");
-            ea::Fsh::SetDevice(new ea::D3DDevice());
+            ea::Fsh::SetDevice(D3DDevice::GlobalDevice());
             options().fshLevels = D3DX_DEFAULT;
             if (cmd.HasArgument("fshLevels")) {
                 options().fshLevels = cmd.GetArgumentInt("fshLevels");
@@ -230,7 +235,8 @@ int main(int argc, char *argv[]) {
                     else
                         out = out / targetFileNameWithExt;
                 }
-                create_directories(out.parent_path());
+                if (opType != RX3EXPORT)
+                    create_directories(out.parent_path());
                 callback(out, in);
             }
         }

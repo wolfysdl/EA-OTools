@@ -3,7 +3,7 @@
 #include "d3dx9.h"
 #include "..\utils.h"
 
-ea::D3DDevice *ea::Fsh::GlobalDevice;
+D3DDevice *ea::Fsh::GlobalDevice;
 
 ea::FshData::~FshData() {}
 
@@ -452,7 +452,6 @@ void ea::Fsh::SetDevice(D3DDevice *device) {
 }
 
 void ea::Fsh::ClearDevice() {
-	delete GlobalDevice;
 	GlobalDevice = nullptr;
 }
 
