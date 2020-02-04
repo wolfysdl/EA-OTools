@@ -1,3 +1,4 @@
+#include "d3dx9.h"
 #include "ExtractModel.h"
 #include "ExtractNames.h"
 #include "..\jsonwriter.h"
@@ -18,6 +19,16 @@ enum DataType {
     dt_4u16,  // 4x unsigned 16 bit
     dt_4u8n,  // 4x unsigned 8 bit normalized
     dt_4u16n  // 4x unsigned 16 bit normalized
+};
+
+struct Matrix {
+    float f[16];
+};
+
+struct Bone {
+    unsigned char parent = 0;
+    unsigned char sibling = 0;
+    vector<unsigned char> children;
 };
 
 DataType DataTypeFromTypeName(string const &name) {
@@ -100,15 +111,16 @@ void ExtractModelFromContainer(Rx3Container const &container, path const &output
     auto indexBufferSections = container.FindAllSections(RX3_SECTION_INDEX_BUFFER);
     auto vertexBufferSections = container.FindAllSections(RX3_SECTION_VERTEX_BUFFER);
     auto vertexDeclarationSections = container.FindAllSections(RX3_SECTION_VERTEX_DECLARATION);
-    auto boneMatrices = container.FindFirstSection(RX3_SECTION_BONE_MATRICES);
-    auto skeletons = container.FindAllSections(RX3_SECTION_SKELETON);
+    auto boneMatricesSection = container.FindFirstSection(RX3_SECTION_BONE_MATRICES);
+    auto skeletonsSections = container.FindAllSections(RX3_SECTION_SKELETON);
     if (
         !indexBufferSections.empty() &&
         indexBufferSections.size() == vertexBufferSections.size() &&
         indexBufferSections.size() == vertexDeclarationSections.size() &&
-        (skeletons.empty() || indexBufferSections.size() == skeletons.size())
+        (skeletonsSections.empty() || indexBufferSections.size() == skeletonsSections.size())
         )
     {
+        bool hasSkeleton = boneMatricesSection != nullptr;
         vector<string> primNames;
         auto geometryNameSections = container.FindFirstSection(RX3_SECTION_NAMES);
         if (geometryNameSections) {
@@ -119,10 +131,13 @@ void ExtractModelFromContainer(Rx3Container const &container, path const &output
             }
         }
         unsigned int numPrimitives = indexBufferSections.size();
-        unsigned int numNodes = 1;
+        unsigned int numMeshNodes = 1;
+        unsigned int numBones = 0;
         primNames.resize(numPrimitives);
         vector<Accessor> accessors;
         vector<Material> materials;
+        vector<Matrix> boneMatrices;
+        vector<Bone> bones;
         path gltfPath = outputPath;
         gltfPath.replace_extension(".gltf");
         JsonWriter j(gltfPath);
@@ -136,21 +151,101 @@ void ExtractModelFromContainer(Rx3Container const &container, path const &output
         j.openArray("scenes");
         j.openScope();
         j.openArray("nodes");
-        for (unsigned int i = 0; i < numNodes; i++)
+        for (unsigned int i = 0; i < (numMeshNodes + (hasSkeleton ? 1 : 0)); i++)
             j.writeValueInt(i);
         j.closeArray();
         j.closeScope();
         j.closeArray();
         // nodes
         j.openArray("nodes");
-        for (unsigned int i = 0; i < numNodes; i++) {
+        for (unsigned int i = 0; i < numMeshNodes; i++) {
             j.openScope();
             j.writeFieldInt("mesh", i);
+            if (hasSkeleton)
+                j.writeFieldInt("skin", 0);
+            j.closeScope();
+        }
+        if (hasSkeleton) {
+            Rx3Reader boneMatricesReader(boneMatricesSection);
+            boneMatricesReader.Skip(4);
+            numBones = boneMatricesReader.Read<unsigned int>();
+            boneMatricesReader.Skip(8);
+            if (numBones > 0) {
+                boneMatrices.resize(numBones);
+                Accessor a;
+                a.componentType = 5126;
+                a.count = numBones;
+                a.type = "MAT4";
+                a.stride = 64;
+                a.data.resize(a.count * 64);
+                memcpy(a.data.data(), boneMatricesReader.GetCurrentPtr(), a.data.size());
+                Matrix *m = (Matrix *)a.data.data();
+                for (unsigned int b = 0; b < numBones; b++) {
+                    m[b].f[15] = 1.0f;
+                    //Matrix im;
+                    //D3DXMatrixInverse((D3DXMATRIX *)&im, NULL, (D3DXMATRIX *)m);
+                    //m[b] = im;
+                }
+                accessors.push_back(a);
+                memcpy(boneMatrices.data(), boneMatricesReader.GetCurrentPtr(), boneMatrices.size() * sizeof(Matrix));
+                for (unsigned int b = 0; b < numBones; b++) {
+                    //boneMatrices[b].f[15] = 1.0f;
+                    Matrix im;
+                    D3DXMatrixInverse((D3DXMATRIX *)&im, NULL, (D3DXMATRIX *)&boneMatrices[b]);
+                    boneMatrices[b] = im;
+                }
+                bones.resize(numBones);
+                for (unsigned int s = 0; s < skeletonsSections.size(); s++) {
+                    Rx3Reader skeletonReader(skeletonsSections[s]);
+                    skeletonReader.Skip(16);
+                    for (unsigned int b = 0; b < numBones; b++) {
+                        if (!bones[b].parent)
+                            bones[b].parent = skeletonReader.Read<unsigned char>();
+                        else
+                            skeletonReader.Skip(1);
+                        if (!bones[b].sibling)
+                            bones[b].sibling = skeletonReader.Read<unsigned char>();
+                        else
+                            skeletonReader.Skip(1);
+                    }
+                }
+            }
+            j.openScope();
+            j.writeFieldString("name", "Skeleton");
+            j.openArray("children");
+            for (unsigned int b = 0; b < numBones; b++)
+                j.writeValueInt(numMeshNodes + 1 + b);
+            j.closeArray();
+            j.closeScope();
+        }
+        for (unsigned int b = 0; b < numBones; b++) {
+            j.openScope();
+            j.writeFieldString("name", "bone_" + to_string(b));
+            //j.openArray("matrix");
+            //for (unsigned int m = 0; m < 16; m++) {
+            //    j.writeValueFloat(boneMatrices[b].f[m]);
+            //}
+            //j.closeArray();
             j.closeScope();
         }
         j.closeArray();
+        if (hasSkeleton) { 
+            j.openArray("skins");
+            j.openScope();
+            if (numBones > 0)
+                j.writeFieldInt("inverseBindMatrices", 0);
+            unsigned int skelRootNodeIndex = numMeshNodes;
+            j.writeFieldInt("skeleton", skelRootNodeIndex);
+            if (numBones > 0) {
+                j.openArray("joints");
+                for (unsigned int i = 0; i < numBones; i++)
+                    j.writeValueInt(skelRootNodeIndex + 1 + i);
+                j.closeArray();
+            }
+            j.closeScope();
+            j.closeArray();
+        }
         j.openArray("meshes");
-
         j.openScope();
         j.openArray("primitives");
         for (unsigned int i = 0; i < numPrimitives; i++) {
