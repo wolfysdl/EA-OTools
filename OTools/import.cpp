@@ -1885,20 +1885,8 @@ void oimport(path const &out, path const &in) {
         bufElf.Put(Elf32_Shdr(sectionNamesOffets[6], SHT_PROGBITS, 0, 0, sectionOffsets[6], bufMetadata.Size(), 0, 0, 1, 0));
     bufElf.WriteToFile(out);
 
-    if (options().writeFsh) {
+    auto WriteFsh = [](path const &fshFilePath, path const &searchDir, map<string, pair<string, string>> const &texturesToAdd) {
         static vector<string> imgExt = { ".png", ".jpg", ".jpeg", ".bmp", ".dds", ".tga" };
-        static set<string> defaultTexturesToIgnore = { "rwa0", "rwa1", "rwa2", "rwa3", "rwh0", "rwh1", "rwh2", "rwh3", "rwn0", "rwn1", "rwn2", "rwn3", "abna", "abnb", "abnc", "afla", "aflb", "aflc", "hbna", "hbnb", "hbnc", "hfla", "hflb", "hflc", "adba", "adbb", "adbc" };
-        path fshFilePath;
-        if (!options().fshOutput.empty()) {
-            if (options().processingFolders)
-                fshFilePath = path(options().fshOutput) / (out.stem().string() + ".fsh");
-            else
-                fshFilePath = options().fshOutput;
-        }
-        else {
-            fshFilePath = out;
-            fshFilePath.replace_extension(".fsh");
-        }
         path fshDir = fshFilePath.parent_path();
         string fshFileName = fshFilePath.filename().string();
         if (!fshDir.empty())
@@ -1908,98 +1896,137 @@ void oimport(path const &out, path const &in) {
         metalBinData.Allocate(64);
         Memory_Zero(metalBinData.GetData(), metalBinData.GetSize());
         strcpy((char *)metalBinData.GetData(), "EAGL64 metal bin attachment for runtime texture management");
-        path inDir = in.parent_path();
-        map<string, pair<string, string>> texturesToAdd;
-        for (auto const &[k, img] : textures) {
-            auto imgLoweredName = ToLower(img.name);
-            bool ignoreThisTexture = false;
-            if (!options().fshDisableTextureIgnore) {
-                if (defaultTexturesToIgnore.contains(imgLoweredName) || options().fshIgnoreTextures.contains(imgLoweredName))
-                    ignoreThisTexture = true;
-            }
-            if (!ignoreThisTexture)
-                texturesToAdd[imgLoweredName] = { img.name, img.filepath };
-        }
-        for (auto const &a : options().fshAddTextures) {
-            path ap = a;
-            string afilename = ap.stem().string();
-            if (!afilename.empty()) {
-                if (afilename.length() > 4)
-                    afilename = afilename.substr(0, 4);
-                string akey = ToLower(afilename);
-                if (!texturesToAdd.contains(akey))
-                    texturesToAdd[akey] = { afilename, a };
-            }
-        }
-        for (auto const &[k, img] : texturesToAdd) {
-            path imgPath = img.second;
-            path finalImgPath = imgPath;
-            bool fileExists = false;
-            bool hasExtension = false;
-            if (imgPath.has_extension()) {
-                string ext = ToLower(imgPath.extension().string());
-                for (auto const &ie : imgExt) {
-                    if (ext == ie) {
-                        hasExtension = true;
-                        break;
+        if (!texturesToAdd.empty()) {
+            for (auto const &[k, img] : texturesToAdd) {
+                path imgPath = img.second;
+                path finalImgPath = imgPath;
+                bool fileExists = false;
+                bool hasExtension = false;
+                if (imgPath.has_extension()) {
+                    string ext = ToLower(imgPath.extension().string());
+                    for (auto const &ie : imgExt) {
+                        if (ext == ie) {
+                            hasExtension = true;
+                            break;
+                        }
                     }
                 }
-            }
-            if (hasExtension) {
-                fileExists = exists(imgPath);
-                if (!fileExists) {
-                    finalImgPath = inDir / imgPath;
-                    fileExists = exists(finalImgPath);
+                if (hasExtension) {
+                    fileExists = exists(imgPath);
                     if (!fileExists) {
-                        imgPath.replace_extension();
-                        hasExtension = false;
+                        finalImgPath = searchDir / imgPath;
+                        fileExists = exists(finalImgPath);
+                        if (!fileExists) {
+                            imgPath.replace_extension();
+                            hasExtension = false;
+                        }
                     }
                 }
-            }
-            if (!fileExists && !hasExtension) {
-                for (auto const &ie : imgExt) {
-                    string filePathWithExt = imgPath.string() + ie;
-                    finalImgPath = filePathWithExt;
-                    fileExists = exists(finalImgPath);
-                    if (fileExists)
-                        break;
-                    finalImgPath = inDir / filePathWithExt;
-                    fileExists = exists(finalImgPath);
-                    if (fileExists)
-                        break;
+                if (!fileExists && !hasExtension) {
+                    for (auto const &ie : imgExt) {
+                        string filePathWithExt = imgPath.string() + ie;
+                        finalImgPath = filePathWithExt;
+                        fileExists = exists(finalImgPath);
+                        if (fileExists)
+                            break;
+                        finalImgPath = searchDir / filePathWithExt;
+                        fileExists = exists(finalImgPath);
+                        if (fileExists)
+                            break;
+                    }
+                }
+                if (fileExists) {
+                    auto &image = fsh.AddImage();
+                    image.ReadFromFile(finalImgPath, options().fshFormat, options().fshLevels, options().fshRescale);
+                    ea::FshPixelData *pixelsData = image.FindFirstData(ea::FshData::PIXELDATA)->As<ea::FshPixelData>();
+                    image.AddData(new ea::FshMetalBin(metalBinData, 0x10));
+                    image.SetTag(img.first);
+                    image.AddData(new ea::FshName(img.first));
+                    char comment[256];
+                    static char idStr[260];
+                    unsigned int texNameHash = Hash(fshFilePath.stem().string() + "_" + img.first);
+                    sprintf_s(idStr, "0x%.8x", texNameHash);
+                    sprintf_s(comment, "TXLY,%s,1,%d,%d,%d,%s", image.GetTag().c_str(), pixelsData->GetNumMipLevels() > 0 ? 1 : 0,
+                        pixelsData->GetWidth(), pixelsData->GetHeight(), idStr);
+                    image.AddData(new ea::FshComment(comment));
                 }
             }
-            if (fileExists) {
-                auto &image = fsh.AddImage();
-                image.ReadFromFile(finalImgPath, options().fshFormat, options().fshLevels, options().fshRescale);
-                ea::FshPixelData *pixelsData = image.FindFirstData(ea::FshData::PIXELDATA)->As<ea::FshPixelData>();
-                image.AddData(new ea::FshMetalBin(metalBinData, 0x10));
-                image.SetTag(img.first);
-                image.AddData(new ea::FshName(img.first));
-                char comment[256];
-                static char idStr[260];
-                sprintf_s(idStr, "0x%.8x", FshHash(fshFileName) + FshHash(img.first));
-                sprintf_s(comment, "TXLY,%s,1,%d,%d,%d,%s", image.GetTag().c_str(), pixelsData->GetNumMipLevels() > 0 ? 1 : 0,
-                    pixelsData->GetWidth(), pixelsData->GetHeight(), idStr);
-                image.AddData(new ea::FshComment(comment));
+            if (fsh.GetImagesCount() > 0) {
+                fsh.ForAllImages([&](ea::FshImage &image) {
+                    auto hotSpot = image.AddData(new ea::FshHotSpot())->As<ea::FshHotSpot>();
+                    fsh.ForAllImages([&](ea::FshImage &image2) {
+                        char fourcc[4] = { 0, 0, 0, 0 };
+                        auto tag = image2.GetTag();
+                        for (unsigned int i = 0; i < 4; i++) {
+                            if (tag.size() > i)
+                                fourcc[i] = tag[i];
+                        }
+                        std::swap(fourcc[0], fourcc[3]);
+                        std::swap(fourcc[1], fourcc[2]);
+                        hotSpot->Regions().push_back(ea::FshHotSpot::Region(*((unsigned int *)fourcc), 0, 0,
+                            image2.FindFirstData(ea::FshData::PIXELDATA)->As<ea::FshPixelData>()->GetWidth(),
+                            image2.FindFirstData(ea::FshData::PIXELDATA)->As<ea::FshPixelData>()->GetHeight()));
+                        });
+                    });
+                fsh.Write(fshFilePath);
             }
         }
-        fsh.ForAllImages([&](ea::FshImage &image) {
-            auto hotSpot = image.AddData(new ea::FshHotSpot())->As<ea::FshHotSpot>();
-            fsh.ForAllImages([&](ea::FshImage &image2) {
-                char fourcc[4] = { 0, 0, 0, 0 };
-                auto tag = image2.GetTag();
-                for (unsigned int i = 0; i < 4; i++) {
-                    if (tag.size() > i)
-                        fourcc[i] = tag[i];
+    };
+
+    if (options().writeFsh) {
+
+        if (options().head && modelName.starts_with("m228__")) {
+            unsigned int playerId = 0;
+            if (sscanf(modelName.substr(6).c_str(), "%d", &playerId) == 1) {
+                string playerIdStr = to_string(playerId);
+                map<string, pair<string, string>> fshTextures1;
+                auto storedLevels = options().fshLevels;
+                options().fshLevels = 1;
+                fshTextures1["tp01"] = { "tp01", "tp01@" + playerIdStr };
+                WriteFsh(out.parent_path() / ("t21__" + playerIdStr + "_0_0_0_0.fsh"), in.parent_path(), fshTextures1);
+                map<string, pair<string, string>> fshTextures2;
+                options().fshLevels = 99;
+                fshTextures2["tp02"] = { "tp02", "tp02@" + playerIdStr };
+                WriteFsh(out.parent_path() / ("t22__" + playerIdStr + "_0.fsh"), in.parent_path(), fshTextures2);
+                options().fshLevels = storedLevels;
+            }
+        }
+        else {
+            path fshPath;
+            if (!options().fshOutput.empty()) {
+                if (options().processingFolders)
+                    fshPath = path(options().fshOutput) / (out.stem().string() + ".fsh");
+                else
+                    fshPath = options().fshOutput;
+            }
+            else {
+                fshPath = out;
+                fshPath.replace_extension(".fsh");
+            }
+            map<string, pair<string, string>> fshTextures;
+            static set<string> defaultTexturesToIgnore = { "rwa0", "rwa1", "rwa2", "rwa3", "rwh0", "rwh1", "rwh2", "rwh3", "rwn0", "rwn1", "rwn2", "rwn3", "abna", "abnb", "abnc", "afla", "aflb", "aflc", "hbna", "hbnb", "hbnc", "hfla", "hflb", "hflc", "adba", "adbb", "adbc" };
+            for (auto const &[k, img] : textures) {
+                auto imgLoweredName = ToLower(img.name);
+                bool ignoreThisTexture = false;
+                if (!options().fshDisableTextureIgnore) {
+                    if (defaultTexturesToIgnore.contains(imgLoweredName) || options().fshIgnoreTextures.contains(imgLoweredName))
+                        ignoreThisTexture = true;
                 }
-                std::swap(fourcc[0], fourcc[3]);
-                std::swap(fourcc[1], fourcc[2]);
-                hotSpot->Regions().push_back(ea::FshHotSpot::Region(*((unsigned int *)fourcc), 0, 0,
-                    image2.FindFirstData(ea::FshData::PIXELDATA)->As<ea::FshPixelData>()->GetWidth(),
-                    image2.FindFirstData(ea::FshData::PIXELDATA)->As<ea::FshPixelData>()->GetHeight()));
-            });
-        });
-        fsh.Write(fshFilePath);
+                if (!ignoreThisTexture)
+                    fshTextures[imgLoweredName] = { img.name, img.filepath };
+            }
+            for (auto const &a : options().fshAddTextures) {
+                path ap = a;
+                string afilename = ap.stem().string();
+                if (!afilename.empty()) {
+                    if (afilename.length() > 4)
+                        afilename = afilename.substr(0, 4);
+                    string akey = ToLower(afilename);
+                    if (!fshTextures.contains(akey))
+                        fshTextures[akey] = { afilename, a };
+                }
+            }
+            WriteFsh(fshPath, in.parent_path(), fshTextures);
+        }
     }
 }

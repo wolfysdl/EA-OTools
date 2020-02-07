@@ -39,6 +39,7 @@ struct GlobalOptions {
     bool sortByName = false;
     bool sortByAlpha = false;
     bool ignoreMatColor = false;
+    bool head = false;
     // export options
     bool noTextures = false;
     bool dummyTextures = false;
@@ -63,4 +64,3 @@ void odump(path const &out, path const &in);
 void oexport(path const &out, path const &in);
 void oimport(path const &out, path const &in);
 void oinfo(path const &out, path const &in);
-void rx3export(path const &out, path const &in);

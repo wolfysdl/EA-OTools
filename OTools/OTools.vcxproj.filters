@@ -31,20 +31,8 @@
       <Filter>Fsh</Filter>
     </ClInclude>
     <ClInclude Include="target.h" />
-    <ClInclude Include="Rx3\Rx3Container.h">
-      <Filter>Rx3</Filter>
-    </ClInclude>
     <ClInclude Include="D3DDevice\D3DDevice.h">
       <Filter>D3DDevice</Filter>
-    </ClInclude>
-    <ClInclude Include="Rx3\ExtractNames.h">
-      <Filter>Rx3</Filter>
-    </ClInclude>
-    <ClInclude Include="Rx3\ExtractTextures.h">
-      <Filter>Rx3</Filter>
-    </ClInclude>
-    <ClInclude Include="Rx3\ExtractModel.h">
-      <Filter>Rx3</Filter>
     </ClInclude>
     <ClInclude Include="jsonwriter.h" />
   </ItemGroup>
@@ -83,21 +71,8 @@
       <Filter>Fsh</Filter>
     </ClCompile>
     <ClCompile Include="target.cpp" />
-    <ClCompile Include="Rx3\Rx3Container.cpp">
-      <Filter>Rx3</Filter>
-    </ClCompile>
     <ClCompile Include="D3DDevice\D3DDevice.cpp">
       <Filter>D3DDevice</Filter>
-    </ClCompile>
-    <ClCompile Include="Rx3\ExtractNames.cpp">
-      <Filter>Rx3</Filter>
-    </ClCompile>
-    <ClCompile Include="Rx3\ExtractTextures.cpp">
-      <Filter>Rx3</Filter>
-    </ClCompile>
-    <ClCompile Include="rx3export.cpp" />
-    <ClCompile Include="Rx3\ExtractModel.cpp">
-      <Filter>Rx3</Filter>
     </ClCompile>
     <ClCompile Include="jsonwriter.cpp" />
   </ItemGroup>
@@ -107,9 +82,6 @@
     </Filter>
     <Filter Include="Fsh">
       <UniqueIdentifier>{0171eb76-e521-43da-be96-b9fe64cda9cc}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Rx3">
-      <UniqueIdentifier>{21c07bf9-9df1-492c-a7cd-6ced9432ba56}</UniqueIdentifier>
     </Filter>
     <Filter Include="D3DDevice">
       <UniqueIdentifier>{88226ef0-ebc6-4c4b-a968-a4ab04b3e0f6}</UniqueIdentifier>

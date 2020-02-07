@@ -4,7 +4,7 @@
 #include "errormsg.h"
 #include "Fsh/Fsh.h"
 
-const char *OTOOLS_VERSION = "0.141";
+const char *OTOOLS_VERSION = "0.142";
 
 GlobalOptions &options() {
     static GlobalOptions go;
@@ -25,7 +25,7 @@ int main(int argc, char *argv[]) {
         "fshIgnoreTextures" },
         { "tristrip", "noTextures", "recursive", "createSubDir", "silent", "onlyFirstTechnique", "dummyTextures", "jpegTextures", "embeddedTextures", 
         "swapYZ", "forceLighting", "noMetadata", "genTexNames", "writeFsh", "fshRescale", "fshDisableTextureIgnore", "preTransformVertices", "sortByName", 
-        "sortByAlpha", "ignoreMatColor", "noMeshJoin" });
+        "sortByAlpha", "ignoreMatColor", "noMeshJoin", "head" });
     if (cmd.HasOption("silent"))
         SetErrorDisplayType(ErrorDisplayType::ERR_NONE);
     else {
@@ -35,9 +35,10 @@ int main(int argc, char *argv[]) {
             SetErrorDisplayType(ErrorDisplayType::ERR_CONSOLE);
     }
     enum OperationType {
-        UNKNOWN, DUMP, EXPORT, IMPORT, INFO, RX3EXPORT
+        UNKNOWN, DUMP, EXPORT, IMPORT, INFO
     } opType = OperationType::UNKNOWN;
     void (*callback)(path const &, path const &) = nullptr;
+    bool isCustom = false;
     string targetExt;
     set<string> inExt;
     if (argc >= 2) {
@@ -64,11 +65,6 @@ int main(int argc, char *argv[]) {
             opType = OperationType::INFO;
             callback = oinfo;
             inExt = { ".o" };
-        }
-        else if (opTypeStr == "rx3export") {
-            opType = OperationType::RX3EXPORT;
-            callback = rx3export;
-            inExt = { ".rx3" };
         }
     }
     if (opType == OperationType::UNKNOWN) {
@@ -208,6 +204,8 @@ int main(int argc, char *argv[]) {
             options().sortByAlpha = true;
         if (cmd.HasOption("ignoreMatColor"))
             options().ignoreMatColor = true;
+        if (cmd.HasOption("head"))
+            options().head = true;
     }
     else if (opType == OperationType::DUMP) {
         if (cmd.HasOption("onlyFirstTechnique"))
@@ -219,45 +217,48 @@ int main(int argc, char *argv[]) {
         o = cmd.GetArgumentString("o");
     bool createSubDir = cmd.HasOption("createSubDir");
     
-    auto processFile = [=](path const &in, bool inDir) {
-        try {
-            if (!inDir || (is_regular_file(in) && inExt.contains(ToLower(in.extension().string())))) {
-                path out;
-                if (hasOutput)
-                    out = o;
-                else
-                    out = in.parent_path();
-                if (!hasOutput || inDir) {
-                    string targetFileName = in.stem().string();
-                    string targetFileNameWithExt = targetFileName + targetExt;
-                    if (createSubDir)
-                        out = out / targetFileName / targetFileNameWithExt;
+    if (!isCustom) {
+        auto processFile = [=](path const &in, bool inDir) {
+            try {
+                if (!inDir || (is_regular_file(in) && inExt.contains(ToLower(in.extension().string())))) {
+                    path out;
+                    if (hasOutput)
+                        out = o;
                     else
-                        out = out / targetFileNameWithExt;
-                }
-                if (opType != RX3EXPORT)
+                        out = in.parent_path();
+                    if (!hasOutput || inDir) {
+                        string targetFileName = in.stem().string();
+                        string targetFileNameWithExt = targetFileName + targetExt;
+                        if (createSubDir)
+                            out = out / targetFileName / targetFileNameWithExt;
+                        else
+                            out = out / targetFileNameWithExt;
+                    }
                     create_directories(out.parent_path());
-                callback(out, in);
+                    callback(out, in);
+                }
+            }
+            catch (exception & e) {
+                ErrorMessage(in.filename().string() + ": " + e.what());
+            }
+        };
+
+        if (is_directory(i)) {
+            options().processingFolders = true;
+            if (cmd.HasOption("recursive")) {
+                for (auto const &p : recursive_directory_iterator(i))
+                    processFile(p.path(), true);
+            }
+            else {
+                for (auto const &p : directory_iterator(i))
+                    processFile(p.path(), true);
             }
         }
-        catch (exception &e) {
-            ErrorMessage(in.filename().string() + ": " + e.what());
-        }
-    };
-
-    if (is_directory(i)) {
-        options().processingFolders = true;
-        if (cmd.HasOption("recursive")) {
-            for (auto const &p : recursive_directory_iterator(i))
-                processFile(p.path(), true);
-        }
-        else {
-            for (auto const &p : directory_iterator(i))
-                processFile(p.path(), true);
-        }
+        else
+            processFile(i, false);
     }
     else
-        processFile(i, false);
+        callback(o, i);
 
     if (options().writeFsh)
         ea::Fsh::ClearDevice();

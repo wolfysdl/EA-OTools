@@ -162,3 +162,7 @@ void JsonWriter::close() {
     mResult.clear();
     mOutputPath.clear();
 }
+
+string &JsonWriter::result() {
+    return mResult;
+}
