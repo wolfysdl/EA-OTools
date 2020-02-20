@@ -91,6 +91,12 @@ Additional import options:
 
 `-ignoreMatColor` - ignore material color (by default, material color will be multiplied with vertex color and stored as vertex color)
 
+`-startsWith` - filter files by prefix (when `-i` argument is folder)
+
+`-pad <size>` - pad resulting .o files to the specified size (in bytes). This option is ignored if the size of resulting file is greater than the specified value.
+
+`-padFsh <size>` - pad resulting .fsh files to the specified size (in bytes). This option is ignored if the size of resulting file is greater than the specified value.
+
 **Source code dependencies**
 
 * Visual Studio 2017/2019
