@@ -77,11 +77,13 @@ Additional import options:
 
 `-fshRescale` - rescale .fsh images to power-of-two size
 
-`-fshAddTextures <image names list>` - a list of comma-separated names of images which should be additionally packed into .fsh
+`-fshTextures <image names list>` - a list of comma-separated names of images which should be packed into .fsh. Images which are referenced by the model but not present in this list, will be ignored when writing to .fsh
+
+`-fshAddTextures <image names list>` - a list of comma-separated names of images which should be additionally packed into .fsh. This option is used to add images which are not referenced by the model
 
 `-fshDisableTextureIgnore` - disable any texture ignorance when writing to .fsh (some textures like "adba", "rwa0" are ignored by default)
 
-`-fshIgnoreTextures <image names list>` - a list of comma-separated names of images which should be additionally ignored when writing to .fsh
+`-fshIgnoreTextures <image names list>` - a list of comma-separated names of images which should be ignored when writing to .fsh
 
 `-preTransformVertices` - pre-transform all vertices to global space
 
@@ -95,7 +97,9 @@ Additional import options:
 
 `-pad <size>` - pad resulting .o files to the specified size (in bytes). This option is ignored if the size of resulting file is greater than the specified value.
 
-`-padFsh <size>` - pad resulting .fsh files to the specified size (in bytes). This option is ignored if the size of resulting file is greater than the specified value.
+`-padFsh <size>` - pad resulting .fsh files to the specified size (in bytes). This option is ignored if the size of resulting file is greater than the specified value
+
+`-ignoreEmbeddedTextures` - ignore any embedded textures in the input model
 
 **Source code dependencies**
 
