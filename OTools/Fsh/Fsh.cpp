@@ -391,6 +391,329 @@ void ea::FshImage::ReadFromFile(std::filesystem::path const &filepath, unsigned 
     texture->Release();
 }
 
+void ea::FshImage::Load(LoadingInfo const &loadingInfo, unsigned int d3dformat, unsigned int levels, bool rescale) {
+	RemoveAllDatas(FshData::PIXELDATA);
+	IDirect3DTexture9 *texture = nullptr;
+	D3DSURFACE_DESC desc;
+	if (loadingInfo.data) {
+		struct DDS_HEADER {
+			DWORD           dwSize;
+			DWORD           dwFlags;
+			DWORD           dwHeight;
+			DWORD           dwWidth;
+			DWORD           dwPitchOrLinearSize;
+			DWORD           dwDepth;
+			DWORD           dwMipMapCount;
+			DWORD           dwReserved1[11];
+			struct DDS_PIXELFORMAT {
+				DWORD dwSize;
+				DWORD dwFlags;
+				DWORD dwFourCC;
+				DWORD dwRGBBitCount;
+				DWORD dwRBitMask;
+				DWORD dwGBitMask;
+				DWORD dwBBitMask;
+				DWORD dwABitMask;
+			} ddspf;
+			DWORD           dwCaps;
+			DWORD           dwCaps2;
+			DWORD           dwCaps3;
+			DWORD           dwCaps4;
+			DWORD           dwReserved2;
+		} ddsHeader;
+		static_assert(sizeof(DDS_HEADER) == 124, "Invalid size of DDS header");
+		memset(&ddsHeader, 0, sizeof(DDS_HEADER));
+		unsigned int dataSize = loadingInfo.dataWidth * loadingInfo.dataHeight;
+		unsigned int ddsFourcc = 0x20534444;
+		ddsHeader.dwSize = sizeof(DDS_HEADER);
+		ddsHeader.dwFlags = 0x1 | 0x2 | 0x4 | 0x8 | 0x1000;
+		ddsHeader.dwHeight = loadingInfo.dataHeight;
+		ddsHeader.dwWidth = loadingInfo.dataWidth;
+		ddsHeader.dwCaps = 0x1000;
+		ddsHeader.ddspf.dwSize = sizeof(DDS_HEADER::DDS_PIXELFORMAT);
+		switch (loadingInfo.dataFormat) {
+		case  D3DFMT_A8R8G8B8:
+			ddsHeader.ddspf.dwFlags = 0x1 | 0x40;
+			ddsHeader.ddspf.dwRGBBitCount = 32;
+			ddsHeader.ddspf.dwRBitMask = 0x00ff0000;
+			ddsHeader.ddspf.dwGBitMask = 0x0000ff00;
+			ddsHeader.ddspf.dwBBitMask = 0x000000ff;
+			ddsHeader.ddspf.dwABitMask = 0xff000000;
+			break;
+		case D3DFMT_A8B8G8R8:
+			ddsHeader.ddspf.dwFlags = 0x1 | 0x40;
+			ddsHeader.ddspf.dwRGBBitCount = 32;
+			ddsHeader.ddspf.dwRBitMask = 0x000000ff;
+			ddsHeader.ddspf.dwGBitMask = 0x0000ff00;
+			ddsHeader.ddspf.dwBBitMask = 0x00ff0000;
+			ddsHeader.ddspf.dwABitMask = 0xff000000;
+			break;
+		case D3DFMT_R5G6B5:
+			ddsHeader.ddspf.dwFlags = 0x40;
+			ddsHeader.ddspf.dwRGBBitCount = 16;
+			ddsHeader.ddspf.dwRBitMask = 0xf800;
+			ddsHeader.ddspf.dwGBitMask = 0x7e00;
+			ddsHeader.ddspf.dwBBitMask = 0x001f;
+			break;
+		case D3DFMT_L8:
+			ddsHeader.ddspf.dwFlags = 0x20000;
+			ddsHeader.ddspf.dwRGBBitCount = 8;
+			ddsHeader.ddspf.dwRBitMask = 0xff;
+			break;
+		default:
+			throw Exception("FshImage::Load: unknown format in LoadingInfo");
+			break;
+		}
+		ddsHeader.dwPitchOrLinearSize = (ddsHeader.dwWidth * ddsHeader.ddspf.dwRGBBitCount + 7) / 8;
+		unsigned int ddsDataSize = dataSize + sizeof(DDS_HEADER) + 4;
+		unsigned char *ddsData = new unsigned char[ddsDataSize];
+		memcpy(ddsData, &ddsFourcc, 4);
+		memcpy(ddsData + 4, &ddsHeader, sizeof(DDS_HEADER));
+		memcpy(ddsData + 4 + sizeof(DDS_HEADER), loadingInfo.data, dataSize);
+		D3DXIMAGE_INFO imageInfo;
+		if (FAILED(D3DXGetImageInfoFromFileInMemory(ddsData, ddsDataSize, &imageInfo))) {
+			delete[] ddsData;
+			throw Exception("FshImage::Load: unable to get image info from memory");
+		}
+		if (d3dformat == unsigned int(-4) || d3dformat == unsigned int(-5) || d3dformat == unsigned int(-6)) {
+			switch (imageInfo.Format) {
+			case D3DFMT_A1:
+			case D3DFMT_A4L4:
+			case D3DFMT_A8:
+			case D3DFMT_A8L8:
+			case D3DFMT_A8P8:
+			case D3DFMT_A4R4G4B4:
+			case D3DFMT_A1R5G5B5:
+			case D3DFMT_A8R3G3B2:
+			case D3DFMT_DXT2:
+			case D3DFMT_DXT3:
+			case D3DFMT_DXT4:
+			case D3DFMT_DXT5:
+			case D3DFMT_A8B8G8R8:
+			case D3DFMT_A8R8G8B8:
+			case D3DFMT_A2B10G10R10:
+			case D3DFMT_A2R10G10B10:
+			case D3DFMT_A16B16G16R16:
+			case D3DFMT_A16B16G16R16F:
+			case D3DFMT_A32B32G32R32F:
+			{
+				if (d3dformat == unsigned int(-4))
+					d3dformat = D3DFMT_DXT5;
+				else if (d3dformat == unsigned int(-6))
+					d3dformat = D3DFMT_A4R4G4B4;
+				else
+					d3dformat = D3DFMT_A8R8G8B8;
+			}
+			break;
+			default:
+			{
+				if (d3dformat == unsigned int(-4))
+					d3dformat = D3DFMT_DXT1;
+				else if (d3dformat == unsigned int(-6))
+					d3dformat = D3DFMT_R5G6B5;
+				else
+					d3dformat = D3DFMT_A8R8G8B8;
+			}
+			break;
+			}
+		}
+		else if (d3dformat == D3DFMT_FROM_FILE) {
+			unsigned char format = GetPixelFormat(imageInfo.Format);
+			if (format == 0)
+				d3dformat = D3DFMT_A8R8G8B8;
+		}
+		if (FAILED(D3DXCreateTextureFromFileInMemoryEx(Fsh::GlobalDevice->Interface(), ddsData, ddsDataSize,
+			rescale ? D3DX_DEFAULT : D3DX_DEFAULT_NONPOW2, rescale ? D3DX_DEFAULT : D3DX_DEFAULT_NONPOW2,
+			levels, D3DUSAGE_DYNAMIC, D3DFORMAT(d3dformat), D3DPOOL_SYSTEMMEM, D3DX_FILTER_TRIANGLE | D3DX_FILTER_DITHER, D3DX_FILTER_BOX, 0,
+			NULL, NULL, &texture)))
+		{
+			delete[] ddsData;
+			throw Exception("FshImage::Load: failed to create direct3d texture from memory");
+		}
+		delete[] ddsData;
+		if (FAILED(texture->GetLevelDesc(0, &desc))) {
+			texture->Release();
+			throw Exception("FshImage::Load: failed to retrieve texture format from memory");
+		}
+	}
+	else if (loadingInfo.fileData) {
+		D3DXIMAGE_INFO imageInfo;
+		if (FAILED(D3DXGetImageInfoFromFileInMemory(loadingInfo.fileData, loadingInfo.fileDataSize, &imageInfo)))
+			throw Exception("FshImage::Load: unable to get image info from file in memory");
+		if (d3dformat == unsigned int(-4) || d3dformat == unsigned int(-5) || d3dformat == unsigned int(-6)) {
+			switch (imageInfo.Format) {
+			case D3DFMT_A1:
+			case D3DFMT_A4L4:
+			case D3DFMT_A8:
+			case D3DFMT_A8L8:
+			case D3DFMT_A8P8:
+			case D3DFMT_A4R4G4B4:
+			case D3DFMT_A1R5G5B5:
+			case D3DFMT_A8R3G3B2:
+			case D3DFMT_DXT2:
+			case D3DFMT_DXT3:
+			case D3DFMT_DXT4:
+			case D3DFMT_DXT5:
+			case D3DFMT_A8B8G8R8:
+			case D3DFMT_A8R8G8B8:
+			case D3DFMT_A2B10G10R10:
+			case D3DFMT_A2R10G10B10:
+			case D3DFMT_A16B16G16R16:
+			case D3DFMT_A16B16G16R16F:
+			case D3DFMT_A32B32G32R32F:
+			{
+				if (d3dformat == unsigned int(-4))
+					d3dformat = D3DFMT_DXT5;
+				else if (d3dformat == unsigned int(-6))
+					d3dformat = D3DFMT_A4R4G4B4;
+				else
+					d3dformat = D3DFMT_A8R8G8B8;
+			}
+			break;
+			default:
+			{
+				if (d3dformat == unsigned int(-4))
+					d3dformat = D3DFMT_DXT1;
+				else if (d3dformat == unsigned int(-6))
+					d3dformat = D3DFMT_R5G6B5;
+				else
+					d3dformat = D3DFMT_A8R8G8B8;
+			}
+			break;
+			}
+		}
+		else if (d3dformat == D3DFMT_FROM_FILE) {
+			unsigned char format = GetPixelFormat(imageInfo.Format);
+			if (format == 0)
+				d3dformat = D3DFMT_A8R8G8B8;
+		}
+		if (FAILED(D3DXCreateTextureFromFileInMemoryEx(Fsh::GlobalDevice->Interface(), loadingInfo.fileData, loadingInfo.fileDataSize,
+			rescale ? D3DX_DEFAULT : D3DX_DEFAULT_NONPOW2, rescale ? D3DX_DEFAULT : D3DX_DEFAULT_NONPOW2,
+			levels, D3DUSAGE_DYNAMIC, D3DFORMAT(d3dformat), D3DPOOL_SYSTEMMEM, D3DX_FILTER_TRIANGLE | D3DX_FILTER_DITHER, D3DX_FILTER_BOX, 0,
+			NULL, NULL, &texture)))
+		{
+			throw Exception("FshImage::Load: failed to create direct3d texture from file in memory");
+		}
+		if (FAILED(texture->GetLevelDesc(0, &desc))) {
+			texture->Release();
+			throw Exception("FshImage::Load: failed to retrieve texture format from file in memory");
+		}
+	}
+	else if (loadingInfo.fileExists) {
+		D3DXIMAGE_INFO imageInfo;
+		if (FAILED(D3DXGetImageInfoFromFileW(loadingInfo.filepath.c_str(), &imageInfo)))
+			throw Exception("FshImage::Load: unable to get image info from file");
+		if (d3dformat == unsigned int(-4) || d3dformat == unsigned int(-5) || d3dformat == unsigned int(-6)) {
+			switch (imageInfo.Format) {
+			case D3DFMT_A1:
+			case D3DFMT_A4L4:
+			case D3DFMT_A8:
+			case D3DFMT_A8L8:
+			case D3DFMT_A8P8:
+			case D3DFMT_A4R4G4B4:
+			case D3DFMT_A1R5G5B5:
+			case D3DFMT_A8R3G3B2:
+			case D3DFMT_DXT2:
+			case D3DFMT_DXT3:
+			case D3DFMT_DXT4:
+			case D3DFMT_DXT5:
+			case D3DFMT_A8B8G8R8:
+			case D3DFMT_A8R8G8B8:
+			case D3DFMT_A2B10G10R10:
+			case D3DFMT_A2R10G10B10:
+			case D3DFMT_A16B16G16R16:
+			case D3DFMT_A16B16G16R16F:
+			case D3DFMT_A32B32G32R32F:
+			{
+				if (d3dformat == unsigned int(-4))
+					d3dformat = D3DFMT_DXT5;
+				else if (d3dformat == unsigned int(-6))
+					d3dformat = D3DFMT_A4R4G4B4;
+				else
+					d3dformat = D3DFMT_A8R8G8B8;
+			}
+			break;
+			default:
+			{
+				if (d3dformat == unsigned int(-4))
+					d3dformat = D3DFMT_DXT1;
+				else if (d3dformat == unsigned int(-6))
+					d3dformat = D3DFMT_R5G6B5;
+				else
+					d3dformat = D3DFMT_A8R8G8B8;
+			}
+			break;
+			}
+		}
+		else if (d3dformat == D3DFMT_FROM_FILE) {
+			unsigned char format = GetPixelFormat(imageInfo.Format);
+			if (format == 0)
+				d3dformat = D3DFMT_A8R8G8B8;
+		}
+		if (FAILED(D3DXCreateTextureFromFileExW(Fsh::GlobalDevice->Interface(), loadingInfo.filepath.c_str(),
+			rescale ? D3DX_DEFAULT : D3DX_DEFAULT_NONPOW2, rescale ? D3DX_DEFAULT : D3DX_DEFAULT_NONPOW2,
+			levels, D3DUSAGE_DYNAMIC, D3DFORMAT(d3dformat), D3DPOOL_SYSTEMMEM, D3DX_FILTER_TRIANGLE | D3DX_FILTER_DITHER, D3DX_FILTER_BOX, 0,
+			NULL, NULL, &texture)))
+		{
+			throw Exception("FshImage::Load: failed to create direct3d texture");
+		}
+		if (FAILED(texture->GetLevelDesc(0, &desc))) {
+			texture->Release();
+			throw Exception("FshImage::Load: failed to retrieve texture format");
+		}
+	}
+	else
+		throw Exception("FshImage::Load: Empty LoadingInfo");
+	unsigned char format = GetPixelFormat(desc.Format);
+	if (format == 0) {
+		texture->Release();
+		throw Exception(FormatStatic("FshImage::Load: unsupported texture format (input format: %d, result format: %d)", d3dformat, desc.Format));
+	}
+	unsigned char numLevels = (unsigned char)texture->GetLevelCount();
+	size_t pixelsSize = 0;
+	unsigned short w = desc.Width;
+	unsigned short h = desc.Height;
+	for (unsigned int i = 0; i < numLevels; i++) {
+		pixelsSize += GetPixelDataSize(w, h, format);
+		w /= 2;
+		h /= 2;
+	}
+	Buffer pixels;
+	pixels.Allocate(pixelsSize);
+	w = desc.Width;
+	h = desc.Height;
+	unsigned char *pixelsPtr = (unsigned char *)pixels.GetData();
+	for (unsigned int i = 0; i < numLevels; i++) {
+		size_t pixelsDataSize = GetPixelDataSize(w, h, format);
+		D3DLOCKED_RECT rect;
+		if (FAILED(texture->LockRect(i, &rect, NULL, D3DLOCK_READONLY))) {
+			texture->Release();
+			throw Exception("FshImage::Load: failed to lock texture");
+		}
+		if (desc.Format == D3DFMT_X8R8G8B8) {
+			clr_x8r8g8b8 *xrgb = (clr_x8r8g8b8 *)rect.pBits;
+			clr_b8g8r8 *bgr = (clr_b8g8r8 *)pixelsPtr;
+			unsigned int numPixels = w * h;
+			for (unsigned int p = 0; p < numPixels; p++) {
+				bgr[p].r = xrgb[p].r;
+				bgr[p].g = xrgb[p].g;
+				bgr[p].b = xrgb[p].b;
+			}
+		}
+		else
+			memcpy(pixelsPtr, rect.pBits, pixelsDataSize);
+		if (FAILED(texture->UnlockRect(i))) {
+			texture->Release();
+			throw Exception("FshImage::Load: failed to unlock texture");
+		}
+		pixelsPtr = &pixelsPtr[pixelsDataSize];
+		w /= 2;
+		h /= 2;
+	}
+	AddData(new FshPixelData(format, pixels, desc.Width, desc.Height, (unsigned char)texture->GetLevelCount() - 1, 0, 0, 0, 0, 0));
+	texture->Release();
+}
+
 ea::FshData::DataType ea::FshPixelData::GetDataType() const { return FshData::PIXELDATA; }
 
 size_t ea::FshPixelData::GetDataSize() const { return 12 + mPixels.GetSize(); }

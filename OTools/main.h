@@ -32,6 +32,7 @@ struct GlobalOptions {
     int fshLevels = 0;
     unsigned int fshFormat = 0;
     bool fshRescale = false;
+    vector<string> fshTextures;
     vector<string> fshAddTextures;
     bool fshDisableTextureIgnore = false;
     set<string> fshIgnoreTextures;
@@ -40,6 +41,9 @@ struct GlobalOptions {
     bool sortByAlpha = false;
     bool ignoreMatColor = false;
     bool head = false;
+    unsigned int pad = 0;
+    unsigned int padFsh = 0;
+    bool ignoreEmbeddedTextures = false;
     // export options
     bool noTextures = false;
     bool dummyTextures = false;

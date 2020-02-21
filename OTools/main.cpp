@@ -4,7 +4,7 @@
 #include "errormsg.h"
 #include "Fsh/Fsh.h"
 
-const char *OTOOLS_VERSION = "0.142";
+const char *OTOOLS_VERSION = "0.145";
 
 GlobalOptions &options() {
     static GlobalOptions go;
@@ -21,11 +21,11 @@ enum ErrorType {
 };
 
 int main(int argc, char *argv[]) {
-    CommandLine cmd(argc, argv, { "i", "o", "scale", "defaultVCol", "setVCol", "vColScale", "fshOutput", "fshLevels", "fshFormat", "fshAddTextures",
-        "fshIgnoreTextures" },
+    CommandLine cmd(argc, argv, { "i", "o", "scale", "defaultVCol", "setVCol", "vColScale", "fshOutput", "fshLevels", "fshFormat", "fshTextures",
+        "fshAddTextures", "fshIgnoreTextures", "startsWith", "pad", "padFsh" },
         { "tristrip", "noTextures", "recursive", "createSubDir", "silent", "onlyFirstTechnique", "dummyTextures", "jpegTextures", "embeddedTextures", 
         "swapYZ", "forceLighting", "noMetadata", "genTexNames", "writeFsh", "fshRescale", "fshDisableTextureIgnore", "preTransformVertices", "sortByName", 
-        "sortByAlpha", "ignoreMatColor", "noMeshJoin", "head" });
+        "sortByAlpha", "ignoreMatColor", "noMeshJoin", "head", "ignoreEmbeddedTextures" });
     if (cmd.HasOption("silent"))
         SetErrorDisplayType(ErrorDisplayType::ERR_NONE);
     else {
@@ -182,6 +182,8 @@ int main(int argc, char *argv[]) {
             }
             if (cmd.HasOption("fshRescale"))
                 options().fshRescale = true;
+            if (cmd.HasArgument("fshTextures"))
+                options().fshTextures = Split(cmd.GetArgumentString("fshTextures"), ',', true, true);
             if (cmd.HasArgument("fshAddTextures"))
                 options().fshAddTextures = Split(cmd.GetArgumentString("fshAddTextures"), ',', true, true);
             if (cmd.HasOption("fshDisableTextureIgnore"))
@@ -195,6 +197,8 @@ int main(int argc, char *argv[]) {
                     }
                 }
             }
+            if (cmd.HasArgument("padFsh"))
+                options().padFsh = cmd.GetArgumentInt("padFsh");
         }
         if (cmd.HasOption("preTransformVertices"))
             options().preTransformVertices = true;
@@ -206,6 +210,10 @@ int main(int argc, char *argv[]) {
             options().ignoreMatColor = true;
         if (cmd.HasOption("head"))
             options().head = true;
+        if (cmd.HasArgument("pad"))
+            options().pad = cmd.GetArgumentInt("pad");
+        if (cmd.HasOption("ignoreEmbeddedTextures"))
+            options().ignoreEmbeddedTextures = true;
     }
     else if (opType == OperationType::DUMP) {
         if (cmd.HasOption("onlyFirstTechnique"))
@@ -216,26 +224,31 @@ int main(int argc, char *argv[]) {
     if (hasOutput)
         o = cmd.GetArgumentString("o");
     bool createSubDir = cmd.HasOption("createSubDir");
+    string startsWith;
+    if (cmd.HasArgument("startsWith"))
+        startsWith = cmd.GetArgumentString("startsWith");
     
     if (!isCustom) {
         auto processFile = [=](path const &in, bool inDir) {
             try {
                 if (!inDir || (is_regular_file(in) && inExt.contains(ToLower(in.extension().string())))) {
-                    path out;
-                    if (hasOutput)
-                        out = o;
-                    else
-                        out = in.parent_path();
-                    if (!hasOutput || inDir) {
-                        string targetFileName = in.stem().string();
-                        string targetFileNameWithExt = targetFileName + targetExt;
-                        if (createSubDir)
-                            out = out / targetFileName / targetFileNameWithExt;
+                    if (startsWith.empty() || in.filename().string().starts_with(startsWith)) {
+                        path out;
+                        if (hasOutput)
+                            out = o;
                         else
-                            out = out / targetFileNameWithExt;
+                            out = in.parent_path();
+                        if (!hasOutput || inDir) {
+                            string targetFileName = in.stem().string();
+                            string targetFileNameWithExt = targetFileName + targetExt;
+                            if (createSubDir)
+                                out = out / targetFileName / targetFileNameWithExt;
+                            else
+                                out = out / targetFileNameWithExt;
+                        }
+                        create_directories(out.parent_path());
+                        callback(out, in);
                     }
-                    create_directories(out.parent_path());
-                    callback(out, in);
                 }
             }
             catch (exception & e) {

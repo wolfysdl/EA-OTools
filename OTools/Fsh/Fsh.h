@@ -163,6 +163,18 @@ namespace ea {
 			BMP = 0, JPG = 1, TGA = 2, PNG = 3, DDS = 4, PPM = 5, DIB = 6, HDR = 7, PFM = 8
 		};
 
+		struct LoadingInfo {
+			std::filesystem::path filepath;
+			bool fileExists = false;
+			void *fileData = nullptr;
+			unsigned int fileDataSize = 0;
+			FileFormat fileFormat;
+			void *data = nullptr;
+			unsigned int dataWidth = 0;
+			unsigned int dataHeight = 0;
+			unsigned int dataFormat = 0;
+		} loadingInfo;
+
     private:
 		static unsigned int GetPixelD3DFormat(unsigned char format);
 		static unsigned char GetPixelFormat(unsigned int format);
@@ -170,6 +182,7 @@ namespace ea {
     public:
         void WriteToFile(std::filesystem::path const &filepath, FileFormat fileFormat);
         void ReadFromFile(std::filesystem::path const &filepath, unsigned int d3dformat = ((unsigned int)-3), unsigned int levels = ((unsigned int)-3), bool rescale = false);
+		void Load(LoadingInfo const &loadingInfo, unsigned int d3dformat = ((unsigned int)-3), unsigned int levels = ((unsigned int)-3), bool rescale = false);
 	};
 
 	class Fsh {
