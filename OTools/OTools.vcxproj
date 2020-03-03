@@ -81,6 +81,7 @@
     <ClCompile Include="commandline.cpp" />
     <ClCompile Include="D3DDevice\D3DDevice.cpp" />
     <ClCompile Include="dump.cpp" />
+    <ClCompile Include="dumpshaders.cpp" />
     <ClCompile Include="elf.cpp" />
     <ClCompile Include="errormsg.cpp" />
     <ClCompile Include="export.cpp" />
@@ -98,6 +99,8 @@
     <ClCompile Include="NvTriStrip\VertexCache.cpp" />
     <ClCompile Include="shaders.cpp" />
     <ClCompile Include="target.cpp" />
+    <ClCompile Include="target_fifa07.cpp" />
+    <ClCompile Include="target_fm13.cpp" />
     <ClCompile Include="utils.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

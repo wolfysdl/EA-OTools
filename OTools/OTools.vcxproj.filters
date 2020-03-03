@@ -75,6 +75,9 @@
       <Filter>D3DDevice</Filter>
     </ClCompile>
     <ClCompile Include="jsonwriter.cpp" />
+    <ClCompile Include="dumpshaders.cpp" />
+    <ClCompile Include="target_fm13.cpp" />
+    <ClCompile Include="target_fifa07.cpp" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="NvTriStrip">

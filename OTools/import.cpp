@@ -631,10 +631,13 @@ bool LoadTextureIntoTexSlot(aiScene const *scene, aiMaterial const *mat, aiTextu
 }
 
 void oimport(path const &out, path const &in) {
+    Target *target = globalVars().target;
+    if (!target)
+        throw runtime_error("Unknown target");
     Assimp::Importer importer;
     importer.SetPropertyInteger(AI_CONFIG_PP_SBP_REMOVE, aiPrimitiveType_POINT | aiPrimitiveType_LINE);
     //importer.SetPropertyInteger(AI_CONFIG_IMPORT_REMOVE_EMPTY_BONES, 0);
-    importer.SetPropertyInteger(AI_CONFIG_PP_LBW_MAX_WEIGHTS, 3);
+    importer.SetPropertyInteger(AI_CONFIG_PP_LBW_MAX_WEIGHTS, target->GetMaxBoneWeightsPerVertex());
     unsigned int sceneLoadingFlags = aiProcess_Triangulate | aiProcess_GenSmoothNormals | aiProcess_GenUVCoords | aiProcess_SplitLargeMeshes |
         aiProcess_SortByPType | aiProcess_PopulateArmatureData | aiProcess_LimitBoneWeights;
     if (options().scale > 0.0f && options().scale != 1.0f) {
@@ -653,16 +656,17 @@ void oimport(path const &out, path const &in) {
     if (!scene->mRootNode)
         throw runtime_error("Unable to find scene root node");
     Node::scene = scene;
-    const unsigned int MAX_BONE_WEIGHTS_PER_MESH = 128;
 
     // TODO: axis detection
 
     static aiMatrix4x4 identityMatrix = { 1, 0, 0, 0,  0, 1, 0, 0,  0, 0, 1, 0,  0, 0, 0, 1 };
     Vector4D vecZeroOneTwoThree = { 0, 1, 2, 3 };
+    Vector4D vec0000 = { 1, 1, 1, 1 };
     Vector4D vec1111 = { 1, 1, 1, 1 };
     Vector4D vecEnvMapConstants = { 1.0f, 0.25f, 0.5f, 0.75f };
     bool flipAxis = options().swapYZ;
     bool hasSkeleton = false;
+    bool hasMorph = false;
     bool hasLights = scene->HasLights() || options().forceLighting;
     const unsigned int ZERO = 0;
     const unsigned int ONE = 1;
@@ -845,7 +849,7 @@ void oimport(path const &out, path const &in) {
                 if (b_start != string::npos && matName.length() > b_start) {
                     auto b_end = matName.find(']', b_start + 1);
                     if (b_end != string::npos) {
-                        shader = FindShader(matName.substr(b_start + 1, b_end - b_start - 1));
+                        shader = target->FindShader(matName.substr(b_start + 1, b_end - b_start - 1));
                         if (shader)
                             usesCustomShaderName = true;
                     }
@@ -854,61 +858,61 @@ void oimport(path const &out, path const &in) {
 
             if (!shader) {
                 if (hasDiffuseTex && tex[0].IsAdboardsTexture())
-                    shader = FindShader("XFadeScrollTexture");
+                    shader = target->FindShader("XFadeScrollTexture");
                 else {
                     if (!meshHasBones) {
                         if (hasDiffuseTex) {
                             if (usesAlphaBlending) {
                                 if (!isUnlit && (hasReflectionTex || hasSpecularTex || isMetallic))
-                                    shader = FindShader("IrradLitTextureEnvmapTransparent2x");
+                                    shader = target->FindShader("IrradLitTextureEnvmapTransparent2x");
                                 else {
                                     if (blendFunc == aiBlendMode::aiBlendMode_Additive)
-                                        shader = FindShader("ClipTextureAddNodepthwrite");
+                                        shader = target->FindShader("ClipTextureAddNodepthwrite");
                                     else
-                                        shader = FindShader("ClipTextureAlphablend");
+                                        shader = target->FindShader("ClipTextureAlphablend");
                                 }
                             }
                             else { // no alpha blending
                                 if (isUnlit)
-                                    shader = FindShader("Texture2x");
+                                    shader = target->FindShader("Texture2x");
                                 else {
                                     if (hasReflectionTex || hasSpecularTex || isMetallic)
-                                        shader = FindShader("LitTextureIrradEnvmap");
+                                        shader = target->FindShader("LitTextureIrradEnvmap");
                                     else {
                                         if (hasLights)
-                                            shader = FindShader("LitTexture2x");
+                                            shader = target->FindShader("LitTexture2x");
                                         else
-                                            shader = FindShader("Texture2x");
+                                            shader = target->FindShader("Texture2x");
                                     }
                                 }
                             }
                         }
                         else {
                             if (hasLights && !isUnlit)
-                                shader = FindShader("IrradLitGouraud2x");
+                                shader = target->FindShader("IrradLitGouraud2x");
                             else
-                                shader = FindShader("Gouraud");
+                                shader = target->FindShader("Gouraud");
                         }
                     }
                     else { // mesh is skinned
                         if (hasDiffuseTex) {
                             if (usesAlphaBlending)
-                                shader = FindShader("LitTexture2x_Skin");  //FindShader("LitTexture2Alpha2x_Skin");
+                                shader = target->FindShader("LitTexture2x_Skin");  //FindShader("LitTexture2Alpha2x_Skin");
                             else { // no alpha blending
                                 if (hasReflectionTex || hasSpecularTex || isMetallic)
-                                    shader = FindShader("LitTexture2x_Skin"); // FindShader("LitTextureIrradSpecMap_Skin");
+                                    shader = target->FindShader("LitTexture2x_Skin"); // FindShader("LitTextureIrradSpecMap_Skin");
                                 else
-                                    shader = FindShader("LitTexture2x_Skin");
+                                    shader = target->FindShader("LitTexture2x_Skin");
                             }
                         }
                         else
-                            shader = FindShader("Gouraud_Skin");
+                            shader = target->FindShader("Gouraud_Skin");
                     }
                 }
             }
 
             if (!shader)
-                shader = &Shaders[0];
+                shader = &target->Shaders()[0];
 
             auto AddTexToSlot = [&](unsigned int slot, string const &name) {
                 auto texit = textures.find(name);
@@ -1034,8 +1038,8 @@ void oimport(path const &out, path const &in) {
                 unsigned int *tri = mesh->mFaces[f].mIndices;
                 if (useSkinning) {
                     unsigned int numBoneWeights = meshes.back().weightsMap.size();
-                    if ((numBoneWeights + 3) > MAX_BONE_WEIGHTS_PER_MESH) {
-                        unsigned int maxNumBoneWeightsToAdd = MAX_BONE_WEIGHTS_PER_MESH - numBoneWeights;
+                    if ((numBoneWeights + 3) > target->GetMaxVertexWeightsPerMesh()) {
+                        unsigned int maxNumBoneWeightsToAdd = target->GetMaxVertexWeightsPerMesh() - numBoneWeights;
                         unsigned int numWeightsToAdd = 0;
                         for (unsigned int ind = 0; ind < 3; ind++) {
                             if (!meshes.back().weightsMap.contains(allMeshesVertexWeights[tri[ind]])) {
@@ -1281,6 +1285,16 @@ void oimport(path const &out, path const &in) {
                         bufData.Put(vecEnvMapConstants);
                         bufData.Put(ZERO);
                         break;
+                    case Shader::VecZeroLocal:
+                        globalArgs.emplace_back(bufData.Position());
+                        bufData.Put(vec0000);
+                        bufData.Put(ZERO);
+                        break;
+                    case Shader::VecOneLocal:
+                        globalArgs.emplace_back(bufData.Position());
+                        bufData.Put(vec1111);
+                        bufData.Put(ZERO);
+                        break;
                     case Shader::EnvmapColour:
                         globalArgs.emplace_back("__COORD4:::EnvmapColour");
                         break;
@@ -1320,7 +1334,7 @@ void oimport(path const &out, path const &in) {
                         globalArgs.emplace_back("__COORD4:::RMGrass::CameraPosition");
                         break;
                     case Shader::EAGLAnimationBuffer:
-                        globalArgs.emplace_back("__const MATRIX4:::EAGLAnimationBuffer", MAX_BONE_WEIGHTS_PER_MESH);
+                        globalArgs.emplace_back("__const MATRIX4:::EAGLAnimationBuffer", target->GetMaxVertexWeightsPerMesh());
                         break;
                     case Shader::ViewVector:
                         globalArgs.emplace_back("__COORD4:::ViewVector");
@@ -1339,6 +1353,9 @@ void oimport(path const &out, path const &in) {
                         break;
                     case Shader::HalfVector:
                         globalArgs.emplace_back("__COORD4:::SGR::Specular::HalfVector");
+                        break;
+                    case Shader::HighlightAlpha:
+                        globalArgs.emplace_back("__COORD4:::SGR::GameFace::HighlightAlpha");
                         break;
                     case Shader::UVOffset0:
                     {
@@ -1436,6 +1453,14 @@ void oimport(path const &out, path const &in) {
                             }
                             else if (arg == Shader::VertexCount)
                                 bufData.Put(numVertices);
+                            else if (arg == Shader::VertexBufferIndex)
+                                bufData.Put(meshCounter * numVariations);
+                            else if (arg == Shader::VariationsCount) {
+                                if (hasMorph)
+                                    bufData.Put(numVariations);
+                                else
+                                    bufData.Put(-int(numVariations));
+                            }
                             else if (arg == Shader::IndexData) {
                                 relocations[""].push_back(bufData.Position());
                                 bufData.Put(indexBufferOffset);

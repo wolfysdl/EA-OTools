@@ -45,6 +45,7 @@ struct Shader {
     enum Argument {
         VertexData = 0x70000001,
         VertexCount,
+        VertexBufferIndex,
         IndexData,
         IndexCount,
         VertexSkinData,
@@ -94,7 +95,11 @@ struct Shader {
         SubSurfFactor,
         SpecLightVec,
         SpecLightCol,
-        HalfVector
+        HalfVector,
+        HighlightAlpha,
+        VariationsCount,
+        VecZeroLocal,
+        VecOneLocal
     };
 
     struct Command {
@@ -106,9 +111,10 @@ struct Shader {
 
     struct GlobalArgument {
         unsigned int type;
-        char const *format;
+        std::string format;
 
-        GlobalArgument(unsigned int _type, char const *_format = nullptr);
+        GlobalArgument();
+        GlobalArgument(unsigned int _type, std::string const &_format = std::string());
     };
 
     std::string name;
@@ -121,12 +127,12 @@ struct Shader {
     std::vector<GlobalArgument> globalArguments;
 
     Shader();
-    Shader(char const *_name, unsigned int _numTechniques, std::vector<VertexDeclElement> const &_declaration, std::vector<Command> _commands, std::vector<GlobalArgument> _globalArguments);
+    Shader(std::string const &_name, unsigned int _numTechniques, std::vector<VertexDeclElement> const &_declaration, std::vector<Command> const&_commands, std::vector<GlobalArgument> const&_globalArguments);
     unsigned int VertexSize() const;
     int ComputationCommandIndex() const;
     bool HasAttribute(DataUsage attribute) const;
+    void Update(bool validate = true);
 };
 
-extern Shader *Shaders;
-extern unsigned int NumShaders;
-Shader *FindShader(std::string const &name);
+bool operator==(Shader::Command const &a, Shader::Command const &b);
+bool operator==(Shader::GlobalArgument const &a, Shader::GlobalArgument const &b);

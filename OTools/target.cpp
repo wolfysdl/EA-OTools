@@ -1,9 +1,27 @@
 #include "target.h"
+#include "utils.h"
 
 unsigned int Target::GetMaxBoneWeightsPerVertex() {
     return 3;
 }
 
 unsigned int Target::GetMaxVertexWeightsPerMesh() {
+    return 128;
+}
+
+Shader *Target::FindShader(std::string const &name) {
+    auto nameLowered = ToLower(name);
+    for (unsigned int i = 0; i < NumShaders(); i++) {
+        if (nameLowered == Shaders()[i].nameLowered)
+            return &Shaders()[i];
+    }
+    return nullptr;
+}
+
+unsigned int FifaTarget::GetMaxBoneWeightsPerVertex() {
+    return 3;
+}
+
+unsigned int FifaTarget::GetMaxVertexWeightsPerMesh() {
     return 128;
 }

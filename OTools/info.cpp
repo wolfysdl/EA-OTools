@@ -201,6 +201,9 @@ class analyzer {
     };
 public:
     void convert_o_to_gltf(unsigned char *fileData, unsigned int fileDataSize, path const &outPath) {
+        Target *target = globalVars().target;
+        if (!target)
+            throw runtime_error("Unknown target");
         string filename = outPath.filename().string();
         unsigned char *data = nullptr;
         unsigned int dataSize = 0;
@@ -345,7 +348,7 @@ public:
                                 auto shaderName = codeName.substr(0, codeName.length() - 15);
                                 // find texture reference and geoprimstate reference in the code (external only)
                                 // todo check internal TAR
-                                shader = FindShader(shaderName);
+                                shader = target->FindShader(shaderName);
                                 if (shader && shader->numTechniques) {
                                     //if (false && !v[shaderName].contains(renderMethod->mComputationIndexCommand)) {
                                     //    cout << shaderName << "," << renderMethod->mComputationIndexCommand << "," << filename << endl;

@@ -4,7 +4,7 @@
 #include "errormsg.h"
 #include "Fsh/Fsh.h"
 
-const char *OTOOLS_VERSION = "0.145";
+const char *OTOOLS_VERSION = "0.146";
 
 GlobalOptions &options() {
     static GlobalOptions go;
@@ -21,21 +21,21 @@ enum ErrorType {
 };
 
 int main(int argc, char *argv[]) {
-    CommandLine cmd(argc, argv, { "i", "o", "scale", "defaultVCol", "setVCol", "vColScale", "fshOutput", "fshLevels", "fshFormat", "fshTextures",
+    CommandLine cmd(argc, argv, { "i", "o", "target", "scale", "defaultVCol", "setVCol", "vColScale", "fshOutput", "fshLevels", "fshFormat", "fshTextures",
         "fshAddTextures", "fshIgnoreTextures", "startsWith", "pad", "padFsh" },
-        { "tristrip", "noTextures", "recursive", "createSubDir", "silent", "onlyFirstTechnique", "dummyTextures", "jpegTextures", "embeddedTextures", 
+        { "tristrip", "noTextures", "recursive", "createSubDir", "silent", "console", "onlyFirstTechnique", "dummyTextures", "jpegTextures", "embeddedTextures", 
         "swapYZ", "forceLighting", "noMetadata", "genTexNames", "writeFsh", "fshRescale", "fshDisableTextureIgnore", "preTransformVertices", "sortByName", 
         "sortByAlpha", "ignoreMatColor", "noMeshJoin", "head", "ignoreEmbeddedTextures" });
     if (cmd.HasOption("silent"))
         SetErrorDisplayType(ErrorDisplayType::ERR_NONE);
     else {
-        if (!cmd.HasOption("console"))
-            SetErrorDisplayType(ErrorDisplayType::ERR_MESSAGE_BOX);
-        else
+        if (cmd.HasOption("console"))
             SetErrorDisplayType(ErrorDisplayType::ERR_CONSOLE);
+        else
+            SetErrorDisplayType(ErrorDisplayType::ERR_MESSAGE_BOX);  
     }
     enum OperationType {
-        UNKNOWN, DUMP, EXPORT, IMPORT, INFO
+        UNKNOWN, DUMP, EXPORT, IMPORT, INFO, DUMPSHADERS
     } opType = OperationType::UNKNOWN;
     void (*callback)(path const &, path const &) = nullptr;
     bool isCustom = false;
@@ -66,6 +66,11 @@ int main(int argc, char *argv[]) {
             callback = oinfo;
             inExt = { ".o" };
         }
+        else if (opTypeStr == "dumpshaders") {
+            opType = OperationType::DUMPSHADERS;
+            callback = dumpshaders;
+            isCustom = true;
+        }
     }
     if (opType == OperationType::UNKNOWN) {
         ErrorMessage("Unknown operation type");
@@ -79,6 +84,27 @@ int main(int argc, char *argv[]) {
     if (!exists(i)) {
         ErrorMessage("Input path does not exist");
         return ErrorType::INVALID_INPUT_PATH;
+    }
+    string target = cmd.GetArgumentString("target");
+    if (target == "fm") {
+        static TargetFM13 defaultFMTarget;
+        globalVars().target = &defaultFMTarget;
+    }
+    else if (target == "fifa") {
+        static TargetFIFA07 defaultFIFATarget;
+        globalVars().target = &defaultFIFATarget;
+    }
+    else if (target == "fm13") {
+        static TargetFM13 targetFM13;
+        globalVars().target = &targetFM13;
+    }
+    else if (target == "fifa07") {
+        static TargetFIFA07 targetFIFA07;
+        globalVars().target = &targetFIFA07;
+    }
+    else {
+        static TargetFM13 defaultTarget;
+        globalVars().target = &defaultTarget;
     }
     if (opType == OperationType::EXPORT) {
         if (cmd.HasOption("noTextures"))

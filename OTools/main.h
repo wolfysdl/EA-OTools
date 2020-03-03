@@ -8,6 +8,7 @@
 #include "memory.h"
 #include "utils.h"
 #include <assimp/color4.h>
+#include "target.h"
 
 using namespace std;
 using namespace std::filesystem;
@@ -56,6 +57,7 @@ struct GlobalOptions {
 GlobalOptions &options();
 
 struct GlobalVars {
+    Target *target = nullptr;
     map<string, pair<unsigned char, string>> maxColorValue;
     map<string, map<vector<unsigned char>, vector<string>>> shaders;
 };
@@ -68,3 +70,4 @@ void odump(path const &out, path const &in);
 void oexport(path const &out, path const &in);
 void oimport(path const &out, path const &in);
 void oinfo(path const &out, path const &in);
+void dumpshaders(path const &out, path const &in);
