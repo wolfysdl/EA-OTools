@@ -4,7 +4,7 @@
 
 **Current progress and limitations**:
 
-* Only shaders from FIFA Manager 13 are implemented, they are not guaranteed to work with any other games
+* Shaders from FIFA (2003 - 2010), FIFA Manager 13 and Cricket 07 are implemented. Most of them are untested and may contain errors. Also they are not guaranteed to work with any other games
 
 otools is a command-line tool. First argument is operation type (export or import), second argument (`-i`) is input file/folder path. All other arguments are optional.
 
@@ -12,19 +12,19 @@ otools is a command-line tool. First argument is operation type (export or impor
 
 Extract all .o models in "test" folder to .gltf format
 ```
-otools export -i "test"
+otools export -i "test" -game fifa07
 ```
 Extract test.o to test.gltf
 ```
-otools export -i "test.o"
+otools export -i "test.o" -game fifa07
 ```
 Import all models (.gltf, .glb, .fbx, .dae, .obj, .3ds) in "test" folder to .o format
 ```
-otools import -i "test"
+otools import -i "test" -game fifa07
 ```
 Import test.gltf to test.o
 ```
-otools import -i "test.gltf"
+otools import -i "test.gltf" -game fifa07
 ```
 
 Additional options:
@@ -50,6 +50,8 @@ Additional export options:
 `-noMeshJoin` - do not merge same materials to one material
 
 Additional import options:
+
+`-game <gameId>` - set the source/target game. Currently implemented games are: `fifa2003`, `fifa2004`, `fifa2005`, `fifa06`, `fifa07`, `fifa08`, `fifa09`, `fifa10`, `euro2004`, `euro2008`, `wc2006`, `cl0405`, `cl0607`, `fm13`, `cricket07`
 
 `-scale <scaling>` - scale model by given floating-point factor
 
@@ -100,6 +102,8 @@ Additional import options:
 `-padFsh <size>` - pad resulting .fsh files to the specified size (in bytes). This option is ignored if the size of resulting file is greater than the specified value
 
 `-ignoreEmbeddedTextures` - ignore any embedded textures in the input model
+
+`-ord` - import to .ord and .orl files
 
 **Source code dependencies**
 
