@@ -17,11 +17,3 @@ Shader *Target::FindShader(std::string const &name) {
     }
     return nullptr;
 }
-
-unsigned int FifaTarget::GetMaxBoneWeightsPerVertex() {
-    return 3;
-}
-
-unsigned int FifaTarget::GetMaxVertexWeightsPerMesh() {
-    return 128;
-}

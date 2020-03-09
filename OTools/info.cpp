@@ -515,21 +515,11 @@ public:
     }
 
     void convert_o_to_gltf(path const &inPath, path const &outPath) {
-        FILE *f = _wfopen(inPath.c_str(), L"rb");
-        if (f) {
-            fseek(f, 0, SEEK_END);
-            unsigned int fileSize = ftell(f);
-            fseek(f, 0, SEEK_SET);
-            unsigned char *fileData = new unsigned char[fileSize];
-            if (fread(fileData, 1, fileSize, f) == fileSize)
-                convert_o_to_gltf(fileData, fileSize, outPath);
-            //else
-            //    Error(L"failed to read %s", inPath.c_str());
-            delete[] fileData;
-            fclose(f);
+        auto fileData = readofile(inPath);
+        if (fileData.first) {
+            convert_o_to_gltf(fileData.first, fileData.second, outPath);
+            delete[] fileData.first;
         }
-        //else
-        //    Error(L"failed to open %s", inPath.c_str());
     }
 };
 

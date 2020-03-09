@@ -1,6 +1,9 @@
 #include "shaders.h"
 #include "utils.h"
 
+Shader DummyShader = { "DUMMY", 0, { { Shader::Float3, Shader::Position } }, {}, {} };
+Shader DummyShader_Skin = { "DUMMY_SKIN", 0, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color1 }, { Shader::UByte4, Shader::BlendIndices }, { Shader::Float3, Shader::BlendWeight } }, {}, {} };
+
 Shader::Shader() {}
 
 Shader::Shader(std::string const &_name, unsigned int _numTechniques, std::vector<VertexDeclElement> const &_declaration, std::vector<Command> const&_commands, std::vector<GlobalArgument> const&_globalArguments) {
@@ -58,10 +61,12 @@ void Shader::Update(bool validate) {
         }
     }
     if (validate) {
-        if ((commands.size() % numTechniques) != 0)
-            Error("Invalid command buffer in shader " + name);
-        else if ((commands.size() / numTechniques) != (globalArguments.size() + 2))
-            Error("Invalid argument buffer in shader " + name);
+        if (numTechniques > 0) {
+            if ((commands.size() % numTechniques) != 0)
+                Error("Invalid command buffer in shader " + name);
+            else if ((commands.size() / numTechniques) != (globalArguments.size() + 2))
+                Error("Invalid argument buffer in shader " + name);
+        }
     }
 }
 

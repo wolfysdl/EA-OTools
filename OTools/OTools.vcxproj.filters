@@ -77,7 +77,15 @@
     <ClCompile Include="jsonwriter.cpp" />
     <ClCompile Include="dumpshaders.cpp" />
     <ClCompile Include="target_fm13.cpp" />
-    <ClCompile Include="target_fifa07.cpp" />
+    <ClCompile Include="target_fifa03.cpp" />
+    <ClCompile Include="target_cricket07.cpp" />
+    <ClCompile Include="target_fifa04.cpp" />
+    <ClCompile Include="target_fifa06.cpp" />
+    <ClCompile Include="target_fifa09.cpp" />
+    <ClCompile Include="target_fifa10.cpp" />
+    <ClCompile Include="target_euro04.cpp" />
+    <ClCompile Include="target_cl0405.cpp" />
+    <ClCompile Include="target_wc06.cpp" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="NvTriStrip">

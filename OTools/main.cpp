@@ -4,7 +4,7 @@
 #include "errormsg.h"
 #include "Fsh/Fsh.h"
 
-const char *OTOOLS_VERSION = "0.146";
+const char *OTOOLS_VERSION = "0.147";
 
 GlobalOptions &options() {
     static GlobalOptions go;
@@ -21,11 +21,11 @@ enum ErrorType {
 };
 
 int main(int argc, char *argv[]) {
-    CommandLine cmd(argc, argv, { "i", "o", "target", "scale", "defaultVCol", "setVCol", "vColScale", "fshOutput", "fshLevels", "fshFormat", "fshTextures",
+    CommandLine cmd(argc, argv, { "i", "o", "game", "scale", "defaultVCol", "setVCol", "vColScale", "fshOutput", "fshLevels", "fshFormat", "fshTextures",
         "fshAddTextures", "fshIgnoreTextures", "startsWith", "pad", "padFsh" },
         { "tristrip", "noTextures", "recursive", "createSubDir", "silent", "console", "onlyFirstTechnique", "dummyTextures", "jpegTextures", "embeddedTextures", 
         "swapYZ", "forceLighting", "noMetadata", "genTexNames", "writeFsh", "fshRescale", "fshDisableTextureIgnore", "preTransformVertices", "sortByName", 
-        "sortByAlpha", "ignoreMatColor", "noMeshJoin", "head", "ignoreEmbeddedTextures" });
+        "sortByAlpha", "ignoreMatColor", "noMeshJoin", "head", "ignoreEmbeddedTextures", "ord" });
     if (cmd.HasOption("silent"))
         SetErrorDisplayType(ErrorDisplayType::ERR_NONE);
     else {
@@ -47,24 +47,27 @@ int main(int argc, char *argv[]) {
             opType = OperationType::IMPORT;
             callback = oimport;
             inExt = { ".gltf", ".glb", ".dae", ".fbx", ".obj", ".blend", ".3ds" };
-            targetExt = ".o";
+            if (cmd.HasOption("ord"))
+                targetExt = ".o";
+            else
+                targetExt = ".ord";
         }
         else if (opTypeStr == "export") {
             opType = OperationType::EXPORT;
             callback = oexport;
-            inExt = { ".o" };
+            inExt = { ".o", ".ord" };
             targetExt = ".gltf";
         }
         else if (opTypeStr == "dump") {
             opType = OperationType::DUMP;
             callback = odump;
-            inExt = { ".o" };
+            inExt = { ".o", ".ord" };
             targetExt = ".txt";
         }
         else if (opTypeStr == "info") {
             opType = OperationType::INFO;
             callback = oinfo;
-            inExt = { ".o" };
+            inExt = { ".o", ".ord" };
         }
         else if (opTypeStr == "dumpshaders") {
             opType = OperationType::DUMPSHADERS;
@@ -85,22 +88,78 @@ int main(int argc, char *argv[]) {
         ErrorMessage("Input path does not exist");
         return ErrorType::INVALID_INPUT_PATH;
     }
-    string target = cmd.GetArgumentString("target");
-    if (target == "fm") {
+    string game = ToLower(cmd.GetArgumentString("game"));
+    if (game == "fm") {
         static TargetFM13 defaultFMTarget;
         globalVars().target = &defaultFMTarget;
     }
-    else if (target == "fifa") {
-        static TargetFIFA07 defaultFIFATarget;
+    else if (game == "fifa") {
+        static TargetFIFA10 defaultFIFATarget;
         globalVars().target = &defaultFIFATarget;
     }
-    else if (target == "fm13") {
+    else if (game == "cricket") {
+        static TargetCRICKET07 defaultCricketTarget;
+        globalVars().target = &defaultCricketTarget;
+    }
+    else if (game == "fm13") {
         static TargetFM13 targetFM13;
         globalVars().target = &targetFM13;
     }
-    else if (target == "fifa07") {
+    else if (game == "fifa10") {
+        static TargetFIFA10 targetFIFA10;
+        globalVars().target = &targetFIFA10;
+    }
+    else if (game == "fifa09") {
+        static TargetFIFA09 targetFIFA09;
+        globalVars().target = &targetFIFA09;
+    }
+    else if (game == "fifa08") {
+        static TargetFIFA08 targetFIFA08;
+        globalVars().target = &targetFIFA08;
+    }
+    else if (game == "fifa07") {
         static TargetFIFA07 targetFIFA07;
         globalVars().target = &targetFIFA07;
+    }
+    else if (game == "fifa06") {
+        static TargetFIFA06 targetFIFA06;
+        globalVars().target = &targetFIFA06;
+    }
+    else if (game == "fifa05" || game == "fifa2005") {
+        static TargetFIFA05 targetFIFA05;
+        globalVars().target = &targetFIFA05;
+    }
+    else if (game == "fifa04" || game == "fifa2004") {
+        static TargetFIFA04 targetFIFA04;
+        globalVars().target = &targetFIFA04;
+    }
+    else if (game == "fifa03" || game == "fifa2003") {
+        static TargetFIFA03 targetFIFA03;
+        globalVars().target = &targetFIFA03;
+    }
+    else if (game == "cl0607" || game == "cl07" || game == "uefacl0607" || game == "uefacl07") {
+        static TargetCL0607 targetCL0607;
+        globalVars().target = &targetCL0607;
+    }
+    else if (game == "cl0405" || game == "cl05" || game == "uefacl0405" || game == "uefacl05") {
+        static TargetCL0405 targetCL0405;
+        globalVars().target = &targetCL0405;
+    }
+    else if (game == "wc06" || game == "fifawc06" || game == "wc2006" || game == "fifawc2006") {
+        static TargetWC06 targetWC06;
+        globalVars().target = &targetWC06;
+    }
+    else if (game == "euro08" || game == "uefaeuro08" || game == "euro2008" || game == "uefaeuro2008") {
+        static TargetEURO08 targetEURO08;
+        globalVars().target = &targetEURO08;
+    }
+    else if (game == "euro04" || game == "uefaeuro04" || game == "euro2004" || game == "uefaeuro2004") {
+        static TargetEURO04 targetEURO04;
+        globalVars().target = &targetEURO04;
+    }
+    else if (game == "cricket07") {
+        static TargetCRICKET07 targetCRICKET07;
+        globalVars().target = &targetCRICKET07;
     }
     else {
         static TargetFM13 defaultTarget;
@@ -303,4 +362,52 @@ int main(int argc, char *argv[]) {
         ea::Fsh::ClearDevice();
 
     return ErrorType::NONE;
+}
+
+pair<unsigned char *, unsigned int> readofile(path const &inPath) {
+    pair<unsigned char *, unsigned int> result = { nullptr, 0 };
+    if (ToLower(inPath.extension().string()) != ".ord") {
+        FILE *f = _wfopen(inPath.c_str(), L"rb");
+        if (f) {
+            fseek(f, 0, SEEK_END);
+            unsigned int fileSize = ftell(f);
+            fseek(f, 0, SEEK_SET);
+            result.first = new unsigned char[fileSize];
+            if (fread(result.first, 1, fileSize, f) != fileSize) {
+                delete[] result.first;
+                result.first = nullptr;
+            }
+            else
+                result.second = fileSize;
+            fclose(f);
+        }
+    }
+    else {
+        auto orlPath = inPath;
+        orlPath.replace_extension(".orl");
+        if (exists(orlPath) && is_regular_file(orlPath)) {
+            FILE *ordFile = _wfopen(inPath.c_str(), L"rb");
+            FILE *orlFile = _wfopen(orlPath.c_str(), L"rb");
+            if (ordFile && orlFile) {
+                fseek(ordFile, 0, SEEK_END);
+                unsigned int ordFileSize = ftell(ordFile);
+                fseek(ordFile, 0, SEEK_SET);
+                fseek(orlFile, 0, SEEK_END);
+                unsigned int orlFileSize = ftell(orlFile);
+                fseek(orlFile, 0, SEEK_SET);
+                result.first = new unsigned char[ordFileSize + orlFileSize];
+                if (fread(result.first, 1, ordFileSize, ordFile) != ordFileSize || fread(result.first + ordFileSize, 1, orlFileSize, orlFile) != orlFileSize) {
+                    delete[] result.first;
+                    result.first = nullptr;
+                }
+                else
+                    result.second = ordFileSize + orlFileSize;
+            }
+            if (ordFile)
+                fclose(ordFile);
+            if (orlFile)
+                fclose(orlFile);
+        }
+    }
+    return result;
 }

@@ -122,9 +122,26 @@ string GetShaderAttributeName(int attr) {
     case Shader::SpecLightCol:              return "Shader::SpecLightCol";
     case Shader::HalfVector:                return "Shader::HalfVector";
     case Shader::HighlightAlpha:            return "Shader::HighlightAlpha";
+    case Shader::CrowdTintH:                return "Shader::CrowdTintH";
+    case Shader::CrowdTintA:                return "Shader::CrowdTintA";
+    case Shader::RMStadium_CameraPos:       return "Shader::RMStadium_CameraPos";
+    case Shader::ColourModulator:           return "Shader::ColourModulator";
+    case Shader::ColourTranslate:           return "Shader::ColourTranslate";
     case Shader::VariationsCount:           return "Shader::VariationsCount";
     case Shader::VecOneLocal:               return "Shader::VecOneLocal";
     case Shader::VecZeroLocal:              return "Shader::VecZeroLocal";
+    case Shader::Vec0505051Local:           return "Shader::Vec0505051Local";
+    case Shader::SubSurfFactor2:            return "Shader::SubSurfFactor2";
+    case Shader::SpecFactor:                return "Shader::SpecFactor";
+    case Shader::StarBall_MatrixMVP:        return "Shader::StarBall_MatrixMVP";
+    case Shader::StarBall_MatrixMV:         return "Shader::StarBall_MatrixMV";
+    case Shader::StarBall_MatrixMVR:        return "Shader::StarBall_MatrixMVR";
+    case Shader::StarBall_Params0:          return "Shader::StarBall_Params0";
+    case Shader::StarBall_Params1:          return "Shader::StarBall_Params1";
+    case Shader::PlaneEquation:             return "Shader::PlaneEquation";
+    case Shader::FresnelColour:             return "Shader::FresnelColour";
+    case Shader::Fresnel:                   return "Shader::Fresnel";
+    case Shader::LightMultipliers:          return "Shader::LightMultipliers";
     }
     return string();
 }
@@ -156,7 +173,20 @@ int GetShaderAttributeFromSymbolName(string const &symbolName) {
         { "__COORD4:::SGR::Specular::SpecLightVec", Shader::SpecLightVec },
         { "__COORD4:::SGR::Specular::SpecLightCol", Shader::SpecLightCol },
         { "__COORD4:::SGR::Specular::HalfVector", Shader::HalfVector },
-        { "__COORD4:::SGR::GameFace::HighlightAlpha", Shader::HighlightAlpha }
+        { "__COORD4:::SGR::GameFace::HighlightAlpha", Shader::HighlightAlpha },
+        { "__COORD4:::RMStadium::CameraPos", Shader::RMStadium_CameraPos },
+        { "__COORD4:::ColourModulator", Shader::ColourModulator },
+        { "__COORD4:::SGR:SubSurf:SubSurfFactor", Shader::SubSurfFactor2 },
+        { "__COORD4:::SGR:SubSurf:SpecFactor", Shader::SpecFactor },
+        { "__const MATRIX4:::RM::StarBall::MatrixMVP", Shader::StarBall_MatrixMVP },
+        { "__const MATRIX4:::RM::StarBall::MatrixMV", Shader::StarBall_MatrixMV },
+        { "__const MATRIX4:::RM::StarBall::MatrixMVR", Shader::StarBall_MatrixMVR },
+        { "__COORD4:::RM::StarBall::Params0", Shader::StarBall_Params0 },
+        { "__COORD4:::RM::StarBall::Params1", Shader::StarBall_Params1 },
+        { "__COORD4:::RM::Globe::PlaneEquation", Shader::PlaneEquation },
+        { "__COORD4:::RM::Globe::FresnelColour", Shader::FresnelColour },
+        { "__COORD4:::ColourTranslate", Shader::ColourTranslate },
+        { "__COORD4:::Hbs::Render::Fresnel", Shader::Fresnel }
     };
     auto it = attrMap.find(symbolName);
     if (it != attrMap.end())
@@ -336,16 +366,9 @@ class ShaderDumper {
     };
 public:
     void get_o_info(path const &inPath, bool isEAGLRM = false) {
-        FILE *f = _wfopen(inPath.c_str(), L"rb");
-        if (!f)
+        auto fileData = readofile(inPath);
+        if (!fileData.first)
             return;
-        fseek(f, 0, SEEK_END);
-        unsigned int fileSize = ftell(f);
-        fseek(f, 0, SEEK_SET);
-        unsigned char *fileData = new unsigned char[fileSize];
-        fread(fileData, 1, fileSize, f);
-        fclose(f);
-
         string filename = inPath.filename().string();
         unsigned char *data = nullptr;
         unsigned int dataSize = 0;
@@ -357,7 +380,7 @@ public:
         unsigned int symbolNamesSize = 0;
         unsigned int dataIndex = 0;
 
-        Elf32_Ehdr *h = (Elf32_Ehdr *)fileData;
+        Elf32_Ehdr *h = (Elf32_Ehdr *)fileData.first;
         Elf32_Shdr *s = At<Elf32_Shdr>(h, h->e_shoff);
         for (unsigned int i = 0; i < h->e_shnum; i++) {
             if (s[i].sh_size > 0) {
@@ -511,17 +534,26 @@ public:
                 static float vecZero[4] = { 0, 0, 0, 0 };
                 static float vec0123[4] = { 0, 1, 2, 3 };
                 static float vecEnvMapCoeff[4] = { 1.0f, 0.25f, 0.5f, 0.75f };
+                static unsigned int vec0505051[4] = { 0x3EFEFF00, 0x3EFEFF00, 0x3EFEFF00, 0x3F800000 };
                 map<void const *, ModifiableData const *> modifiables;
                 for (unsigned int m = 0; m < model->mNumModifiableDatas; m++)
                     modifiables[model->mModifiableData[m].mEntries] = &model->mModifiableData[m];
                 if (model->mNumLayers && model->mLayers) {
                     unsigned int *modelLayers = (unsigned int *)(model->mLayers);
+                    unsigned int modelLayersHeader = *modelLayers;
+                    bool isOldFormat = modelLayersHeader == 0xA0000000;
                     modelLayers++;
+                    if (isOldFormat)
+                        modelLayers += 2;
                     for (unsigned int i = 0; i < model->mNumLayers; i++) {
+                        if (isOldFormat)
+                            modelLayers += 2;
                         unsigned int numPrimitives = *modelLayers;
+                        if (isOldFormat)
+                            numPrimitives /= 2;
                         modelLayers++;
                         for (unsigned int p = 0; p < numPrimitives; p++) {
-                            void *renderDescriptor = GetAt<void *>(modelLayers, p * 4);
+                            void *renderDescriptor = GetAt<void *>(modelLayers, isOldFormat ? (p * 8 + 4) : (p * 4));
                             RenderMethod *renderMethod = GetAt<RenderMethod *>(renderDescriptor, 0);
                             void *globalParameters = At<void *>(renderDescriptor, 4);
                             unsigned int rmCodeOffset = At<unsigned char>(renderMethod, 8) - data;
@@ -582,6 +614,28 @@ public:
                                                             args[a] = Shader::VariationsCount;
                                                         else if (a == 9)
                                                             args[a] = Shader::VertexBufferIndex;
+                                                        else if (a >= 25) {
+                                                            if (args[18] == args[19]) {
+                                                                if (a == 26)
+                                                                    args[a] = Shader::VertexData;
+                                                                else if (a == 27)
+                                                                    args[a] = Shader::VertexCount;
+                                                                else if (a == 28)
+                                                                    args[a] = Shader::VariationsCount;
+                                                                else if (a == 29)
+                                                                    args[a] = Shader::VertexBufferIndex;
+                                                            }
+                                                            else {
+                                                                if (a == 25)
+                                                                    args[a] = Shader::VertexData;
+                                                                else if (a == 26)
+                                                                    args[a] = Shader::VertexCount;
+                                                                else if (a == 27)
+                                                                    args[a] = Shader::VariationsCount;
+                                                                else if (a == 28)
+                                                                    args[a] = Shader::VertexBufferIndex;
+                                                            }
+                                                        }
                                                     }
                                                     else if (firstTechniqueCommandId == 7) {
                                                         if (a == 3)
@@ -703,6 +757,12 @@ public:
                                                                                 info.globalArguments[g].type = Shader::UVOffset1;
                                                                             else if (mname.ends_with("::XFade"))
                                                                                 info.globalArguments[g].type = Shader::XFade;
+                                                                            else if (mname == "Coordinate4::GeomName::CrowdTintH")
+                                                                                info.globalArguments[g].type = Shader::CrowdTintH;
+                                                                            else if (mname == "Coordinate4::GeomName::CrowdTintA")
+                                                                                info.globalArguments[g].type = Shader::CrowdTintA;
+                                                                            else if (mname == "Coordinate4::LightMultipliers")
+                                                                                info.globalArguments[g].type = Shader::LightMultipliers;
                                                                         }
                                                                         else {
                                                                             if (!memcmp(argData, vec0123, 16))
@@ -714,6 +774,10 @@ public:
                                                                                     info.globalArguments[g].type = Shader::VecOneLocal;
                                                                                 else if (!memcmp(argData, vecZero, 16))
                                                                                     info.globalArguments[g].type = Shader::VecZeroLocal;
+                                                                            }
+                                                                            else if (shaderName == "GouraudApt") {
+                                                                                if (!memcmp(argData, vec0505051, 16))
+                                                                                    info.globalArguments[g].type = Shader::Vec0505051Local;
                                                                             }
                                                                         }
                                                                     }
@@ -751,12 +815,12 @@ public:
                                 }
                             }
                         }
-                        modelLayers += numPrimitives;
+                        modelLayers += numPrimitives * (isOldFormat ? 2 : 1);
                     }
                 }
             }
         }
-        delete[] fileData;
+        delete[] fileData.first;
     }
 
     void dump(path const &inPath) {
@@ -775,10 +839,16 @@ public:
             cout << "Scanning folders for .o files" << endl;
             for (auto const &i : recursive_directory_iterator(inPath)) {
                 auto const &p = i.path();
-                if (is_regular_file(p) && p.extension() == ".o" && p.filename() != "eaglrm.o")
-                    get_o_info(p, false);
+                if (is_regular_file(p) && p.extension() == ".o" && p.filename() != "eaglrm.o") {
+                    try {
+                        get_o_info(p, false);
+                    }
+                    catch (exception e) {
+                        Error("Unable to get info from model %s", p.string().c_str());
+                    }
+                }
             }
-            string targetName = "shaders_" + inPath.parent_path().filename().string();
+            string targetName = "shaders_" + inPath.filename().string();
             string targetFileName = targetName + ".txt";
             cout << "Writing to " << targetFileName << endl;
             FILE *out = fopen(targetFileName.c_str(), "wt");
@@ -810,7 +880,24 @@ public:
                     if (i != 0)
                         fputs(",\n", out);
                     fputs("    // ", out);
-                    fputs(name.c_str(), out);
+                    string shaderFullId = "t" + to_string(s.numTechniques);
+                    if (!s.declaration.empty()) {
+                        shaderFullId += "d";
+                        for (auto const &d : s.declaration)
+                            shaderFullId += to_string(d.type) + to_string(d.usage);
+                    }
+                    for (auto const &ic : s.commands) {
+                        shaderFullId += "c" + to_string(ic.id);
+                        for (auto const &ica : ic.arguments)
+                            shaderFullId += "a" + to_string(unsigned int(ica));
+                    }
+                    for (auto const &ig : s.globalArguments) {
+                        shaderFullId += "g" + to_string(unsigned int(ig.type));
+                        if (!ig.format.empty())
+                            shaderFullId += "f" + to_string(Hash(ig.format));
+                    }
+                    string shaderIdLine = name + ", hash " + to_string(Hash(shaderFullId));
+                    fputs(shaderIdLine.c_str(), out);
                     fputs("\n", out);
                     if (s.debugVertexSize != s.VertexSize())
                         fprintf(out, "    // NOTE: vertex size mismatch (%d calculated, %d in code)", s.VertexSize(), s.debugVertexSize);

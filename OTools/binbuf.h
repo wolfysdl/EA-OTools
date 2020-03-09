@@ -27,6 +27,7 @@ public:
     void Put(void const *data, unsigned int size);
     void Put(BinaryBuffer const &buf);
     bool WriteToFile(std::filesystem::path const &filepath);
+    bool WriteToFile(std::filesystem::path const &filepath, unsigned int from, unsigned int size);
     bool Compare(BinaryBuffer const &otherBuf);
     void Align(unsigned int alignment);
 

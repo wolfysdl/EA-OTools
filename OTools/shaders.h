@@ -99,7 +99,24 @@ struct Shader {
         HighlightAlpha,
         VariationsCount,
         VecZeroLocal,
-        VecOneLocal
+        VecOneLocal,
+        Vec0505051Local,
+        ColourModulator,
+        ColourTranslate,
+        CrowdTintH,
+        CrowdTintA,
+        RMStadium_CameraPos,
+        StarBall_MatrixMVP,
+        StarBall_MatrixMV,
+        StarBall_MatrixMVR,
+        StarBall_Params0,
+        StarBall_Params1,
+        SubSurfFactor2,
+        SpecFactor,
+        PlaneEquation,
+        FresnelColour,
+        Fresnel,
+        LightMultipliers
     };
 
     struct Command {
@@ -136,3 +153,6 @@ struct Shader {
 
 bool operator==(Shader::Command const &a, Shader::Command const &b);
 bool operator==(Shader::GlobalArgument const &a, Shader::GlobalArgument const &b);
+
+extern Shader DummyShader;
+extern Shader DummyShader_Skin;

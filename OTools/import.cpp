@@ -21,6 +21,13 @@ struct Vector4D {
     float w = 0.0f;
 };
 
+struct Vector4D_int {
+    int x = 0;
+    int y = 0;
+    int z = 0;
+    int w = 0;
+};
+
 enum AlphaMode {
     ALPHA_NOT_SET,
     ALPHA_OPAQUE,
@@ -191,12 +198,22 @@ struct Tex {
     }
 
     bool IsRuntimeConstructed() const {
-        return !IsAdboardsTexture();
+        return !IsFIFAAdboardsTexture();
     }
 
-    bool IsAdboardsTexture() const {
+    bool IsFIFAAdboardsTexture() const {
         string ln = ToLower(name);
         return ln == "adba" || ln == "adbb" || ln == "adbc";
+    }
+
+    bool IsFIFACrowdHomeTexture() const {
+        string ln = ToLower(name);
+        return ln == "chf0" || ln == "chf1" || ln == "chf2" || ln == "chf3";
+    }
+
+    bool IsFIFACrowdAwayTexture() const {
+        string ln = ToLower(name);
+        return ln == "caf0" || ln == "caf1" || ln == "caf2" || ln == "caf3";
     }
 
     void SetUVAddressingMode(aiTextureMapMode _mode) {
@@ -295,21 +312,18 @@ struct ModData {
     vector<unsigned char> data;
     string runtimeConstructorLine;
     unsigned int runtimeSize = 0;
-    string layerName;
 
-    ModData(string const &_name, unsigned int _offset, vector<unsigned char> const &_data, string const &_layerName) {
+    ModData(string const &_name, unsigned int _offset, vector<unsigned char> const &_data) {
         name = _name;
         offset = _offset;
         data = _data;
-        layerName = _layerName;
     }
 
-    ModData(string const &_name, string const &_runtimeConstructorLine, unsigned int _runtimeSize, string const &_layerName) {
+    ModData(string const &_name, string const &_runtimeConstructorLine, unsigned int _runtimeSize) {
         name = _name;
         offset = 0;
         runtimeConstructorLine = _runtimeConstructorLine;
         runtimeSize = _runtimeSize;
-        layerName = _layerName;
     }
 
     ModData() {
@@ -320,7 +334,7 @@ struct ModData {
 struct Modifiables {
     vector<ModData> vec;
 
-    GlobalArg GetArg(string const &name, string const &_runtimeConstructorLine, unsigned int _runtimeSize, string const &_layerName = string()) {
+    GlobalArg GetArg(string const &name, string const &_runtimeConstructorLine, unsigned int _runtimeSize) {
         bool isPresent = false;
         for (auto const &m : vec) {
             if (m.name == name && m.runtimeConstructorLine == _runtimeConstructorLine && m.runtimeSize == _runtimeSize) {
@@ -329,12 +343,12 @@ struct Modifiables {
             }
         }
         if (!isPresent)
-            vec.emplace_back(name, _runtimeConstructorLine, _runtimeSize, _layerName);
+            vec.emplace_back(name, _runtimeConstructorLine, _runtimeSize);
         return GlobalArg(_runtimeConstructorLine);
     }
 
     template<typename T>
-    GlobalArg GetArg(string const &name, BinaryBuffer &buf, T const &obj, bool putZero = false, bool align = false, string const &_layerName = string()) {
+    GlobalArg GetArg(string const &name, BinaryBuffer &buf, T const &obj, bool putZero = false, bool align = false) {
         vector<unsigned char> newVec(sizeof(T));
         Memory_Copy(&newVec[0], &obj, sizeof(T));
         bool isPresent = false;
@@ -350,7 +364,7 @@ struct Modifiables {
             if (align)
                 buf.Align(16);
             offset = buf.Position();
-            vec.emplace_back(name, buf.Position(), newVec, _layerName);
+            vec.emplace_back(name, buf.Position(), newVec);
             buf.Put(obj);
             if (putZero)
                 buf.Put(int(0));
@@ -664,6 +678,7 @@ void oimport(path const &out, path const &in) {
     Vector4D vec0000 = { 1, 1, 1, 1 };
     Vector4D vec1111 = { 1, 1, 1, 1 };
     Vector4D vecEnvMapConstants = { 1.0f, 0.25f, 0.5f, 0.75f };
+    Vector4D_int vec0505051 = { 0x3EFEFF00, 0x3EFEFF00, 0x3EFEFF00, 0x3F800000 };
     bool flipAxis = options().swapYZ;
     bool hasSkeleton = false;
     bool hasMorph = false;
@@ -676,6 +691,8 @@ void oimport(path const &out, path const &in) {
     const float FZERO = 0.0f;
     BinaryBuffer bufData;
     string modelName = out.stem().string();
+    auto outExt = out.extension().string();
+    bool isOrd = ToLower(outExt) == ".ord";
     unsigned int uid = Hash(modelName);
     aiColor4D DEFAULT_COLOR = { 0.5f, 0.5f, 0.5f, 1.0f };
 
@@ -857,62 +874,33 @@ void oimport(path const &out, path const &in) {
             }
 
             if (!shader) {
-                if (hasDiffuseTex && tex[0].IsAdboardsTexture())
-                    shader = target->FindShader("XFadeScrollTexture");
-                else {
-                    if (!meshHasBones) {
-                        if (hasDiffuseTex) {
-                            if (usesAlphaBlending) {
-                                if (!isUnlit && (hasReflectionTex || hasSpecularTex || isMetallic))
-                                    shader = target->FindShader("IrradLitTextureEnvmapTransparent2x");
-                                else {
-                                    if (blendFunc == aiBlendMode::aiBlendMode_Additive)
-                                        shader = target->FindShader("ClipTextureAddNodepthwrite");
-                                    else
-                                        shader = target->FindShader("ClipTextureAlphablend");
-                                }
-                            }
-                            else { // no alpha blending
-                                if (isUnlit)
-                                    shader = target->FindShader("Texture2x");
-                                else {
-                                    if (hasReflectionTex || hasSpecularTex || isMetallic)
-                                        shader = target->FindShader("LitTextureIrradEnvmap");
-                                    else {
-                                        if (hasLights)
-                                            shader = target->FindShader("LitTexture2x");
-                                        else
-                                            shader = target->FindShader("Texture2x");
-                                    }
-                                }
-                            }
-                        }
-                        else {
-                            if (hasLights && !isUnlit)
-                                shader = target->FindShader("IrradLitGouraud2x");
-                            else
-                                shader = target->FindShader("Gouraud");
-                        }
-                    }
-                    else { // mesh is skinned
-                        if (hasDiffuseTex) {
-                            if (usesAlphaBlending)
-                                shader = target->FindShader("LitTexture2x_Skin");  //FindShader("LitTexture2Alpha2x_Skin");
-                            else { // no alpha blending
-                                if (hasReflectionTex || hasSpecularTex || isMetallic)
-                                    shader = target->FindShader("LitTexture2x_Skin"); // FindShader("LitTextureIrradSpecMap_Skin");
-                                else
-                                    shader = target->FindShader("LitTexture2x_Skin");
-                            }
-                        }
-                        else
-                            shader = target->FindShader("Gouraud_Skin");
-                    }
-                }
+                MaterialProperties matProps;
+                matProps.isAdboard = tex[0].IsFIFAAdboardsTexture();
+                if (!matProps.isAdboard)
+                    matProps.isHomeCrowd = tex[0].IsFIFACrowdHomeTexture();
+                else
+                    matProps.isHomeCrowd = false;
+                if (!matProps.isAdboard && !matProps.isHomeCrowd)
+                    matProps.isAwayCrowd = tex[0].IsFIFACrowdAwayTexture();
+                else
+                    matProps.isAwayCrowd = false;
+                matProps.isAdditive = blendFunc == aiBlendMode::aiBlendMode_Additive;
+                matProps.isLit = hasLights;
+                matProps.isMetallic = isMetallic;
+                matProps.isReflective = hasReflectionTex;
+                matProps.isShiny = hasSpecularTex;
+                matProps.isSkinned = meshHasBones;
+                matProps.isTextured = hasDiffuseTex;
+                matProps.isTransparent = usesAlphaBlending;
+                matProps.isUnlit = isUnlit;
+                shader = target->DecideShader(matProps);
             }
 
             if (!shader)
-                shader = &target->Shaders()[0];
+                shader = target->FindShader("Gouraud");
+
+            if (!shader)
+                throw runtime_error("Unable to decide shader");
 
             auto AddTexToSlot = [&](unsigned int slot, string const &name) {
                 auto texit = textures.find(name);
@@ -1295,6 +1283,11 @@ void oimport(path const &out, path const &in) {
                         bufData.Put(vec1111);
                         bufData.Put(ZERO);
                         break;
+                    case Shader::Vec0505051Local:
+                        globalArgs.emplace_back(bufData.Position());
+                        bufData.Put(vec0505051);
+                        bufData.Put(ZERO);
+                        break;
                     case Shader::EnvmapColour:
                         globalArgs.emplace_back("__COORD4:::EnvmapColour");
                         break;
@@ -1314,10 +1307,17 @@ void oimport(path const &out, path const &in) {
                         globalArgs.emplace_back("__COORD4:::SGR::Fog::Parameters3");
                         break;
                     case Shader::BaseColour:
-                    {
                         globalArgs.emplace_back(modifiables.GetArg("Coordinate4::BaseColour", bufData, vec1111, true));
-                    }
-                    break;
+                        break;
+                    case Shader::LightMultipliers:
+                        globalArgs.emplace_back(modifiables.GetArg("Coordinate4::LightMultipliers", bufData, vec1111, true));
+                        break;
+                    case Shader::CrowdTintH:
+                        globalArgs.emplace_back(modifiables.GetArg("Coordinate4::GeomName::CrowdTintH", bufData, vec0000, true));
+                        break;
+                    case Shader::CrowdTintA:
+                        globalArgs.emplace_back(modifiables.GetArg("Coordinate4::GeomName::CrowdTintA", bufData, vec0000, true));
+                        break;
                     case Shader::ShadowColour:
                         globalArgs.emplace_back("__COORD4:::gShadowColour");
                         break;
@@ -1357,22 +1357,61 @@ void oimport(path const &out, path const &in) {
                     case Shader::HighlightAlpha:
                         globalArgs.emplace_back("__COORD4:::SGR::GameFace::HighlightAlpha");
                         break;
+                    case Shader::ColourModulator:
+                        globalArgs.emplace_back(modifiables.GetArg("Coordinate4::ColourModulator", "__COORD4:::ColourModulator", 16));
+                        break;
+                    case Shader::ColourTranslate:
+                        globalArgs.emplace_back(modifiables.GetArg("Coordinate4::ColourTranslate", "__COORD4:::ColourTranslate", 16));
+                        break;
+                    case Shader::Fresnel:
+                        globalArgs.emplace_back("__COORD4:::Hbs::Render::Fresnel");
+                        break;
+                    case Shader::RMStadium_CameraPos:
+                        globalArgs.emplace_back("__COORD4:::RMStadium::CameraPos");
+                        break;
+                    case Shader::SubSurfFactor2:
+                        globalArgs.emplace_back("__COORD4:::SGR:SubSurf:SubSurfFactor");
+                        break;
+                    case Shader::SpecFactor:
+                        globalArgs.emplace_back("__COORD4:::SGR:SubSurf:SpecFactor");
+                        break;
+                    case Shader::StarBall_MatrixMVP:
+                        globalArgs.emplace_back("__const MATRIX4:::RM::StarBall::MatrixMVP");
+                        break;
+                    case Shader::StarBall_MatrixMV:
+                        globalArgs.emplace_back("__const MATRIX4:::RM::StarBall::MatrixMV");
+                        break;
+                    case Shader::StarBall_MatrixMVR:
+                        globalArgs.emplace_back("__const MATRIX4:::RM::StarBall::MatrixMVR");
+                        break;
+                    case Shader::StarBall_Params0:
+                        globalArgs.emplace_back("__COORD4:::RM::StarBall::Params0");
+                        break;
+                    case Shader::StarBall_Params1:
+                        globalArgs.emplace_back("__COORD4:::RM::StarBall::Params1");
+                        break;
+                    case Shader::PlaneEquation:
+                        globalArgs.emplace_back("__COORD4:::RM::Globe::PlaneEquation");
+                        break;
+                    case Shader::FresnelColour:
+                        globalArgs.emplace_back("__COORD4:::RM::Globe::FresnelColour");
+                        break;
                     case Shader::UVOffset0:
                     {
                         Vector4D uvOffset0;
-                        globalArgs.emplace_back(modifiables.GetArg("Coordinate4::$LAYERNAME$::UVOffset0", bufData, uvOffset0, false, false, n.name));
+                        globalArgs.emplace_back(modifiables.GetArg("Coordinate4::" + n.name + "::UVOffset0", bufData, uvOffset0, false, false));
                     }
                     break;
                     case Shader::UVOffset1:
                     {
                         Vector4D uvOffset1;
-                        globalArgs.emplace_back(modifiables.GetArg("Coordinate4::$LAYERNAME$::UVOffset1", bufData, uvOffset1, false, false, n.name));
+                        globalArgs.emplace_back(modifiables.GetArg("Coordinate4::" + n.name + "::UVOffset1", bufData, uvOffset1, false, false));
                     }
                     break;
                     case Shader::XFade:
                     {
                         Vector4D xFade;
-                        globalArgs.emplace_back(modifiables.GetArg("Coordinate4::$LAYERNAME$::XFade", bufData, xFade, false, false, n.name));
+                        globalArgs.emplace_back(modifiables.GetArg("Coordinate4::" + n.name + "::XFade", bufData, xFade, false, false));
                     }
                     break;
                     case Shader::Light:
@@ -1492,8 +1531,11 @@ void oimport(path const &out, path const &in) {
                 }
                 bufData.Put(ZERO);
                 // ShaderName
-                unsigned int shaderNameOffset = bufData.Position();
-                bufData.Put(shader->name);
+                unsigned int shaderNameOffset = 0;
+                if (target->Version() >= 3) {
+                    shaderNameOffset = bufData.Position();
+                    bufData.Put(shader->name);
+                }
                 // RenderMethod
                 bufData.Align(16);
                 unsigned int renderMethodOffset = bufData.Position();
@@ -1514,8 +1556,10 @@ void oimport(path const &out, path const &in) {
                 bufData.Put(geoPrimDataBufferOffset);
                 bufData.Put(shader->ComputationCommandIndex());
                 relocations[""].push_back(bufData.Position());
-                bufData.Put(shaderNameOffset);
-                bufData.Put(ZERO);
+                if (target->Version() >= 3) {
+                    bufData.Put(shaderNameOffset);
+                    bufData.Put(ZERO);
+                }
                 static unsigned char EASig[] = { 0xEA, 0xEF, 0xCD, 0xAB };
                 bufData.Put(EASig, std::size(EASig));
                 // RenderDescriptor
@@ -1606,13 +1650,35 @@ void oimport(path const &out, path const &in) {
     bufData.Put(TTARSig, std::size(TTARSig));
     // ModelLayers
     unsigned int modelLayersOffset = bufData.Position();
-    bufData.Put(ZERO);
-    for (auto const &n : nodes) {
-        bufData.Put(n.renderDescriptorsOffsets.size());
-        for (auto const &d : n.renderDescriptorsOffsets) {
-            relocations[""].push_back(bufData.Position());
-            bufData.Put(d);
+    if (target->Version() >= 3) {
+        bufData.Put(ZERO);
+        for (auto const &n : nodes) {
+            bufData.Put(n.renderDescriptorsOffsets.size());
+            for (auto const &d : n.renderDescriptorsOffsets) {
+                relocations[""].push_back(bufData.Position());
+                bufData.Put(d);
+            }
         }
+    }
+    else {
+        bufData.Put(unsigned int(0xA0000000));
+        bufData.Put(ZERO);
+        unsigned int numModelLayersBlocks = nodes.size() * 2;
+        for (auto const &n : nodes)
+            numModelLayersBlocks += n.renderDescriptorsOffsets.size() * 2;
+        bufData.Put(numModelLayersBlocks);
+        for (auto const &n : nodes) {
+            bufData.Put(unsigned int(0xA0000001));
+            bufData.Put(ZERO);
+            bufData.Put(n.renderDescriptorsOffsets.size() * 2);
+            for (auto const &d : n.renderDescriptorsOffsets) {
+                bufData.Put(unsigned int(0xA000FFFF));
+                relocations[""].push_back(bufData.Position());
+                bufData.Put(d);
+            }
+        }
+        bufData.Put(ZERO);
+        bufData.Align(16);
     }
     unsigned int modelNameOffset = bufData.Position();
     bufData.Put(modelName);
@@ -1631,8 +1697,6 @@ void oimport(path const &out, path const &in) {
     }
     vector<unsigned int> modifiablesNameOffsets;
     if (!modifiables.vec.empty()) {
-        for (auto &m : modifiables.vec)
-            Replace(m.name, "$LAYERNAME$", m.layerName);
         std::sort(modifiables.vec.begin(), modifiables.vec.end(), [](ModData const &a, ModData const &b) {
             if (a.name < b.name)
                 return true;
@@ -1714,8 +1778,10 @@ void oimport(path const &out, path const &in) {
                 relocations[""].push_back(bufData.Position());
                 bufData.Put(t.offset);
             }
-            bufData.Put(unsigned short(1));
-            bufData.Put(unsigned short(1));
+            if (target->Version() >= 4) {
+                bufData.Put(unsigned short(1));
+                bufData.Put(unsigned short(1));
+            }
             texIndex++;
         }
         bufData.Put(ZERO);
@@ -1833,7 +1899,10 @@ void oimport(path const &out, path const &in) {
     bufSymbols.Put(Elf32_Sym(bufSymbolNames.Position(), 0, 4, 0x21, 0, 1));
     bufSymbolNames.Put(string("__OTOOLS_VERSION:::OTOOLS_VERSION-") + OTOOLS_VERSION);
     bufSymbols.Put(Elf32_Sym(bufSymbolNames.Position(), 0, 4, 0x21, 0, 1));
-    bufSymbolNames.Put("__EAGL_TOOLLIB_VERSION:::EAGL_TOOLLIB_VERSION-4");
+    if (target->Version() >= 3)
+        bufSymbolNames.Put("__EAGL_TOOLLIB_VERSION:::EAGL_TOOLLIB_VERSION-" + to_string(target->Version()));
+    else
+        bufSymbolNames.Put("__LASTCHANGELIST:::4.06.01 Tue_June_25th_2002");
     
     for (auto const &s : symbols) {
         bufSymbols.Put(Elf32_Sym(bufSymbolNames.Position(), s.offset, 4, 0x11, 0, 1));
@@ -1939,7 +2008,14 @@ void oimport(path const &out, path const &in) {
         for (unsigned int i = 0; i < numPaddingBytes; i++)
             bufElf.Put<unsigned char>(0);
     }
-    bufElf.WriteToFile(out);
+    if (!isOrd)
+        bufElf.WriteToFile(out);
+    else {
+        bufElf.WriteToFile(out, 0, sectionOffsets[2]);
+        auto orlPath = out;
+        orlPath.replace_extension(outExt == ".ORD" ? ".ORL" : ".orl");
+        bufElf.WriteToFile(out, sectionOffsets[2], bufElf.Size() - sectionNamesOffets[2]);
+    }
 
     struct TextureToAdd {
         string name;
@@ -2154,7 +2230,7 @@ void oimport(path const &out, path const &in) {
                 }
             }
             else {
-                static set<string> defaultTexturesToIgnore = { "eyeb", "rwa0", "rwa1", "rwa2", "rwa3", "rwh0", "rwh1", "rwh2", "rwh3", "rwn0", "rwn1", "rwn2", "rwn3", "abna", "abnb", "abnc", "afla", "aflb", "aflc", "hbna", "hbnb", "hbnc", "hfla", "hflb", "hflc", "adba", "adbb", "adbc" };
+                static set<string> defaultTexturesToIgnore = { "eyeb", "rwa0", "rwa1", "rwa2", "rwa3", "rwh0", "rwh1", "rwh2", "rwh3", "rwn0", "rwn1", "rwn2", "rwn3", "abna", "abnb", "abnc", "afla", "aflb", "aflc", "hbna", "hbnb", "hbnc", "hfla", "hflb", "hflc", "adba", "adbb", "adbc", "chf0", "chf1", "chf2", "chf3","caf0", "caf1", "caf2", "caf3" };
                 for (auto const &[k, img] : textures) {
                     auto imgLoweredName = ToLower(img.name);
                     auto imgLoweredFilename = ToLower(path(img.filepath).stem().string());

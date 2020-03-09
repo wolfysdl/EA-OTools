@@ -66,6 +66,8 @@ GlobalVars &globalVars();
 
 extern const char *OTOOLS_VERSION;
 
+pair<unsigned char *, unsigned int> readofile(path const &inPath);
+
 void odump(path const &out, path const &in);
 void oexport(path const &out, path const &in);
 void oimport(path const &out, path const &in);

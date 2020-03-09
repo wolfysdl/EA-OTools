@@ -98,33 +98,6 @@ class exporter {
         void *unknown2;
     };
 
-    struct Shader {
-        enum DataType {
-            NoType, Float2, Float3, Float4, D3DColor, UByte4
-        };
-        enum DataUsage {
-            NoUsage, Position, Normal, Color0, Color1, Texcoord0, Texcoord1, Texcoord2, BlendIndices, BlendWeight
-        };
-        struct VertexDeclElement {
-            DataType type = NoType;
-            DataUsage usage = NoUsage;
-        };
-        
-        unsigned int numTechniques;
-        vector<VertexDeclElement> declaration;
-
-        Shader() {}
-
-        Shader(unsigned int _numTechniques, vector<VertexDeclElement> const &_declaration) {
-            numTechniques = _numTechniques;
-            declaration = _declaration;
-        }
-
-        Shader(unsigned int _numTechniques) {
-            numTechniques = _numTechniques;
-        }
-    };
-
     struct Buffer {
         enum Type {
             NotSet, Vertex, Index, VertexSkin, Matrix
@@ -259,62 +232,6 @@ public:
                 }
             }
         }
-
-        static map<string, Shader> shaderInfo = {
-            { "PlayerIDShader", { 9, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color1 }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 }, { Shader::UByte4, Shader::BlendIndices }, { Shader::Float4, Shader::BlendWeight } } } },
-            { "ClipTextureAlphablend", { 9, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 } } } },
-            { "PitchLitMow", { 9, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 }, { Shader::Float2, Shader::Texcoord1 }, { Shader::Float2, Shader::Texcoord2 } } } },
-            { "LitTextureIrradEnvmap_Skin", { 3, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color1 }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 }, { Shader::UByte4, Shader::BlendIndices }, { Shader::Float4, Shader::BlendWeight } } } },
-            { "PostFX", { 2, { { Shader::Float4, Shader::Position }, { Shader::Float3, Shader::Texcoord0 }, { Shader::D3DColor, Shader::Color0 } } } },
-            { "Gouraud_Skin", { 9, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color1 }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 }, { Shader::UByte4, Shader::BlendIndices }, { Shader::Float4, Shader::BlendWeight } } } },
-            { "LitTextureIrradEnvmap", { 9, { { Shader::Float3, Shader::Position }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 } } } },
-            { "LitTexture2IrradSkinSubSurfSpec", { 9, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color1 }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 }, { Shader::UByte4, Shader::BlendIndices }, { Shader::Float4, Shader::BlendWeight } } } },
-            { "LitTextureIrradSpecMap_Skin", { 9, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color1 }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 }, { Shader::UByte4, Shader::BlendIndices }, { Shader::Float4, Shader::BlendWeight } } } },
-            { "ClipTextureNodepthwriteWithAlpha", { 9, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 } } } },
-            { "GouraudApt", { 2, { { Shader::Float3, Shader::Position } } } },
-            { "LitGouraud", { 2, { { Shader::Float3, Shader::Position }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 } } } },
-            { "LitTexture2IrradSpecMap_Skin", { 17, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color1 }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 }, { Shader::Float2, Shader::Texcoord1 }, { Shader::UByte4, Shader::BlendIndices }, { Shader::Float4, Shader::BlendWeight } } } },
-            { "LitTexture4Head_Skin", { 3, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color1 }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 }, { Shader::Float2, Shader::Texcoord1 }, { Shader::UByte4, Shader::BlendIndices }, { Shader::Float4, Shader::BlendWeight } } } },
-            { "LitTexture2Hair_Skin", { 18, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color1 }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 }, { Shader::Float2, Shader::Texcoord1 }, { Shader::UByte4, Shader::BlendIndices }, { Shader::Float4, Shader::BlendWeight } } } },
-            { "NewMethod2", { 9, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 } } } },
-            { "PlanarShadow", { 12, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color0 } } } },
-            { "ClipTextureModulateNodepthwrite", { 9, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 } } } },
-            { "LitTexture2x_Skin", { 9, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color1 }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 }, { Shader::UByte4, Shader::BlendIndices }, { Shader::Float4, Shader::BlendWeight } } } },
-            { "ClipTextureNoalphablend", { 9, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 } } } },
-            { "LitTexture2x", { 9, { { Shader::Float3, Shader::Position }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 } } } },
-            { "Texture2x_Skin", { 9, { { Shader::Float3, Shader::Position }, { Shader::UByte4, Shader::BlendIndices }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 } } } },
-            { "BloomExtractHot", { 2, { { Shader::Float4, Shader::Position }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float3, Shader::Texcoord0 } } } },
-            { "LitTextureEye_Skin", { 9, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color1 }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 }, { Shader::UByte4, Shader::BlendIndices }, { Shader::Float4, Shader::BlendWeight } } } },
-            { "LitTexture2Alpha2x_Skin", { 18, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color1 }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 }, { Shader::Float2, Shader::Texcoord1 }, { Shader::UByte4, Shader::BlendIndices }, { Shader::Float4, Shader::BlendWeight } } } },
-            { "BloomTint", { 2, { { Shader::Float4, Shader::Position }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float3, Shader::Texcoord0 } } } },
-            { "PlanarShadow_Skin", { 15, { { Shader::Float3, Shader::Position }, { Shader::UByte4, Shader::BlendIndices }, { Shader::D3DColor, Shader::Color0 } } } },
-            { "DATexture", { 2, { { Shader::Float4, Shader::Position }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float4, Shader::Texcoord0 } } } },
-            { "XFadeScrollTexture", { 9, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 } } } },
-            { "LitTexture2IrradSkinSubSurfSpecGameface", { 13, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color1 }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 }, { Shader::UByte4, Shader::BlendIndices }, { Shader::Float4, Shader::BlendWeight } } } },
-            { "NewMethod1", { 9, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 } } } },
-            { "ClipTextureNodepthwrite", { 9, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 } } } },
-            { "DAGouraud", { 2, { { Shader::Float4, Shader::Position }, { Shader::D3DColor, Shader::Color0 } } } },
-            { "TextureApt", { 4, { { Shader::Float3, Shader::Position } } } },
-            { "ClipTextureNodepthwriteFade", { 9, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 } } } },
-            { "Texture2x", { 9, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 } } } },
-            { "LitTexture2Haircap_Skin", { 18, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color1 }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 }, { Shader::Float2, Shader::Texcoord1 }, { Shader::UByte4, Shader::BlendIndices }, { Shader::Float4, Shader::BlendWeight } } } },
-            { "Gouraud", { 2, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color0 } } } },
-            { "IrradLitTextureTransparent2x", { 9, { { Shader::Float3, Shader::Position }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 } } } },
-            { "IrradLitTextureColored2x", { 6, { { Shader::Float3, Shader::Position }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 } } } },
-            { "IrradLitTextureEnvmapMasked2x", { 3, { { Shader::Float3, Shader::Position }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 } } } },
-            { "XFadeFixTexture", { 9, { { Shader::Float3, Shader::Position }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 } } } },
-            { "XFadeDigitalScrollTexture", { 3, { { Shader::Float3, Shader::Position }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 } } } },
-            { "IrradLitTexture2x", { 9, { { Shader::Float3, Shader::Position }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 } } } },
-            { "IrradLitTextureColoured2x", { 6, { { Shader::Float3, Shader::Position }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 } } } },
-            { "ClipTextureAddNodepthwrite", { 9, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 } } } },
-            { "IrradLitGouraud2x", { 3, { { Shader::Float3, Shader::Position }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 } } } },
-            { "IrradLitTextureColouredTransparent2x", { 6, { { Shader::Float3, Shader::Position }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 } } } },
-            { "IrradLitTextureColoredTransparent2x", { 6, { { Shader::Float3, Shader::Position }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 } } } },
-            { "IrradLitTextureEnvmapTransparent2x", { 3, { { Shader::Float3, Shader::Position }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 } } } },
-            //{ "XFadeTexture", 4 }
-            { "FIFACrowda", { 9, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 } } } },
-            { "FIFACrowdh", { 9, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 } } } },
-        };
 
         // get symbols
 
@@ -565,16 +482,24 @@ public:
             if (model && model->mNumLayers) {
                 j.openArray("meshes");
                 unsigned int *modelLayers = (unsigned int *)(model->mLayers);
+                unsigned int modelLayersHeader = *modelLayers;
+                bool isOldFormat = modelLayersHeader == 0xA0000000;
                 modelLayers++;
+                if (isOldFormat)
+                    modelLayers += 2;
                 for (unsigned int i = 0; i < model->mNumLayers; i++) {
                     j.openScope();
                     if (model->mLayerNames[i])
                         j.writeFieldString("name", model->mLayerNames[i]);
                     j.openArray("primitives");
+                    if (isOldFormat)
+                        modelLayers += 2;
                     unsigned int numPrimitives = *modelLayers;
+                    if (isOldFormat)
+                        numPrimitives /= 2;
                     modelLayers++;
                     for (unsigned int p = 0; p < numPrimitives; p++) {
-                        void *renderDescriptor = GetAt<void *>(modelLayers, p * 4);
+                        void *renderDescriptor = GetAt<void *>(modelLayers, isOldFormat ? (p * 8 + 4) : (p * 4));
                         void *renderMethod = GetAt<void *>(renderDescriptor, 0);
                         void *globalParameters = At<void *>(renderDescriptor, 4);
                         GeometryInfo *geometryInfo = GetAt<GeometryInfo *>(globalParameters, 4);
@@ -589,7 +514,7 @@ public:
                         unsigned int numSkinVertexInfos = 0;
                         GeoPrimState *geoPrimState = nullptr;
                         unsigned int geoPrimMode = 5;
-                        Shader shader;
+                        Shader *shader = nullptr;
                         string shaderName;
                         int color1Offset = -1;
                         Material mat;
@@ -603,259 +528,260 @@ public:
                                 string shaderLowered = ToLower(mat.shader);
                                 if (shaderLowered == "cliptextureaddnodepthwrite" || shaderLowered == "cliptexturealphablend" || shaderLowered.find("transparent") != string::npos)
                                     mat.alphaMode = "BLEND";
-                                shader = shaderInfo[shaderName];
-                                if (shader.numTechniques) {
-                                    void *renderCode = GetAt<void *>(renderMethod, 0);
-                                    unsigned int numCommands = 0;
-                                    unsigned int commandOffset = 0;
-                                    unsigned short id = GetAt<unsigned short>(renderCode, commandOffset + 2);
-                                    unsigned short size = GetAt<unsigned short>(renderCode, commandOffset);
-                                    while (id != 0 && (!vertexBuffer || !indexBuffer)) {
-                                        switch (id) {
-                                        case 4:
-                                        case 75: //TODO
-                                            if (!vertexBuffer) {
-                                                vertexBuffer = GetAt<void *>(globalParameters, 4);
-                                                numVertices = GetAt<unsigned int>(globalParameters, 0);
-                                                vertexSize = GetAt<unsigned int>(renderCode, commandOffset + 8);
-                                            }
-                                            break;
-                                        case 7:
-                                            if (!indexBuffer) {
-                                                indexBuffer = GetAt<void *>(globalParameters, 4);
-                                                numIndices = GetAt<unsigned int>(globalParameters, 0); // GetAt<unsigned int>(renderCode, commandOffset + 20) - 1;
-                                                indexSize = GetAt<unsigned int>(renderCode, commandOffset + 4);
-                                            }
-                                            break;
-                                        case 28:
-                                            if (!skinVertexDataBuffer) {
-                                                numSkinVertexInfos = GetAt<unsigned int>(globalParameters, 0);
-                                                skinVertexDataBuffer = GetAt<VertexSkinDataPacked *>(globalParameters, 4);
-                                            }
-                                            break;
-                                        case 33:
-                                            geoPrimState = GetAt<GeoPrimState *>(globalParameters, 4);
-                                            if (geoPrimState) {
-                                                if (geoPrimState->nPrimitiveType == 1)
-                                                    geoPrimMode = 0;
-                                                else if (geoPrimState->nPrimitiveType == 2)
-                                                    geoPrimMode = 1;
-                                                else if (geoPrimState->nPrimitiveType == 3)
-                                                    geoPrimMode = 3;
-                                                else if (geoPrimState->nPrimitiveType == 4)
-                                                    geoPrimMode = 4;
-                                                else if (geoPrimState->nPrimitiveType == 5)
-                                                    geoPrimMode = 5;
-                                                else if (geoPrimState->nPrimitiveType == 6)
-                                                    geoPrimMode = 6;
-                                                if (geoPrimState->bCullEnable == 1)
-                                                    mat.doubleSided = false;
-                                            }
-                                            else {
-                                                it = symbolRelocations.find(unsigned int(At<GeoPrimState *>(globalParameters, 4)) - unsigned int(data));
-                                                if (it != symbolRelocations.end() && (*it).second.st_info == 0x10) {
-                                                    string format = (*it).second.name;
-                                                    auto primTypePos = format.rfind("SetPrimitiveType=");
-                                                    if (primTypePos != string::npos) {
-                                                        string primTypeStr = format.substr(primTypePos + 17);
-                                                        if (primTypeStr.starts_with("EAGL::PT_POINTLIST"))
-                                                            geoPrimMode = 0;
-                                                        else if (primTypeStr.starts_with("EAGL::PT_LINELIST"))
-                                                            geoPrimMode = 1;
-                                                        else if (primTypeStr.starts_with("EAGL::PT_LINESTRIP"))
-                                                            geoPrimMode = 3;
-                                                        else if (primTypeStr.starts_with("EAGL::PT_TRIANGLELIST"))
-                                                            geoPrimMode = 4;
-                                                        else if (primTypeStr.starts_with("EAGL::PT_TRIANGLESTRIP"))
-                                                            geoPrimMode = 5;
-                                                        else if (primTypeStr.starts_with("EAGL::PT_TRIANGLEFAN"))
-                                                            geoPrimMode = 6;
-                                                    }
-
-                                                    auto cullEnablePos = format.rfind("SetCullEnable=");
-                                                    if (cullEnablePos != string::npos) {
-                                                        string cullEnableValue = format.substr(cullEnablePos + 14);
-                                                        if (cullEnableValue == "true")
-                                                            mat.doubleSided = false;
-                                                    }
-                                                }
-                                            }
-                                            break;
-                                        case 9:
-                                        case 32:
-                                            {
-                                                unsigned int samplerIndex = GetAt<unsigned int>(renderCode, commandOffset + 4);
-                                                if (samplerIndex < 3) {
-                                                    Texture tex;
-                                                    TAR const *tar = GetAt<TAR *>(globalParameters, 4);
-                                                    FileSymbol const *texSymbol = nullptr;
-                                                    string tarAttributes;
-                                                    bool isGlobal = false;
-                                                    if (tar) { // local texture
-                                                        char texTag[5];
-                                                        Memory_Copy(texTag, tar->tag, 4);
-                                                        texTag[4] = '\0';
-                                                        tex.name = texTag;
-                                                    }
-                                                    else { // global or runtime-constructed texture
-                                                        unsigned int tarOffset = unsigned int(At<TAR *>(globalParameters, 4)) - unsigned int(data);
-                                                        auto it = symbolRelocations.find(tarOffset);
-                                                        if (it != symbolRelocations.end()) {
-                                                            auto const &s = (*it).second;
-                                                            texSymbol = &s;
-                                                            if (s.name.length() > 14 && s.name.starts_with("__EAGL::TAR:::")) {
-                                                                tarAttributes = s.name.substr(14);
-                                                                if (!tarAttributes.starts_with("RUNTIME_ALLOC")) {
-                                                                    tex.name = "global_" + tarAttributes;
-                                                                    isGlobal = true;
-                                                                }
-                                                                else {
-                                                                    auto shapenamePos = tarAttributes.find("SHAPENAME=");
-                                                                    if (shapenamePos != string::npos) {
-                                                                        auto semiColonPos = tarAttributes.find_first_of(",;", shapenamePos + 10);
-                                                                        if (semiColonPos != string::npos)
-                                                                            tex.name = tarAttributes.substr(shapenamePos + 10, semiColonPos - shapenamePos - 10);
-                                                                        else
-                                                                            tex.name = tarAttributes.substr(shapenamePos + 10);
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                    Texture *pTex = nullptr;
-                                                    if (!tex.name.empty()) {
-                                                        auto texKey = ToLower(tex.name);
-                                                        if (samplerIndex == 1 && (texKey == "spec")) {
-                                                            mat.roughnessFactor = 0.3f;
-                                                            mat.metallicFactor = 0.5f;
-                                                        }
-                                                        else if (samplerIndex == 0) { // temporary disabled additional texture maps
-                                                            auto txit = textures.find(texKey);
-                                                            if (txit != textures.end())
-                                                                pTex = (*txit).second;
-                                                            else {
-                                                                if (tar) {
-                                                                    if (tar->wrapU == 3 || tar->wrapU == 5)
-                                                                        tex.wrapU = 33071; // CLAMP_TO_EDGE
-                                                                    else if (tar->wrapU == 2)
-                                                                        tex.wrapU = 33648; // MIRRORED_REPEAT
-                                                                    if (tar->wrapV == 3 || tar->wrapV == 5)
-                                                                        tex.wrapV = 33071; // CLAMP_TO_EDGE
-                                                                    else if (tar->wrapV == 2)
-                                                                        tex.wrapV = 33648; // MIRRORED_REPEAT
-                                                                }
-                                                                else if (texSymbol) {
-                                                                    if (!isGlobal && !tarAttributes.empty()) {
-                                                                        bool foundU = false, foundV = false;
-                                                                        {
-                                                                            auto attrPos = tarAttributes.rfind("PCEXTOBJ_SetClampU=");
-                                                                            if (attrPos != string::npos) {
-                                                                                string attr;
-                                                                                auto semiColonPos = tarAttributes.find_first_of(";", attrPos + 19);
-                                                                                if (semiColonPos != string::npos)
-                                                                                    attr = tarAttributes.substr(attrPos + 19, semiColonPos - attrPos - 19);
-                                                                                else
-                                                                                    attr = tarAttributes.substr(attrPos + 19);
-                                                                                if (attr == "EAGL::PCCM_CLAMP" || attr == "EAGL::PCCM_CLAMPTOEDGE")
-                                                                                    tex.wrapU = 33071; // CLAMP_TO_EDGE
-                                                                                else if (attr == "EAGL::PCCM_MIRROR")
-                                                                                    tex.wrapU = 33648; // MIRRORED_REPEAT
-                                                                                foundU = true;
-                                                                            }
-                                                                        }
-                                                                        {
-                                                                            auto attrPos = tarAttributes.rfind("PCEXTOBJ_SetClampV=");
-                                                                            if (attrPos != string::npos) {
-                                                                                string attr;
-                                                                                auto semiColonPos = tarAttributes.find_first_of(";", attrPos + 19);
-                                                                                if (semiColonPos != string::npos)
-                                                                                    attr = tarAttributes.substr(attrPos + 19, semiColonPos - attrPos - 19);
-                                                                                else
-                                                                                    attr = tarAttributes.substr(attrPos + 19);
-                                                                                if (attr == "EAGL::PCCM_CLAMP" || attr == "EAGL::PCCM_CLAMPTOEDGE")
-                                                                                    tex.wrapV = 33071; // CLAMP_TO_EDGE
-                                                                                else if (attr == "EAGL::PCCM_MIRROR")
-                                                                                    tex.wrapV = 33648; // MIRRORED_REPEAT
-                                                                                foundV = true;
-                                                                            }
-                                                                        }
-                                                                        if (!foundU && !foundV) {
-                                                                            auto attrPos = tarAttributes.rfind("SetClampMode=");
-                                                                            if (attrPos != string::npos) {
-                                                                                string attr;
-                                                                                auto semiColonPos = tarAttributes.find_first_of(";", attrPos + 13);
-                                                                                if (semiColonPos != string::npos)
-                                                                                    attr = tarAttributes.substr(attrPos + 13, semiColonPos - attrPos - 13);
-                                                                                else
-                                                                                    attr = tarAttributes.substr(attrPos + 13);
-                                                                                if (attr == "EAGL::CM_CLAMP")
-                                                                                    tex.wrapU = tex.wrapV = 33071; // CLAMP_TO_EDGE
-                                                                                else if (attr == "EAGL::CM_MIRROR")
-                                                                                    tex.wrapU = tex.wrapV = 33648; // MIRRORED_REPEAT
-                                                                            }
-                                                                        }
-                                                                        {
-                                                                            auto attrPos = tarAttributes.rfind("SetFilterMode=");
-                                                                            if (attrPos != string::npos) {
-                                                                                string attr;
-                                                                                auto semiColonPos = tarAttributes.find_first_of(";", attrPos + 14);
-                                                                                if (semiColonPos != string::npos)
-                                                                                    attr = tarAttributes.substr(attrPos + 14, semiColonPos - attrPos - 14);
-                                                                                else
-                                                                                    attr = tarAttributes.substr(attrPos + 14);
-                                                                                if (attr == "EAGL::FM_POINT")
-                                                                                    tex.magFilter = 9728; // NEAREST
-                                                                            }
-                                                                        }
-                                                                        {
-                                                                            auto attrPos = tarAttributes.rfind("SetMIPMAPMode=");
-                                                                            if (attrPos != string::npos) {
-                                                                                string attr;
-                                                                                auto semiColonPos = tarAttributes.find_first_of(";", attrPos + 14);
-                                                                                if (semiColonPos != string::npos)
-                                                                                    attr = tarAttributes.substr(attrPos + 14, semiColonPos - attrPos - 14);
-                                                                                else
-                                                                                    attr = tarAttributes.substr(attrPos + 14);
-                                                                                if (attr == "EAGL::MMM_NEAREST")
-                                                                                    tex.minFilter = 9985; // LINEAR_MIPMAP_NEAREST
-                                                                                else if (attr == "EAGL::MMM_LINEAR")
-                                                                                    tex.minFilter = 9987; // LINEAR_MIPMAP_LINEAR
-                                                                            }
-                                                                        }
-                                                                    }
-                                                                }
-                                                                tex.source = tex.name + (options().jpegTextures ? ".jpeg" : ".png");
-                                                                tex.mimeType = string("image/") + (options().jpegTextures ? "jpeg" : "png");
-                                                                pTex = new Texture(tex);
-                                                                textures[texKey] = pTex;
-                                                            }
-                                                        }
-                                                    }
-                                                    mat.textures[samplerIndex] = pTex;
-                                                }
-                                            }
-                                            break;
+                                shader = globalVars().target->FindShader(shaderName);
+                                void *renderCode = GetAt<void *>(renderMethod, 0);
+                                unsigned int numCommands = 0;
+                                unsigned int commandOffset = 0;
+                                unsigned short id = GetAt<unsigned short>(renderCode, commandOffset + 2);
+                                unsigned short size = GetAt<unsigned short>(renderCode, commandOffset);
+                                while (id != 0 && (!vertexBuffer || !indexBuffer)) {
+                                    switch (id) {
+                                    case 4:
+                                    case 75: //TODO
+                                        if (!vertexBuffer) {
+                                            vertexBuffer = GetAt<void *>(globalParameters, 4);
+                                            numVertices = GetAt<unsigned int>(globalParameters, 0);
+                                            vertexSize = GetAt<unsigned int>(renderCode, commandOffset + 8);
                                         }
-                                        if (numCommands != 0)
-                                            globalParameters = At<void *>(globalParameters, 8);
-                                        numCommands++;
-                                        commandOffset += size * 4;
-                                        id = GetAt<unsigned short>(renderCode, commandOffset + 2);
-                                        size = GetAt<unsigned short>(renderCode, commandOffset);
+                                        break;
+                                    case 7:
+                                        if (!indexBuffer) {
+                                            indexBuffer = GetAt<void *>(globalParameters, 4);
+                                            numIndices = GetAt<unsigned int>(globalParameters, 0); // GetAt<unsigned int>(renderCode, commandOffset + 20) - 1;
+                                            indexSize = GetAt<unsigned int>(renderCode, commandOffset + 4);
+                                        }
+                                        break;
+                                    case 28:
+                                        if (!skinVertexDataBuffer) {
+                                            numSkinVertexInfos = GetAt<unsigned int>(globalParameters, 0);
+                                            skinVertexDataBuffer = GetAt<VertexSkinDataPacked *>(globalParameters, 4);
+                                        }
+                                        break;
+                                    case 33:
+                                        geoPrimState = GetAt<GeoPrimState *>(globalParameters, 4);
+                                        if (geoPrimState) {
+                                            if (geoPrimState->nPrimitiveType == 1)
+                                                geoPrimMode = 0;
+                                            else if (geoPrimState->nPrimitiveType == 2)
+                                                geoPrimMode = 1;
+                                            else if (geoPrimState->nPrimitiveType == 3)
+                                                geoPrimMode = 3;
+                                            else if (geoPrimState->nPrimitiveType == 4)
+                                                geoPrimMode = 4;
+                                            else if (geoPrimState->nPrimitiveType == 5)
+                                                geoPrimMode = 5;
+                                            else if (geoPrimState->nPrimitiveType == 6)
+                                                geoPrimMode = 6;
+                                            if (geoPrimState->bCullEnable == 1)
+                                                mat.doubleSided = false;
+                                        }
+                                        else {
+                                            it = symbolRelocations.find(unsigned int(At<GeoPrimState *>(globalParameters, 4)) - unsigned int(data));
+                                            if (it != symbolRelocations.end() && (*it).second.st_info == 0x10) {
+                                                string format = (*it).second.name;
+                                                auto primTypePos = format.rfind("SetPrimitiveType=");
+                                                if (primTypePos != string::npos) {
+                                                    string primTypeStr = format.substr(primTypePos + 17);
+                                                    if (primTypeStr.starts_with("EAGL::PT_POINTLIST"))
+                                                        geoPrimMode = 0;
+                                                    else if (primTypeStr.starts_with("EAGL::PT_LINELIST"))
+                                                        geoPrimMode = 1;
+                                                    else if (primTypeStr.starts_with("EAGL::PT_LINESTRIP"))
+                                                        geoPrimMode = 3;
+                                                    else if (primTypeStr.starts_with("EAGL::PT_TRIANGLELIST"))
+                                                        geoPrimMode = 4;
+                                                    else if (primTypeStr.starts_with("EAGL::PT_TRIANGLESTRIP"))
+                                                        geoPrimMode = 5;
+                                                    else if (primTypeStr.starts_with("EAGL::PT_TRIANGLEFAN"))
+                                                        geoPrimMode = 6;
+                                                }
+
+                                                auto cullEnablePos = format.rfind("SetCullEnable=");
+                                                if (cullEnablePos != string::npos) {
+                                                    string cullEnableValue = format.substr(cullEnablePos + 14);
+                                                    if (cullEnableValue == "true")
+                                                        mat.doubleSided = false;
+                                                }
+                                            }
+                                        }
+                                        break;
+                                    case 9:
+                                    case 32:
+                                        {
+                                            unsigned int samplerIndex = GetAt<unsigned int>(renderCode, commandOffset + 4);
+                                            if (samplerIndex < 3) {
+                                                Texture tex;
+                                                TAR const *tar = GetAt<TAR *>(globalParameters, 4);
+                                                FileSymbol const *texSymbol = nullptr;
+                                                string tarAttributes;
+                                                bool isGlobal = false;
+                                                if (tar) { // local texture
+                                                    char texTag[5];
+                                                    Memory_Copy(texTag, tar->tag, 4);
+                                                    texTag[4] = '\0';
+                                                    tex.name = texTag;
+                                                }
+                                                else { // global or runtime-constructed texture
+                                                    unsigned int tarOffset = unsigned int(At<TAR *>(globalParameters, 4)) - unsigned int(data);
+                                                    auto it = symbolRelocations.find(tarOffset);
+                                                    if (it != symbolRelocations.end()) {
+                                                        auto const &s = (*it).second;
+                                                        texSymbol = &s;
+                                                        if (s.name.length() > 14 && s.name.starts_with("__EAGL::TAR:::")) {
+                                                            tarAttributes = s.name.substr(14);
+                                                            if (!tarAttributes.starts_with("RUNTIME_ALLOC")) {
+                                                                tex.name = "global_" + tarAttributes;
+                                                                isGlobal = true;
+                                                            }
+                                                            else {
+                                                                auto shapenamePos = tarAttributes.find("SHAPENAME=");
+                                                                if (shapenamePos != string::npos) {
+                                                                    auto semiColonPos = tarAttributes.find_first_of(",;", shapenamePos + 10);
+                                                                    if (semiColonPos != string::npos)
+                                                                        tex.name = tarAttributes.substr(shapenamePos + 10, semiColonPos - shapenamePos - 10);
+                                                                    else
+                                                                        tex.name = tarAttributes.substr(shapenamePos + 10);
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                Texture *pTex = nullptr;
+                                                if (!tex.name.empty()) {
+                                                    auto texKey = ToLower(tex.name);
+                                                    if (samplerIndex == 1 && (texKey == "spec")) {
+                                                        mat.roughnessFactor = 0.3f;
+                                                        mat.metallicFactor = 0.5f;
+                                                    }
+                                                    else if (samplerIndex == 0) { // temporary disabled additional texture maps
+                                                        auto txit = textures.find(texKey);
+                                                        if (txit != textures.end())
+                                                            pTex = (*txit).second;
+                                                        else {
+                                                            if (tar) {
+                                                                if (tar->wrapU == 3 || tar->wrapU == 5)
+                                                                    tex.wrapU = 33071; // CLAMP_TO_EDGE
+                                                                else if (tar->wrapU == 2)
+                                                                    tex.wrapU = 33648; // MIRRORED_REPEAT
+                                                                if (tar->wrapV == 3 || tar->wrapV == 5)
+                                                                    tex.wrapV = 33071; // CLAMP_TO_EDGE
+                                                                else if (tar->wrapV == 2)
+                                                                    tex.wrapV = 33648; // MIRRORED_REPEAT
+                                                            }
+                                                            else if (texSymbol) {
+                                                                if (!isGlobal && !tarAttributes.empty()) {
+                                                                    bool foundU = false, foundV = false;
+                                                                    {
+                                                                        auto attrPos = tarAttributes.rfind("PCEXTOBJ_SetClampU=");
+                                                                        if (attrPos != string::npos) {
+                                                                            string attr;
+                                                                            auto semiColonPos = tarAttributes.find_first_of(";", attrPos + 19);
+                                                                            if (semiColonPos != string::npos)
+                                                                                attr = tarAttributes.substr(attrPos + 19, semiColonPos - attrPos - 19);
+                                                                            else
+                                                                                attr = tarAttributes.substr(attrPos + 19);
+                                                                            if (attr == "EAGL::PCCM_CLAMP" || attr == "EAGL::PCCM_CLAMPTOEDGE")
+                                                                                tex.wrapU = 33071; // CLAMP_TO_EDGE
+                                                                            else if (attr == "EAGL::PCCM_MIRROR")
+                                                                                tex.wrapU = 33648; // MIRRORED_REPEAT
+                                                                            foundU = true;
+                                                                        }
+                                                                    }
+                                                                    {
+                                                                        auto attrPos = tarAttributes.rfind("PCEXTOBJ_SetClampV=");
+                                                                        if (attrPos != string::npos) {
+                                                                            string attr;
+                                                                            auto semiColonPos = tarAttributes.find_first_of(";", attrPos + 19);
+                                                                            if (semiColonPos != string::npos)
+                                                                                attr = tarAttributes.substr(attrPos + 19, semiColonPos - attrPos - 19);
+                                                                            else
+                                                                                attr = tarAttributes.substr(attrPos + 19);
+                                                                            if (attr == "EAGL::PCCM_CLAMP" || attr == "EAGL::PCCM_CLAMPTOEDGE")
+                                                                                tex.wrapV = 33071; // CLAMP_TO_EDGE
+                                                                            else if (attr == "EAGL::PCCM_MIRROR")
+                                                                                tex.wrapV = 33648; // MIRRORED_REPEAT
+                                                                            foundV = true;
+                                                                        }
+                                                                    }
+                                                                    if (!foundU && !foundV) {
+                                                                        auto attrPos = tarAttributes.rfind("SetClampMode=");
+                                                                        if (attrPos != string::npos) {
+                                                                            string attr;
+                                                                            auto semiColonPos = tarAttributes.find_first_of(";", attrPos + 13);
+                                                                            if (semiColonPos != string::npos)
+                                                                                attr = tarAttributes.substr(attrPos + 13, semiColonPos - attrPos - 13);
+                                                                            else
+                                                                                attr = tarAttributes.substr(attrPos + 13);
+                                                                            if (attr == "EAGL::CM_CLAMP")
+                                                                                tex.wrapU = tex.wrapV = 33071; // CLAMP_TO_EDGE
+                                                                            else if (attr == "EAGL::CM_MIRROR")
+                                                                                tex.wrapU = tex.wrapV = 33648; // MIRRORED_REPEAT
+                                                                        }
+                                                                    }
+                                                                    {
+                                                                        auto attrPos = tarAttributes.rfind("SetFilterMode=");
+                                                                        if (attrPos != string::npos) {
+                                                                            string attr;
+                                                                            auto semiColonPos = tarAttributes.find_first_of(";", attrPos + 14);
+                                                                            if (semiColonPos != string::npos)
+                                                                                attr = tarAttributes.substr(attrPos + 14, semiColonPos - attrPos - 14);
+                                                                            else
+                                                                                attr = tarAttributes.substr(attrPos + 14);
+                                                                            if (attr == "EAGL::FM_POINT")
+                                                                                tex.magFilter = 9728; // NEAREST
+                                                                        }
+                                                                    }
+                                                                    {
+                                                                        auto attrPos = tarAttributes.rfind("SetMIPMAPMode=");
+                                                                        if (attrPos != string::npos) {
+                                                                            string attr;
+                                                                            auto semiColonPos = tarAttributes.find_first_of(";", attrPos + 14);
+                                                                            if (semiColonPos != string::npos)
+                                                                                attr = tarAttributes.substr(attrPos + 14, semiColonPos - attrPos - 14);
+                                                                            else
+                                                                                attr = tarAttributes.substr(attrPos + 14);
+                                                                            if (attr == "EAGL::MMM_NEAREST")
+                                                                                tex.minFilter = 9985; // LINEAR_MIPMAP_NEAREST
+                                                                            else if (attr == "EAGL::MMM_LINEAR")
+                                                                                tex.minFilter = 9987; // LINEAR_MIPMAP_LINEAR
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                            tex.source = tex.name + (options().jpegTextures ? ".jpeg" : ".png");
+                                                            tex.mimeType = string("image/") + (options().jpegTextures ? "jpeg" : "png");
+                                                            pTex = new Texture(tex);
+                                                            textures[texKey] = pTex;
+                                                        }
+                                                    }
+                                                }
+                                                mat.textures[samplerIndex] = pTex;
+                                            }
+                                        }
+                                        break;
                                     }
+                                    if (numCommands != 0)
+                                        globalParameters = At<void *>(globalParameters, 8);
+                                    numCommands++;
+                                    commandOffset += size * 4;
+                                    id = GetAt<unsigned short>(renderCode, commandOffset + 2);
+                                    size = GetAt<unsigned short>(renderCode, commandOffset);
                                 }
-                                //else {
-                                //    Error("Shader can't be found (%s) in file %s", codeName.c_str(), outPath.filename().string().c_str());
-                                //}
                             }
                         }
                         j.openScope();
                         if (vertexBuffer) {
+                            if (!shader) {
+                                if (skinVertexDataBuffer)
+                                    shader = &DummyShader_Skin;
+                                else
+                                    shader = &DummyShader;
+                            }
                             j.openScope("attributes");
                             unsigned int attrOffset = 0;
                             bool hasBlendIndices = false;
                             bool hasBlendWeights = false;
-                            for (auto const &d : shader.declaration) {
+                            for (auto const &d : shader->declaration) {
                                 if (d.usage == Shader::BlendIndices)
                                     hasBlendIndices = true;
                                 else if (d.usage == Shader::BlendWeight)
@@ -863,7 +789,7 @@ public:
                             }
                             bool uses2Streams = skinVertexDataBuffer && hasBlendIndices && hasBlendWeights;
                             unsigned int streamNumber = 0;
-                            for (auto const &d : shader.declaration) {
+                            for (auto const &d : shader->declaration) {
                                 switch (d.usage) {
                                 case Shader::Position:
                                     j.writeFieldInt("POSITION", accessors.size());
@@ -901,7 +827,10 @@ public:
                                 }
                                 Accessor a;
                                 a.offset = attrOffset;
-                                switch (d.type) {
+                                auto declType = d.type;
+                                if (d.usage == Shader::BlendWeight && declType == Shader::Float3)
+                                    declType = Shader::Float4;
+                                switch (declType) {
                                 case Shader::Float4:
                                     a.type = "VEC4";
                                     a.componentType = 5126;
@@ -1045,7 +974,7 @@ public:
                         j.writeFieldInt("material", materialId);
                         j.closeScope();
                     }
-                    modelLayers += numPrimitives;
+                    modelLayers += numPrimitives * (isOldFormat? 2 : 1);
                     j.closeArray();
                     j.closeScope();
                 }
@@ -1273,21 +1202,11 @@ public:
     }
 
     void convert_o_to_gltf(path const &inPath, path const &outPath) {
-        FILE *f = _wfopen(inPath.c_str(), L"rb");
-        if (f) {
-            fseek(f, 0, SEEK_END);
-            unsigned int fileSize = ftell(f);
-            fseek(f, 0, SEEK_SET);
-            unsigned char *fileData = new unsigned char[fileSize];
-            if (fread(fileData, 1, fileSize, f) == fileSize)
-                convert_o_to_gltf(fileData, fileSize, outPath);
-            //else
-            //    Error(L"failed to read %s", inPath.c_str());
-            delete[] fileData;
-            fclose(f);
+        auto fileData = readofile(inPath);
+        if (fileData.first) {
+            convert_o_to_gltf(fileData.first, fileData.second, outPath);
+            delete[] fileData.first;
         }
-        //else
-        //    Error(L"failed to open %s", inPath.c_str());
     }
 };
 

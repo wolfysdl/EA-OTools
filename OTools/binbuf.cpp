@@ -105,6 +105,19 @@ bool BinaryBuffer::WriteToFile(std::filesystem::path const &filepath) {
     return result;
 }
 
+bool BinaryBuffer::WriteToFile(std::filesystem::path const &filepath, unsigned int from, unsigned int size) {
+    if ((from + size) > Size())
+        return false;
+    FILE *f = _wfopen(filepath.c_str(), L"wb");
+    bool result = false;
+    if (f) {
+        if (fwrite(mData + from, size, 1, f) == 1)
+            result = true;
+        fclose(f);
+    }
+    return result;
+}
+
 bool BinaryBuffer::Compare(BinaryBuffer const &otherBuf) {
     if (mSize == otherBuf.mSize)
         return mSize == 0 || !memcmp(mData, otherBuf.mData, mSize);

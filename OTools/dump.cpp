@@ -27,7 +27,6 @@ string Writer::mResult;
 unsigned int Writer::mSpacing = 0;
 const unsigned int SPACING = 4;
 map<unsigned int, Symbol> symbolRelocations;
-map<string, unsigned int> codeTechniques;
 void *currentData = nullptr;
 
 void Writer::openScope(string const &title, unsigned int offset, string const &comment) {
@@ -391,22 +390,40 @@ unsigned int WriteModel(void *baseObj, string const &name, unsigned char *data, 
 }
 
 unsigned int WriteRenderMethod(void *baseObj, string const &name, unsigned char *data, unsigned int offset) {
-    return WriteObjectWithFields(baseObj, "RenderMethod", name, data, offset,
-        {
-            { "OFFSET", "CodeBlock" },
-            { "OFFSET", "UsedCodeBlock" },
-            { "OFFSET", "MicroCode" },
-            { "OFFSET", "Effect" },
-            { "OFFSET", "Parent" },
-            { "OFFSET", "ParameterNames" },
-            { "INT32", "unknown2" },
-            { "INT32", "unknown3" },
-            { "OFFSET", "unknown4" },
-            { "OFFSET", "GeometryDataBuffer" },
-            { "INT32", "ComputationIndexCommand" },
-            { "NAMEOFFSET", "Name" },
-            { "OFFSET", "EAGLModel" }
-        });
+    if (globalVars().target->Version() <= 2) {
+        return WriteObjectWithFields(baseObj, "RenderMethod", name, data, offset,
+            {
+                { "OFFSET", "CodeBlock" },
+                { "OFFSET", "UsedCodeBlock" },
+                { "OFFSET", "MicroCode" },
+                { "OFFSET", "Effect" },
+                { "OFFSET", "Parent" },
+                { "OFFSET", "ParameterNames" },
+                { "INT32", "unknown2" },
+                { "INT32", "unknown3" },
+                { "OFFSET", "unknown4" },
+                { "OFFSET", "GeometryDataBuffer" },
+                { "INT32", "ComputationIndexCommand" }
+            });
+    }
+    else {
+        return WriteObjectWithFields(baseObj, "RenderMethod", name, data, offset,
+            {
+                { "OFFSET", "CodeBlock" },
+                { "OFFSET", "UsedCodeBlock" },
+                { "OFFSET", "MicroCode" },
+                { "OFFSET", "Effect" },
+                { "OFFSET", "Parent" },
+                { "OFFSET", "ParameterNames" },
+                { "INT32", "unknown2" },
+                { "INT32", "unknown3" },
+                { "OFFSET", "unknown4" },
+                { "OFFSET", "GeometryDataBuffer" },
+                { "INT32", "ComputationIndexCommand" },
+                { "NAMEOFFSET", "Name" },
+                { "OFFSET", "EAGLModel" }
+            });
+    }
 }
 
 unsigned int WriteModelTexture(void *baseObj, string const &name, unsigned char *data, unsigned int offset) {
@@ -685,9 +702,9 @@ unsigned int WriteGeoPrimDataBuffer(void *baseObj, string const &name, unsigned 
     if (it != symbolRelocations.end() && (*it).second.st_info == 0x10) {
         string codeName = (*it).second.name;
         if (codeName.ends_with("__EAGLMicroCode")) {
-            unsigned int numTechniques = codeTechniques[codeName.substr(0, codeName.length() - 15)];
-            if (numTechniques)
-                bytesWritten += WriteObject(baseObj, "RenderCode", "RenderCode", data, offset + bytesWritten, options().onlyFirstTechnique ? 1 : numTechniques);
+            auto codeShader = globalVars().target->FindShader(codeName.substr(0, codeName.length() - 15));
+            unsigned int numTechniques = codeShader ? codeShader->numTechniques : 1;
+            bytesWritten += WriteObject(baseObj, "RenderCode", "RenderCode", data, offset + bytesWritten, options().onlyFirstTechnique ? 1 : numTechniques);
         }
     }
     Writer::closeScope();
@@ -803,62 +820,6 @@ void InitAnalyzer() {
     GetStructs()["indexbuffer"] = WriteIndexBuffer;
     GetStructs()["texture"] = WriteTexture;
     GetStructs()["boneweightsbuffer"] = WriteBoneWeightsBuffer;
-
-    codeTechniques = {
-        { "PlayerIDShader", 9 },
-        { "ClipTextureAlphablend", 9 },
-        { "PitchLitMow", 9 },
-        { "LitTextureIrradEnvmap_Skin", 3 },
-        { "PostFX", 2 },
-        { "Gouraud_Skin", 9 },
-        { "LitTextureIrradEnvmap", 9 },
-        { "LitTexture2IrradSkinSubSurfSpec", 9 },
-        { "LitTextureIrradSpecMap_Skin", 9 },
-        { "ClipTextureNodepthwriteWithAlpha", 9 },
-        { "GouraudApt", 2 },
-        { "LitGouraud", 2 },
-        { "LitTexture2IrradSpecMap_Skin", 17 },
-        { "LitTexture4Head_Skin", 3 },
-        { "LitTexture2Hair_Skin", 18 },
-        { "NewMethod2", 9 },
-        { "PlanarShadow", 12 },
-        { "ClipTextureModulateNodepthwrite", 9 },
-        { "LitTexture2x_Skin", 9 },
-        { "ClipTextureNoalphablend", 9 },
-        { "LitTexture2x", 9 },
-        { "Texture2x_Skin", 9 },
-        { "BloomExtractHot", 2 },
-        { "LitTextureEye_Skin", 9 },
-        { "LitTexture2Alpha2x_Skin", 18 },
-        { "BloomTint", 2 },
-        { "PlanarShadow_Skin", 15 },
-        { "DATexture", 2 },
-        { "XFadeScrollTexture", 9 },
-        { "LitTexture2IrradSkinSubSurfSpecGameface", 13 },
-        { "NewMethod1", 9 },
-        { "ClipTextureNodepthwrite", 9 },
-        { "DAGouraud", 2 },
-        { "TextureApt", 4 },
-        { "ClipTextureNodepthwriteFade", 9 },
-        { "Texture2x", 9 },
-        { "LitTexture2Haircap_Skin", 18 },
-        { "Gouraud", 2 },
-        { "IrradLitTextureTransparent2x", 9 },
-        { "IrradLitTextureColored2x", 6 },
-        { "IrradLitTextureEnvmapMasked2x", 3 },
-        { "XFadeFixTexture", 9 },
-        { "XFadeDigitalScrollTexture", 3 },
-        { "IrradLitTexture2x", 9 },
-        { "IrradLitTextureColoured2x", 6 },
-        { "ClipTextureAddNodepthwrite", 9 },
-        { "IrradLitGouraud2x", 3 },
-        { "IrradLitTextureColouredTransparent2x", 6 },
-        { "IrradLitTextureColoredTransparent2x", 6 },
-        { "IrradLitTextureEnvmapTransparent2x", 3 },
-        { "XFadeTexture", 4 },
-        { "FIFACrowda", 9 },
-        { "FIFACrowdh", 9 },
-    };
 }
 
 void AnalyzeFile(string const &filename, unsigned char *fileData, unsigned int fileDataSize, vector<Symbol> const &symbols, vector<Relocation> const &references) {
@@ -949,11 +910,19 @@ void AnalyzeFile(string const &filename, unsigned char *fileData, unsigned int f
                 unsigned int modelLayersOffset = GetAt<unsigned int>(model, 0xCC);
                 AddObjectInfo("ModelLayers", Format("ModelLayers.%X", modelLayersOffset), modelLayersOffset, 0, model);
                 void *modelLayers = At<void *>(fileData, modelLayersOffset);
-                unsigned int *rd = At<unsigned int>(modelLayers, 4);
+                unsigned int modelLayersHeader = GetAt<unsigned int>(modelLayers, 0);
+                bool isOldFormat = modelLayersHeader == 0xA0000000;
+                unsigned int *rd = At<unsigned int>(modelLayers, isOldFormat ? 12 : 4);
                 for (unsigned int i = 0; i < numLayers; i++) {
+                    if (isOldFormat)
+                        rd += 2;
                     unsigned int numRenderDescriptors = *rd;
+                    if (isOldFormat)
+                        numRenderDescriptors /= 2;
                     rd++;
                     for (unsigned int d = 0; d < numRenderDescriptors; d++) {
+                        if (isOldFormat)
+                            rd++;
                         unsigned int renderDescriptorOffset = *rd;
                         rd++;
                         void *renderDescriptor = At<void *>(fileData, renderDescriptorOffset);
@@ -966,7 +935,8 @@ void AnalyzeFile(string const &filename, unsigned char *fileData, unsigned int f
                         if (it != symbolRelocations.end() && (*it).second.st_info == 0x10) {
                             string codeName = (*it).second.name;
                             if (codeName.ends_with("__EAGLMicroCode")) {
-                                unsigned int numTechniques = codeTechniques[codeName.substr(0, codeName.length() - 15)];
+                                auto codeShader = globalVars().target->FindShader(codeName.substr(0, codeName.length() - 15));
+                                unsigned int numTechniques = codeShader ? codeShader->numTechniques : 1;
                                 if (numTechniques) {
                                     void *renderCode = At<void *>(fileData, GetAt<unsigned int>(renderMethod, 0));
                                     unsigned int numCommands = 0;
@@ -1035,9 +1005,11 @@ void AnalyzeFile(string const &filename, unsigned char *fileData, unsigned int f
         if (s.name.starts_with("__RenderMethod:::")) {
             void *renderMethod = At<void *>(fileData, s.st_value);
             AddObjectInfo("RenderMethod", s.name.substr(17), s.st_value, 0, renderMethod);
-            unsigned int nameOffset = GetAt<unsigned int>(renderMethod, 0x2C);
-            if (nameOffset) // TODO: replace with IsValidOffset()
-                AddObjectInfo("NAMEALIGNED", Format("Name.%X", nameOffset), nameOffset, 0, renderMethod);
+            if (globalVars().target->Version() >= 3) {
+                unsigned int nameOffset = GetAt<unsigned int>(renderMethod, 0x2C);
+                if (nameOffset) // TODO: replace with IsValidOffset()
+                    AddObjectInfo("NAMEALIGNED", Format("Name.%X", nameOffset), nameOffset, 0, renderMethod);
+            }
             unsigned int geoBuf = GetAt<unsigned int>(renderMethod, 0x24);
             if (geoBuf) // TODO: replace with IsValidOffset()
                 AddObjectInfo("geoprimdatabuffer", Format("geoprimdatabuffer.%X", geoBuf), geoBuf, 0, renderMethod);
@@ -1115,81 +1087,63 @@ GlobalVars &globalVars() {
 
 void odump(path const &out, path const &in) {
     dump::InitAnalyzer();
-    FILE *f = _wfopen(in.c_str(), L"rb");
-    if (f) {
-        fseek(f, 0, SEEK_END);
-        unsigned int fileSize = ftell(f);
-        fseek(f, 0, SEEK_SET);
-        unsigned char *fileData = new unsigned char[fileSize];
-        if (fread(fileData, 1, fileSize, f) == fileSize) {
-            unsigned char *data = nullptr;
-            unsigned int dataSize = 0;
-            Elf32_Sym *symbols = nullptr;
-            unsigned int numSymbols = 0;
-            Elf32_Rel *rel = nullptr;
-            unsigned int numRelocations = 0;
-            char *symbolNames = nullptr;
-            unsigned int symbolNamesSize = 0;
+    auto fileData = readofile(in);
+    if (fileData.first) {
+        unsigned char *data = nullptr;
+        unsigned int dataSize = 0;
+        Elf32_Sym *symbols = nullptr;
+        unsigned int numSymbols = 0;
+        Elf32_Rel *rel = nullptr;
+        unsigned int numRelocations = 0;
+        char *symbolNames = nullptr;
+        unsigned int symbolNamesSize = 0;
 
-            Elf32_Ehdr *h = (Elf32_Ehdr *)fileData;
-            Elf32_Shdr *s = At<Elf32_Shdr>(h, h->e_shoff);
-            for (unsigned int i = 1; i < 6; i++) {
-                if (s[i].sh_size > 0) {
-                    if (s[i].sh_type == 1) {
-                        data = At<unsigned char>(h, s[i].sh_offset);
-                        dataSize = s[i].sh_size;
-                    }
-                    else if (s[i].sh_type == 2) {
-                        symbols = At<Elf32_Sym>(h, s[i].sh_offset);
-                        numSymbols = s[i].sh_size / 16;
-                    }
-                    else if (s[i].sh_type == 3) {
-                        symbolNames = At<char>(h, s[i].sh_offset);
-                        symbolNamesSize = s[i].sh_size;
-                    }
-                    else if (s[i].sh_type == 9) {
-                        rel = At<Elf32_Rel>(h, s[i].sh_offset);
-                        numRelocations = s[i].sh_size / 8;
-                    }
+        Elf32_Ehdr *h = (Elf32_Ehdr *)fileData.first;
+        Elf32_Shdr *s = At<Elf32_Shdr>(h, h->e_shoff);
+        for (unsigned int i = 1; i < 6; i++) {
+            if (s[i].sh_size > 0) {
+                if (s[i].sh_type == 1) {
+                    data = At<unsigned char>(h, s[i].sh_offset);
+                    dataSize = s[i].sh_size;
+                }
+                else if (s[i].sh_type == 2) {
+                    symbols = At<Elf32_Sym>(h, s[i].sh_offset);
+                    numSymbols = s[i].sh_size / 16;
+                }
+                else if (s[i].sh_type == 3) {
+                    symbolNames = At<char>(h, s[i].sh_offset);
+                    symbolNamesSize = s[i].sh_size;
+                }
+                else if (s[i].sh_type == 9) {
+                    rel = At<Elf32_Rel>(h, s[i].sh_offset);
+                    numRelocations = s[i].sh_size / 8;
                 }
             }
-
-            vector<dump::Symbol> vecSymbols;
-            vector<dump::Relocation> vecReferences;
-
-            vecSymbols.resize(numSymbols);
-            vecReferences.resize(numRelocations);
-
-            for (unsigned int i = 0; i < numSymbols; i++) {
-                vecSymbols[i].st_info = symbols[i].st_info;
-                vecSymbols[i].st_name = symbols[i].st_name;
-                vecSymbols[i].st_other = symbols[i].st_other;
-                vecSymbols[i].st_shndx = symbols[i].st_shndx;
-                vecSymbols[i].st_size = symbols[i].st_size;
-                vecSymbols[i].st_value = symbols[i].st_value;
-                vecSymbols[i].name = &symbolNames[symbols[i].st_name];
-            }
-
-            for (unsigned int i = 0; i < numRelocations; i++) {
-                vecReferences[i].r_info_sym = rel[i].r_info_sym;
-                vecReferences[i].r_info_type = rel[i].r_info_type;
-                vecReferences[i].r_offset = rel[i].r_offset;
-            }
-
-            // TODO: check relocation types and symbols
-
-            //Elf32_Rel *rel = (Elf32_Rel *)(&fileData[s[i].sh_offset]);
-            //for (int ss = 0; ss < count; ss++) {
-            //    if (rel->r_info_type != 2) {
-            //        Error(L"rel.data info type (%d) is not 2 in elf %s", rel->r_info_type, fileNameForError.c_str());
-            //    }
-            //}
-            AnalyzeFile(in.filename().string(), data, dataSize, vecSymbols, vecReferences);
         }
-        //else
-        //    Error(L"failed to read %s", inPath.c_str());
-        delete[] fileData;
-        fclose(f);
+
+        vector<dump::Symbol> vecSymbols;
+        vector<dump::Relocation> vecReferences;
+
+        vecSymbols.resize(numSymbols);
+        vecReferences.resize(numRelocations);
+
+        for (unsigned int i = 0; i < numSymbols; i++) {
+            vecSymbols[i].st_info = symbols[i].st_info;
+            vecSymbols[i].st_name = symbols[i].st_name;
+            vecSymbols[i].st_other = symbols[i].st_other;
+            vecSymbols[i].st_shndx = symbols[i].st_shndx;
+            vecSymbols[i].st_size = symbols[i].st_size;
+            vecSymbols[i].st_value = symbols[i].st_value;
+            vecSymbols[i].name = &symbolNames[symbols[i].st_name];
+        }
+
+        for (unsigned int i = 0; i < numRelocations; i++) {
+            vecReferences[i].r_info_sym = rel[i].r_info_sym;
+            vecReferences[i].r_info_type = rel[i].r_info_type;
+            vecReferences[i].r_offset = rel[i].r_offset;
+        }
+        AnalyzeFile(in.filename().string(), data, dataSize, vecSymbols, vecReferences);
+        delete[] fileData.first;
     }
     ofstream w(out, ios::out);
     if (w.is_open())
