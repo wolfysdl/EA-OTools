@@ -16,6 +16,7 @@ using namespace std::filesystem;
 struct GlobalOptions {
     bool processingFolders = false;
     // import options
+    unsigned int hwnd = 0;
     float scale = 1.0f;
     bool tristrip = false;
     bool embeddedTextures = false;
@@ -45,6 +46,10 @@ struct GlobalOptions {
     unsigned int pad = 0;
     unsigned int padFsh = 0;
     bool ignoreEmbeddedTextures = false;
+    unsigned int instances = 0;
+    int computationIndex = -1;
+    // game-specific
+    bool gl20 = false; // fifa 07
     // export options
     bool noTextures = false;
     bool dummyTextures = false;

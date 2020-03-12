@@ -648,6 +648,7 @@ void oimport(path const &out, path const &in) {
     Target *target = globalVars().target;
     if (!target)
         throw runtime_error("Unknown target");
+    string targetName = target->Name();
     Assimp::Importer importer;
     importer.SetPropertyInteger(AI_CONFIG_PP_SBP_REMOVE, aiPrimitiveType_POINT | aiPrimitiveType_LINE);
     //importer.SetPropertyInteger(AI_CONFIG_IMPORT_REMOVE_EMPTY_BONES, 0);
@@ -685,7 +686,7 @@ void oimport(path const &out, path const &in) {
     bool hasLights = scene->HasLights() || options().forceLighting;
     const unsigned int ZERO = 0;
     const unsigned int ONE = 1;
-    const unsigned int ANIM_VERSION = 0xC0DA;
+    unsigned int ANIM_VERSION = target->AnimVersion();
     const int MINONE = -1;
     const float FONE = 1.0f;
     const float FZERO = 0.0f;
@@ -700,7 +701,11 @@ void oimport(path const &out, path const &in) {
     map<string, vector<unsigned int>> relocations;
     Modifiables modifiables;
     unsigned int numVariations = 1;
+    if (options().instances != 0)
+        numVariations = options().instances;
     unsigned short computationIndex = 2;
+    if (options().computationIndex != -1)
+        numVariations = unsigned short(options().computationIndex);
     vector<Node> nodes;
     map<string, BoneInfo> bones; // name -> [index, aiBone]
     map<string, Tex> textures;
@@ -916,13 +921,20 @@ void oimport(path const &out, path const &in) {
             };
 
             if (!hasReflectionTex && !hasSpecularTex &&
-                (shader->nameLowered == "littextureirradenvmap" || shader->nameLowered == "irradlittextureenvmaptransparent2x")) // TODO: check skin?
+                (
+                    shader->nameLowered == "littextureirradenvmap" ||
+                    shader->nameLowered == "irradlittextureenvmaptransparent2x" ||
+                    shader->nameLowered == "littextureirradenvmap_skin"
+                )
+                )
             {
                 AddTexToSlot(1, "spec");
                 hasSpecularTex = true;
             }
             else if (shader->nameLowered == "littexture4head_skin")
                 AddTexToSlot(1, "tp02");
+            else if (shader->nameLowered == "littexture2irradskinsubsurfspec")
+                AddTexToSlot(1, options().gl20 ? "gl20" : "glos");
 
             isMeshSkinned = shader->HasAttribute(Shader::BlendWeight) && shader->HasAttribute(Shader::BlendIndices) && shader->HasAttribute(Shader::Color1);
             bool useSkinning = isMeshSkinned && meshHasBones;
@@ -2014,7 +2026,7 @@ void oimport(path const &out, path const &in) {
         bufElf.WriteToFile(out, 0, sectionOffsets[2]);
         auto orlPath = out;
         orlPath.replace_extension(outExt == ".ORD" ? ".ORL" : ".orl");
-        bufElf.WriteToFile(out, sectionOffsets[2], bufElf.Size() - sectionNamesOffets[2]);
+        bufElf.WriteToFile(orlPath, sectionOffsets[2], bufElf.Size() - sectionOffsets[2]);
     }
 
     struct TextureToAdd {
@@ -2176,18 +2188,68 @@ void oimport(path const &out, path const &in) {
             unsigned int playerId = 0;
             if (sscanf(modelName.substr(6).c_str(), "%d", &playerId) == 1) {
                 string playerIdStr = to_string(playerId);
-                map<string, TextureToAdd> fshTextures1;
                 auto storedLevels = options().fshLevels;
                 auto storedFormat = options().fshFormat;
+                auto storedPad = options().padFsh;
+
+                // writing t21__
+
                 options().fshLevels = 99;
                 options().fshFormat = D3DFMT_DXT1;
+                if (targetName == "FIFA06" || targetName == "FIFA07" || targetName == "FIFA08" || targetName == "FIFA09")
+                    options().fshLevels = 1;
+                else if (targetName == "FIFA10")
+                    options().fshLevels = 99;
+                if (targetName == "FIFA06" || targetName == "FIFA07")
+                    options().padFsh = 16'656;
+                else if (targetName == "FIFA08" || targetName == "FIFA09")
+                    options().padFsh = 65'808;
+                else if (targetName == "FIFA10")
+                    options().padFsh = 87'648;
+                string t21filesuffix = "_0_0_0_0";
+                if (targetName == "FIFA06" || targetName == "FIFA07" || targetName == "FIFA08")
+                    t21filesuffix = "_0_0";
+                map<string, TextureToAdd> fshTextures1;
                 fshTextures1["tp01"] = { "tp01", "tp01@" + playerIdStr };
-                WriteFsh(out.parent_path() / ("t21__" + playerIdStr + "_0_0_0_0.fsh"), in.parent_path(), fshTextures1);
-                //map<string, pair<string, string>> fshTextures2;
-                //fshTextures2["tp02"] = { "tp02", "tp02@" + playerIdStr };
-                //WriteFsh(out.parent_path() / ("t22__" + playerIdStr + "_0.fsh"), in.parent_path(), fshTextures2);
+                if (options().gl20)
+                    fshTextures1["gl20"] = { "gl20", "gl20" };
+                for (auto const &a : options().fshAddTextures) {
+                    path ap = a;
+                    string afilename = ap.stem().string();
+                    if (!afilename.empty()) {
+                        if (afilename.length() > 4)
+                            afilename = afilename.substr(0, 4);
+                        string akey = ToLower(afilename);
+                        if (!fshTextures1.contains(akey))
+                            fshTextures1[akey] = { afilename, a };
+                    }
+                }
+                WriteFsh(out.parent_path() / ("t21__" + playerIdStr + t21filesuffix + ".fsh"), in.parent_path(), fshTextures1);
+
+                // writing t22__
+
+                options().fshLevels = 99;
+                options().fshFormat = D3DFMT_DXT5;
+                options().padFsh = storedPad;
+                //if (targetName == "FIFA06" || targetName == "FIFA07")
+                //    options().fshFormat = D3DFMT_A4R4G4B4;
+                //else if (targetName == "FIFA08" || targetName == "FIFA09" || targetName == "FIFA10")
+                //    options().fshFormat = D3DFMT_DXT1;
+                if (targetName == "FIFA06" || targetName == "FIFA07")
+                    options().padFsh = 43'920;
+                else if (targetName == "FIFA08")
+                    options().padFsh = 11'168;
+                else if (targetName == "FIFA09" || targetName == "FIFA10")
+                    options().padFsh = 43'936;
+                if (options().fshFormat != D3DFMT_UNKNOWN) {
+                    map<string, TextureToAdd> fshTextures2;
+                    fshTextures2["tp02"] = { "tp02", "tp02@" + playerIdStr };
+                    WriteFsh(out.parent_path() / ("t22__" + playerIdStr + "_0.fsh"), in.parent_path(), fshTextures2);
+                }
+
                 options().fshLevels = storedLevels;
                 options().fshFormat = storedFormat;
+                options().padFsh = storedPad;
             }
         }
         else {

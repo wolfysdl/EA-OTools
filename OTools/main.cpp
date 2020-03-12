@@ -4,7 +4,7 @@
 #include "errormsg.h"
 #include "Fsh/Fsh.h"
 
-const char *OTOOLS_VERSION = "0.147";
+const char *OTOOLS_VERSION = "0.149";
 
 GlobalOptions &options() {
     static GlobalOptions go;
@@ -22,10 +22,10 @@ enum ErrorType {
 
 int main(int argc, char *argv[]) {
     CommandLine cmd(argc, argv, { "i", "o", "game", "scale", "defaultVCol", "setVCol", "vColScale", "fshOutput", "fshLevels", "fshFormat", "fshTextures",
-        "fshAddTextures", "fshIgnoreTextures", "startsWith", "pad", "padFsh" },
+        "fshAddTextures", "fshIgnoreTextures", "startsWith", "pad", "padFsh", "instances", "computationIndex", "hwnd" },
         { "tristrip", "noTextures", "recursive", "createSubDir", "silent", "console", "onlyFirstTechnique", "dummyTextures", "jpegTextures", "embeddedTextures", 
         "swapYZ", "forceLighting", "noMetadata", "genTexNames", "writeFsh", "fshRescale", "fshDisableTextureIgnore", "preTransformVertices", "sortByName", 
-        "sortByAlpha", "ignoreMatColor", "noMeshJoin", "head", "ignoreEmbeddedTextures", "ord" });
+        "sortByAlpha", "ignoreMatColor", "noMeshJoin", "head", "ignoreEmbeddedTextures", "ord", "gl20" });
     if (cmd.HasOption("silent"))
         SetErrorDisplayType(ErrorDisplayType::ERR_NONE);
     else {
@@ -48,9 +48,9 @@ int main(int argc, char *argv[]) {
             callback = oimport;
             inExt = { ".gltf", ".glb", ".dae", ".fbx", ".obj", ".blend", ".3ds" };
             if (cmd.HasOption("ord"))
-                targetExt = ".o";
-            else
                 targetExt = ".ord";
+            else
+                targetExt = ".o";
         }
         else if (opTypeStr == "export") {
             opType = OperationType::EXPORT;
@@ -88,6 +88,8 @@ int main(int argc, char *argv[]) {
         ErrorMessage("Input path does not exist");
         return ErrorType::INVALID_INPUT_PATH;
     }
+    if (cmd.HasArgument("hwnd"))
+        options().hwnd = cmd.GetArgumentInt("hwnd");
     string game = ToLower(cmd.GetArgumentString("game"));
     if (game == "fm") {
         static TargetFM13 defaultFMTarget;
@@ -222,68 +224,75 @@ int main(int argc, char *argv[]) {
         }
         if (cmd.HasOption("genTexNames"))
             options().genTexNames = true;
-        if (cmd.HasOption("writeFsh")) {
-            options().writeFsh = true;
-            if (cmd.HasArgument("fshOutput"))
-                options().fshOutput = cmd.GetArgumentString("fshOutput");
-            ea::Fsh::SetDevice(D3DDevice::GlobalDevice());
-            options().fshLevels = D3DX_DEFAULT;
-            if (cmd.HasArgument("fshLevels")) {
-                options().fshLevels = cmd.GetArgumentInt("fshLevels");
-                if (options().fshLevels == -1 || options().fshLevels == 0)
-                    options().fshLevels = D3DX_FROM_FILE;
-                else if (options().fshLevels < -1 || options().fshLevels > 13)
-                    options().fshLevels = D3DX_DEFAULT;
-            }
-            options().fshFormat = unsigned int(-4);
-            if (cmd.HasArgument("fshFormat")) {
-                string format = ToLower(cmd.GetArgumentString("fshFormat"));
-                if (!format.empty()) {
-                    if (format == "dxt")
-                        options().fshFormat = unsigned int(-4);
-                    else if (format == "rgb" || format == "rgba" || format == "rgb32")
-                        options().fshFormat = unsigned int(-5);
-                    else if (format == "rgb16" || format == "rgba16")
-                        options().fshFormat = unsigned int(-6);
-                    else if (format == "auto")
-                        options().fshFormat = unsigned int(-3);
-                    else if (format == "dxt1")
-                        options().fshFormat = D3DFMT_DXT1;
-                    else if (format == "dxt3")
-                        options().fshFormat = D3DFMT_DXT3;
-                    else if (format == "dxt5")
-                        options().fshFormat = D3DFMT_DXT5;
-                    else if (format == "8888")
-                        options().fshFormat = D3DFMT_A8R8G8B8;
-                    else if (format == "888")
-                        options().fshFormat = D3DFMT_R8G8B8;
-                    else if (format == "4444")
-                        options().fshFormat = D3DFMT_A4R4G4B4;
-                    else if (format == "5551")
-                        options().fshFormat = D3DFMT_A1R5G5B5;
-                    else if (format == "565")
-                        options().fshFormat = D3DFMT_R5G6B5;
+        try {
+            if (cmd.HasOption("writeFsh")) {
+                options().writeFsh = true;
+                if (cmd.HasArgument("fshOutput"))
+                    options().fshOutput = cmd.GetArgumentString("fshOutput");
+                static D3DDevice device(options().hwnd ? options().hwnd : unsigned int(GetConsoleWindow()));
+                ea::Fsh::SetDevice(&device);
+                options().fshLevels = D3DX_DEFAULT;
+                if (cmd.HasArgument("fshLevels")) {
+                    options().fshLevels = cmd.GetArgumentInt("fshLevels");
+                    if (options().fshLevels == -1 || options().fshLevels == 0)
+                        options().fshLevels = D3DX_FROM_FILE;
+                    else if (options().fshLevels < -1 || options().fshLevels > 13)
+                        options().fshLevels = D3DX_DEFAULT;
                 }
-            }
-            if (cmd.HasOption("fshRescale"))
-                options().fshRescale = true;
-            if (cmd.HasArgument("fshTextures"))
-                options().fshTextures = Split(cmd.GetArgumentString("fshTextures"), ',', true, true);
-            if (cmd.HasArgument("fshAddTextures"))
-                options().fshAddTextures = Split(cmd.GetArgumentString("fshAddTextures"), ',', true, true);
-            if (cmd.HasOption("fshDisableTextureIgnore"))
-                options().fshDisableTextureIgnore = true;
-            else {
-                if (cmd.HasArgument("fshIgnoreTextures")) {
-                    auto ignoredTexturesList = Split(cmd.GetArgumentString("fshIgnoreTextures"), ',', true, true);
-                    if (!ignoredTexturesList.empty()) {
-                        for (auto const &it : ignoredTexturesList)
-                            options().fshIgnoreTextures.insert(ToLower(it));
+                options().fshFormat = unsigned int(-4);
+                if (cmd.HasArgument("fshFormat")) {
+                    string format = ToLower(cmd.GetArgumentString("fshFormat"));
+                    if (!format.empty()) {
+                        if (format == "dxt")
+                            options().fshFormat = unsigned int(-4);
+                        else if (format == "rgb" || format == "rgba" || format == "rgb32")
+                            options().fshFormat = unsigned int(-5);
+                        else if (format == "rgb16" || format == "rgba16")
+                            options().fshFormat = unsigned int(-6);
+                        else if (format == "auto")
+                            options().fshFormat = unsigned int(-3);
+                        else if (format == "dxt1")
+                            options().fshFormat = D3DFMT_DXT1;
+                        else if (format == "dxt3")
+                            options().fshFormat = D3DFMT_DXT3;
+                        else if (format == "dxt5")
+                            options().fshFormat = D3DFMT_DXT5;
+                        else if (format == "8888")
+                            options().fshFormat = D3DFMT_A8R8G8B8;
+                        else if (format == "888")
+                            options().fshFormat = D3DFMT_R8G8B8;
+                        else if (format == "4444")
+                            options().fshFormat = D3DFMT_A4R4G4B4;
+                        else if (format == "5551")
+                            options().fshFormat = D3DFMT_A1R5G5B5;
+                        else if (format == "565")
+                            options().fshFormat = D3DFMT_R5G6B5;
                     }
                 }
+                if (cmd.HasOption("fshRescale"))
+                    options().fshRescale = true;
+                if (cmd.HasArgument("fshTextures"))
+                    options().fshTextures = Split(cmd.GetArgumentString("fshTextures"), ',', true, true);
+                if (cmd.HasArgument("fshAddTextures"))
+                    options().fshAddTextures = Split(cmd.GetArgumentString("fshAddTextures"), ',', true, true);
+                if (cmd.HasOption("fshDisableTextureIgnore"))
+                    options().fshDisableTextureIgnore = true;
+                else {
+                    if (cmd.HasArgument("fshIgnoreTextures")) {
+                        auto ignoredTexturesList = Split(cmd.GetArgumentString("fshIgnoreTextures"), ',', true, true);
+                        if (!ignoredTexturesList.empty()) {
+                            for (auto const &it : ignoredTexturesList)
+                                options().fshIgnoreTextures.insert(ToLower(it));
+                        }
+                    }
+                }
+                if (cmd.HasArgument("padFsh"))
+                    options().padFsh = cmd.GetArgumentInt("padFsh");
             }
-            if (cmd.HasArgument("padFsh"))
-                options().padFsh = cmd.GetArgumentInt("padFsh");
+        }
+        catch (exception e) {
+            ErrorMessage(e.what());
+            options().writeFsh = false;
         }
         if (cmd.HasOption("preTransformVertices"))
             options().preTransformVertices = true;
@@ -299,6 +308,12 @@ int main(int argc, char *argv[]) {
             options().pad = cmd.GetArgumentInt("pad");
         if (cmd.HasOption("ignoreEmbeddedTextures"))
             options().ignoreEmbeddedTextures = true;
+        if (cmd.HasArgument("instances"))
+            options().instances = cmd.GetArgumentInt("instances");
+        if (cmd.HasArgument("computationIndex"))
+            options().computationIndex = cmd.GetArgumentInt("computationIndex");
+        if (cmd.HasOption("gl20"))
+            options().gl20 = true;
     }
     else if (opType == OperationType::DUMP) {
         if (cmd.HasOption("onlyFirstTechnique"))
@@ -312,9 +327,11 @@ int main(int argc, char *argv[]) {
     string startsWith;
     if (cmd.HasArgument("startsWith"))
         startsWith = cmd.GetArgumentString("startsWith");
+
+    auto errCode = ErrorType::NONE;
     
     if (!isCustom) {
-        auto processFile = [=](path const &in, bool inDir) {
+        auto processFile = [&](path const &in, bool inDir) {
             try {
                 if (!inDir || (is_regular_file(in) && inExt.contains(ToLower(in.extension().string())))) {
                     if (startsWith.empty() || in.filename().string().starts_with(startsWith)) {
@@ -338,6 +355,7 @@ int main(int argc, char *argv[]) {
             }
             catch (exception & e) {
                 ErrorMessage(in.filename().string() + ": " + e.what());
+                errCode = ErrorType::ERROR_OTHER;
             }
         };
 
@@ -361,7 +379,7 @@ int main(int argc, char *argv[]) {
     if (options().writeFsh)
         ea::Fsh::ClearDevice();
 
-    return ErrorType::NONE;
+    return errCode;
 }
 
 pair<unsigned char *, unsigned int> readofile(path const &inPath) {

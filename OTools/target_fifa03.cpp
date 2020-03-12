@@ -2084,6 +2084,10 @@ int TargetFIFA03::Version() {
     return 2;
 }
 
+unsigned short TargetFIFA03::AnimVersion() {
+    return 0xC616;
+}
+
 Shader *TargetFIFA03::Shaders() {
     return shaders_FIFA03;
 }

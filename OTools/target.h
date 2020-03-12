@@ -22,6 +22,7 @@ public:
     virtual unsigned int GetMaxVertexWeightsPerMesh();
     virtual char const *Name() = 0;
     virtual int Version() = 0;
+    virtual unsigned short AnimVersion();
     virtual Shader *Shaders() = 0;
     virtual unsigned int NumShaders() = 0;
     virtual Shader *DecideShader(MaterialProperties const &properties) = 0;
@@ -31,6 +32,7 @@ public:
 class TargetFIFA03 : public Target {
     char const *Name();
     int Version();
+    unsigned short AnimVersion();
     Shader *Shaders();
     unsigned int NumShaders();
     Shader *DecideShader(MaterialProperties const &properties);
