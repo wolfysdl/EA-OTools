@@ -2,6 +2,15 @@
 
 ![](https://i.imgur.com/KIF4gzwm.png) ![](https://i.imgur.com/TQpYMp0m.png) ![](https://i.imgur.com/ALQGlXzm.png)
 
+
+**Note!** By using OTools, you are agree with following:
+
+* Files made with OTools can't be sold or used to get any profit from them.
+* Files made with OTools must be shared freely - without any paid links or paid file hosts.
+* When sharing files made with OTools, they must be available for anyone. Thus, it's not allowed to upload such files in closed communities or groups.
+
+If you are not agree with mentioned terms - simply do not use OTools.
+
 **Current progress and limitations**:
 
 * Shaders from FIFA (2003 - 2010), FIFA Manager 13 and Cricket 07 are implemented. Most of them are untested and may contain errors. Also they are not guaranteed to work with any other games
