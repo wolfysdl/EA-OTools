@@ -1,6 +1,6 @@
 **otools** - tools for importing/exporting EA Sports model format (.o)
 
-![](https://i.imgur.com/KIF4gzwm.png) ![](https://i.imgur.com/EZOPG6im.png) ![](https://i.imgur.com/ALQGlXzm.png)
+![](https://i.imgur.com/KIF4gzwm.png) ![](https://i.imgur.com/TQpYMp0m.png) ![](https://i.imgur.com/ALQGlXzm.png)
 
 **Current progress and limitations**:
 
