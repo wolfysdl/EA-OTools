@@ -6,7 +6,7 @@
 
 * Shaders from FIFA (2003 - 2010), FIFA Manager 13 and Cricket 07 are implemented. Most of them are untested and may contain errors. Also they are not guaranteed to work with any other games
 
-otools is a command-line tool. First argument is operation type (export or import), second argument (`-i`) is input file/folder path. All other arguments are optional.
+otools is a command-line tool (but release also includes GUI version). First argument is operation type (export or import), second argument (`-i`) is input file/folder path. All other arguments are optional.
 
 **Usage examples:**
 
@@ -104,6 +104,12 @@ Additional import options:
 `-ignoreEmbeddedTextures` - ignore any embedded textures in the input model
 
 `-ord` - import to .ord and .orl files
+
+**Requirenents**
+
+* command-line tool: Windows XP SP3 or higher, 32-bit/64-bit
+
+* GUI tool: Windows 7 or higher, 32-bit/64-bit
 
 **Source code dependencies**
 
