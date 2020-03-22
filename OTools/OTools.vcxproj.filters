@@ -7,7 +7,6 @@
     <ClInclude Include="binbuf.h" />
     <ClInclude Include="utils.h" />
     <ClInclude Include="commandline.h" />
-    <ClInclude Include="errormsg.h" />
     <ClInclude Include="shaders.h" />
     <ClInclude Include="NvTriStrip\NvTriStrip.h">
       <Filter>NvTriStrip</Filter>
@@ -35,6 +34,7 @@
       <Filter>D3DDevice</Filter>
     </ClInclude>
     <ClInclude Include="jsonwriter.h" />
+    <ClInclude Include="message.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dump.cpp" />
@@ -45,7 +45,6 @@
     <ClCompile Include="utils.cpp" />
     <ClCompile Include="commandline.cpp" />
     <ClCompile Include="info.cpp" />
-    <ClCompile Include="errormsg.cpp" />
     <ClCompile Include="shaders.cpp" />
     <ClCompile Include="memory.cpp" />
     <ClCompile Include="elf.cpp" />
@@ -86,6 +85,7 @@
     <ClCompile Include="target_euro04.cpp" />
     <ClCompile Include="target_cl0405.cpp" />
     <ClCompile Include="target_wc06.cpp" />
+    <ClCompile Include="message.cpp" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="NvTriStrip">

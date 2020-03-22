@@ -87,9 +87,11 @@ string GetShaderAttributeName(int attr) {
     case Shader::Sampler0:                  return "Shader::Sampler0";
     case Shader::Sampler1:                  return "Shader::Sampler1";
     case Shader::Sampler2:                  return "Shader::Sampler2";
+    case Shader::Sampler3:                  return "Shader::Sampler3";
     case Shader::Sampler0Size:              return "Shader::Sampler0Size";
     case Shader::Sampler1Size:              return "Shader::Sampler1Size";
     case Shader::Sampler2Size:              return "Shader::Sampler2Size";
+    case Shader::Sampler3Size:              return "Shader::Sampler3Size";
     case Shader::GeoPrimState:              return "Shader::GeoPrimState";
     case Shader::RuntimeGeoPrimState:       return "Shader::RuntimeGeoPrimState";
     case Shader::RuntimeGeoPrimState2:      return "Shader::RuntimeGeoPrimState2";
@@ -659,6 +661,8 @@ public:
                                                                 args[a] = Shader::Sampler1Size;
                                                             else if (args[0] == 2)
                                                                 args[a] = Shader::Sampler2Size;
+                                                            else if (args[0] == 3)
+                                                                args[a] = Shader::Sampler3Size;
                                                         }
                                                     }
                                                 }
@@ -703,6 +707,9 @@ public:
                                                                 break;
                                                             case 2:
                                                                 info.globalArguments[g].type = Shader::Sampler2;
+                                                                break;
+                                                            case 3:
+                                                                info.globalArguments[g].type = Shader::Sampler3;
                                                                 break;
                                                             default:
                                                                 info.globalArguments[g].type = 0;

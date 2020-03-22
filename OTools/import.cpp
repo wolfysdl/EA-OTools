@@ -510,9 +510,39 @@ unsigned int FshHash (string const &name) {
     return hash;
 };
 
+map<string, string> GetNameOptions(string const &name, bool isMaterial = false) {
+    map<string, string> result;
+    auto be = name.find('[');
+    if (be != string::npos) {
+        auto en = name.find(']', be + 1);
+        if (en != string::npos) {
+            auto options = Split(name.substr(be + 1, en - be - 1), ',', true, true);
+            for (unsigned int i = 0; i < options.size(); i++) {
+                string optionName, optionValue;
+                auto dd = options[i].find(':');
+                if (dd != string::npos) {
+                    optionName = ToLower(options[i].substr(0, dd));
+                    optionValue = options[i].substr(dd + 1);
+                }
+                else {
+                    if (isMaterial && i == 0) {
+                        optionName = "shader";
+                        optionValue = options[i];
+                    }
+                    else
+                        optionName = options[i];
+                }
+                if (!result.contains(optionName))
+                    result[optionName] = optionValue;
+            }
+        }
+    }
+    return result;
+}
+
 bool ShouldIgnoreThisNode(aiNode *node) {
-    auto l = ToLower(node->mName.C_Str());
-    return l.find("[ignore]") != string::npos;
+    auto options = GetNameOptions(node->mName.C_Str());
+    return options.contains("ignore");
 }
 
 bool IsSkeletonNode(aiNode *node) {
@@ -565,6 +595,8 @@ unsigned int SamplerIndex(unsigned int argType) {
         return 1;
     else if (argType == Shader::Sampler2)
         return 2;
+    else if (argType == Shader::Sampler3)
+        return 3;
     return 0;
 }
 
@@ -603,14 +635,25 @@ bool GetTexInfo(aiScene const *scene, aiMaterial const *mat, aiTextureType texTy
     return false;
 }
 
-bool LoadTextureIntoTexSlot(aiScene const *scene, aiMaterial const *mat, aiTextureType texType, map<string, Tex> &texMap, bool *texPresentFlag, Tex *slot, map<string, string> &generatedTexNames) {
+bool LoadTextureIntoTexSlot(aiScene const *scene, aiMaterial const *mat, aiTextureType texType, map<string, Tex> &texMap, bool *texPresentFlag, Tex *slot, map<string, string> &generatedTexNames, string const &customName) {
     aiTextureMapMode mapMode = aiTextureMapMode_Wrap;
     path texFilePath;
     string texFileName;
     string texFileNameLowered;
     bool isGlobal = false;
     Tex::Embedded embedded;
-    if (GetTexInfo(scene, mat, texType, mapMode, texFilePath, texFileName, texFileNameLowered, isGlobal, embedded)) {
+    bool present = !mat || GetTexInfo(scene, mat, texType, mapMode, texFilePath, texFileName, texFileNameLowered, isGlobal, embedded);
+    if (present) {
+        if (!mat) {
+            if (customName.empty())
+                return false;
+            mapMode = aiTextureMapMode_Wrap;
+            texFilePath = customName;
+            texFileName = customName;
+            texFileNameLowered = ToLower(customName);
+            isGlobal = texFileNameLowered.starts_with("global_");
+            embedded.data = nullptr;
+        }
         if (isGlobal) {
             *texPresentFlag = true;
             slot->isGlobal = true;
@@ -821,6 +864,7 @@ void oimport(path const &out, path const &in) {
             aiMesh *mesh = scene->mMeshes[n.node->mMeshes[m]];
             aiMaterial *mat = scene->mMaterials[mesh->mMaterialIndex];
             string matName = mat->GetName().C_Str();
+            auto matOptions = GetNameOptions(matName, true);
             Shader *shader = nullptr;
             bool meshHasBones = mesh->HasBones();
             bool isMeshSkinned = false;
@@ -858,24 +902,40 @@ void oimport(path const &out, path const &in) {
             bool usesAlphaBlending = blendFunc != 0 || hasMatAlpha || alphaMode == ALPHA_BLEND;
             bool isMetallic = false; // roughnessFactor <= 0.5f && metallicFactor >= 0.5f;
 
-            Tex tex[3];
-            bool texAlreadyPresent[3] = { false, false, false };
-            bool hasDiffuseTex = LoadTextureIntoTexSlot(scene, mat, aiTextureType_DIFFUSE, textures, &texAlreadyPresent[0], &tex[0], generatedTexNames);
-            bool hasReflectionTex = LoadTextureIntoTexSlot(scene, mat, aiTextureType_REFLECTION, textures, &texAlreadyPresent[1], &tex[1], generatedTexNames);
-            bool hasSpecularTex = false;
-            if (!hasReflectionTex)
-                hasSpecularTex = LoadTextureIntoTexSlot(scene, mat, aiTextureType_SPECULAR, textures, &texAlreadyPresent[1], &tex[1], generatedTexNames);
-            bool usesCustomShaderName = false;
-            if (!matName.empty()) {
-                auto b_start = matName.find('[');
-                if (b_start != string::npos && matName.length() > b_start) {
-                    auto b_end = matName.find(']', b_start + 1);
-                    if (b_end != string::npos) {
-                        shader = target->FindShader(matName.substr(b_start + 1, b_end - b_start - 1));
-                        if (shader)
-                            usesCustomShaderName = true;
-                    }
+            Tex tex[4];
+            bool isTextured[4] = { false, false, false, false };
+            bool texAlreadyPresent[4] = { false, false, false, false };
+
+            for (size_t t = 0; t < std::size(isTextured); t++) {
+                auto texIt = matOptions.find("tex" + to_string(t));
+                if (texIt != matOptions.end()) {
+                    isTextured[t] = true;
+                    LoadTextureIntoTexSlot(scene, nullptr, aiTextureType_NONE, textures, &texAlreadyPresent[t], &tex[t], generatedTexNames, (*texIt).second);
                 }
+            }
+
+            bool hasDiffuseTex = isTextured[0];
+            if (!hasDiffuseTex) {
+                if (LoadTextureIntoTexSlot(scene, mat, aiTextureType_DIFFUSE, textures, &texAlreadyPresent[0], &tex[0], generatedTexNames, string())) {
+                    hasDiffuseTex = true;
+                    isTextured[0] = true;
+                }
+            }
+            bool hasReflectionTex = false;
+            bool hasSpecularTex = false;
+            if (!isTextured[1]) {
+                hasReflectionTex = LoadTextureIntoTexSlot(scene, mat, aiTextureType_REFLECTION, textures, &texAlreadyPresent[1], &tex[1], generatedTexNames, string());
+                if (!hasReflectionTex)
+                    hasSpecularTex = LoadTextureIntoTexSlot(scene, mat, aiTextureType_SPECULAR, textures, &texAlreadyPresent[1], &tex[1], generatedTexNames, string());
+                if (hasReflectionTex || hasSpecularTex)
+                    isTextured[1] = true;
+            }
+            bool usesCustomShaderName = false;
+            auto optIt = matOptions.find("shader");
+            if (optIt != matOptions.end()) {
+                shader = target->FindShader((*optIt).second);
+                if (shader)
+                    usesCustomShaderName = true;
             }
 
             if (!shader) {
@@ -907,34 +967,28 @@ void oimport(path const &out, path const &in) {
             if (!shader)
                 throw runtime_error("Unable to decide shader");
 
-            auto AddTexToSlot = [&](unsigned int slot, string const &name) {
-                auto texit = textures.find(name);
-                if (texit != textures.end()) {
-                    texAlreadyPresent[slot] = true;
-                    tex[slot] = (*texit).second;
-                }
-                else {
-                    tex[slot].name = name;
-                    tex[slot].filepath = name;
-                    textures[name] = tex[slot];
-                }
-            };
-
-            if (!hasReflectionTex && !hasSpecularTex &&
-                (
+            if (!isTextured[1]) {
+                if (!hasReflectionTex && !hasSpecularTex &&
+                    (
                     shader->nameLowered == "littextureirradenvmap" ||
                     shader->nameLowered == "irradlittextureenvmaptransparent2x" ||
                     shader->nameLowered == "littextureirradenvmap_skin"
-                )
-                )
-            {
-                AddTexToSlot(1, "spec");
-                hasSpecularTex = true;
+                    )
+                    )
+                {
+                    if (LoadTextureIntoTexSlot(scene, nullptr, aiTextureType_NONE, textures, &texAlreadyPresent[1], &tex[1], generatedTexNames, "spec")) {
+                        hasSpecularTex = true;
+                        isTextured[1] = true;
+                    }
+                } else if (shader->nameLowered == "littexture4head_skin") {
+                    if (LoadTextureIntoTexSlot(scene, nullptr, aiTextureType_NONE, textures, &texAlreadyPresent[1], &tex[1], generatedTexNames, "tp02"))
+                        isTextured[1] = true;
+                }
+                else if (shader->nameLowered == "littexture2irradskinsubsurfspec") {
+                    if (LoadTextureIntoTexSlot(scene, nullptr, aiTextureType_NONE, textures, &texAlreadyPresent[1], &tex[1], generatedTexNames, "glos"))
+                        isTextured[1] = true;
+                }
             }
-            else if (shader->nameLowered == "littexture4head_skin")
-                AddTexToSlot(1, "tp02");
-            else if (shader->nameLowered == "littexture2irradskinsubsurfspec")
-                AddTexToSlot(1, options().gl20 ? "gl20" : "glos");
 
             isMeshSkinned = shader->HasAttribute(Shader::BlendWeight) && shader->HasAttribute(Shader::BlendIndices) && shader->HasAttribute(Shader::Color1);
             bool useSkinning = isMeshSkinned && meshHasBones;
@@ -1448,6 +1502,7 @@ void oimport(path const &out, path const &in) {
                     case Shader::Sampler0:
                     case Shader::Sampler1:
                     case Shader::Sampler2:
+                    case Shader::Sampler3:
                     {
                         unsigned int s = SamplerIndex(arg.type);
                         if (tex[s].isGlobal)
@@ -1524,6 +1579,8 @@ void oimport(path const &out, path const &in) {
                                 bufData.Put(unsigned int(tex[1].isGlobal ? 0 : 48));
                             else if (arg == Shader::Sampler2Size)
                                 bufData.Put(unsigned int(tex[2].isGlobal ? 0 : 48));
+                            else if (arg == Shader::Sampler3Size)
+                                bufData.Put(unsigned int(tex[3].isGlobal ? 0 : 48));
                             else if (arg == Shader::VertexWeights3Bones)
                                 bufData.Put(vertexWeightsNumBones3);
                             else if (arg == Shader::VertexWeights2Bones)
@@ -2211,8 +2268,6 @@ void oimport(path const &out, path const &in) {
                     t21filesuffix = "_0_0";
                 map<string, TextureToAdd> fshTextures1;
                 fshTextures1["tp01"] = { "tp01", "tp01@" + playerIdStr };
-                if (options().gl20)
-                    fshTextures1["gl20"] = { "gl20", "gl20" };
                 for (auto const &a : options().fshAddTextures) {
                     path ap = a;
                     string afilename = ap.stem().string();

@@ -48,8 +48,7 @@ struct GlobalOptions {
     bool ignoreEmbeddedTextures = false;
     unsigned int instances = 0;
     int computationIndex = -1;
-    // game-specific
-    bool gl20 = false; // fifa 07
+    bool keepTex0InMatOptions = false;
     // export options
     bool noTextures = false;
     bool dummyTextures = false;

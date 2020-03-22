@@ -159,7 +159,7 @@ class exporter {
 
     struct Material {
         string shader;
-        Texture *textures[3] = { nullptr, nullptr, nullptr };
+        Texture *textures[4] = { nullptr, nullptr, nullptr, nullptr };
         bool doubleSided = true;
         string alphaMode;
         float metallicFactor = 0.0f;
@@ -170,6 +170,7 @@ class exporter {
                 textures[0] == m.textures[0] &&
                 textures[1] == m.textures[1] &&
                 textures[2] == m.textures[2] &&
+                textures[3] == m.textures[3] &&
                 doubleSided == m.doubleSided &&
                 alphaMode == m.alphaMode &&
                 metallicFactor == m.metallicFactor &&
@@ -609,7 +610,7 @@ public:
                                     case 32:
                                         {
                                             unsigned int samplerIndex = GetAt<unsigned int>(renderCode, commandOffset + 4);
-                                            if (samplerIndex < 3) {
+                                            if (samplerIndex < 4) {
                                                 Texture tex;
                                                 TAR const *tar = GetAt<TAR *>(globalParameters, 4);
                                                 FileSymbol const *texSymbol = nullptr;
@@ -653,7 +654,7 @@ public:
                                                         mat.roughnessFactor = 0.3f;
                                                         mat.metallicFactor = 0.5f;
                                                     }
-                                                    else if (samplerIndex == 0) { // temporary disabled additional texture maps
+                                                    if (samplerIndex < 4) {
                                                         auto txit = textures.find(texKey);
                                                         if (txit != textures.end())
                                                             pTex = (*txit).second;
@@ -1067,7 +1068,16 @@ public:
                 j.openArray("materials");
                 for (unsigned int i = 0; i < materials.size(); i++) {
                     j.openScope();
-                    j.writeFieldString("name", string("material") + Format("%02d", i) + " [" + materials[i].shader + "]");
+                    string matOptionsStr = materials[i].shader;
+                    if (options().keepTex0InMatOptions && materials[i].textures[0])
+                        matOptionsStr += ",tex0:" + materials[i].textures[1]->name;
+                    if (materials[i].textures[1])
+                        matOptionsStr += ",tex1:" + materials[i].textures[1]->name;
+                    if (materials[i].textures[2])
+                        matOptionsStr += ",tex2:" + materials[i].textures[2]->name;
+                    if (materials[i].textures[3])
+                        matOptionsStr += ",tex3:" + materials[i].textures[3]->name;
+                    j.writeFieldString("name", string("material") + Format("%02d", i) + " [" + matOptionsStr + "]");
                     if (materials[i].doubleSided)
                         j.writeFieldBool("doubleSided", true);
                     if (!materials[i].alphaMode.empty())
@@ -1085,6 +1095,7 @@ public:
                                 }
                             }
                         }
+                        /* disabled
                         if (materials[i].textures[1]) {
                             for (unsigned int ti = 0; ti < vecTextures.size(); ti++) {
                                 if (materials[i].textures[1] == vecTextures[ti]) {
@@ -1093,6 +1104,7 @@ public:
                                 }
                             }
                         }
+                        */
                         if (specTexId != -1) {
                             j.closeScope();
                             j.openScope("extensions");

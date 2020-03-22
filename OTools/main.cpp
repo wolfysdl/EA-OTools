@@ -1,10 +1,11 @@
 #include "d3dx9.h"
 #include "main.h"
 #include "commandline.h"
-#include "errormsg.h"
+#include "message.h"
 #include "Fsh/Fsh.h"
 
-const char *OTOOLS_VERSION = "0.149";
+const char *OTOOLS_VERSION = "0.151";
+const unsigned int OTOOLS_VERSION_INT = 151;
 
 GlobalOptions &options() {
     static GlobalOptions go;
@@ -25,17 +26,17 @@ int main(int argc, char *argv[]) {
         "fshAddTextures", "fshIgnoreTextures", "startsWith", "pad", "padFsh", "instances", "computationIndex", "hwnd" },
         { "tristrip", "noTextures", "recursive", "createSubDir", "silent", "console", "onlyFirstTechnique", "dummyTextures", "jpegTextures", "embeddedTextures", 
         "swapYZ", "forceLighting", "noMetadata", "genTexNames", "writeFsh", "fshRescale", "fshDisableTextureIgnore", "preTransformVertices", "sortByName", 
-        "sortByAlpha", "ignoreMatColor", "noMeshJoin", "head", "ignoreEmbeddedTextures", "ord", "gl20" });
+        "sortByAlpha", "ignoreMatColor", "noMeshJoin", "head", "ignoreEmbeddedTextures", "ord", "keepTex0InMatOptions" });
     if (cmd.HasOption("silent"))
-        SetErrorDisplayType(ErrorDisplayType::ERR_NONE);
+        SetMessageDisplayType(MessageDisplayType::MSG_NONE);
     else {
         if (cmd.HasOption("console"))
-            SetErrorDisplayType(ErrorDisplayType::ERR_CONSOLE);
+            SetMessageDisplayType(MessageDisplayType::MSG_CONSOLE);
         else
-            SetErrorDisplayType(ErrorDisplayType::ERR_MESSAGE_BOX);  
+            SetMessageDisplayType(MessageDisplayType::MSG_MESSAGE_BOX);
     }
     enum OperationType {
-        UNKNOWN, DUMP, EXPORT, IMPORT, INFO, DUMPSHADERS
+        UNKNOWN, VERSION, DUMP, EXPORT, IMPORT, INFO, DUMPSHADERS
     } opType = OperationType::UNKNOWN;
     void (*callback)(path const &, path const &) = nullptr;
     bool isCustom = false;
@@ -43,7 +44,10 @@ int main(int argc, char *argv[]) {
     set<string> inExt;
     if (argc >= 2) {
         string opTypeStr = argv[1];
-        if (opTypeStr == "import") {
+        if (opTypeStr == "version") {
+            opType = OperationType::VERSION;
+        }
+        else if (opTypeStr == "import") {
             opType = OperationType::IMPORT;
             callback = oimport;
             inExt = { ".gltf", ".glb", ".dae", ".fbx", ".obj", ".blend", ".3ds" };
@@ -78,6 +82,10 @@ int main(int argc, char *argv[]) {
     if (opType == OperationType::UNKNOWN) {
         ErrorMessage("Unknown operation type");
         return ErrorType::UNKNOWN_OPERATION_TYPE;
+    }
+    if (opType == OperationType::VERSION) {
+        InfoMessage(string("OTools version: ") + OTOOLS_VERSION);
+        return OTOOLS_VERSION_INT;
     }
     if (!cmd.HasArgument("i")) {
         ErrorMessage("Input path is not specified");
@@ -176,6 +184,8 @@ int main(int argc, char *argv[]) {
             options().jpegTextures = true;
         if (cmd.HasOption("noMeshJoin"))
             options().noMeshJoin = true;
+        if (cmd.HasOption("keepTex0InMatOptions"))
+            options().keepTex0InMatOptions = true;
     }
     else if (opType == OperationType::IMPORT) {
         if (cmd.HasOption("noMetadata"))
@@ -312,8 +322,6 @@ int main(int argc, char *argv[]) {
             options().instances = cmd.GetArgumentInt("instances");
         if (cmd.HasArgument("computationIndex"))
             options().computationIndex = cmd.GetArgumentInt("computationIndex");
-        if (cmd.HasOption("gl20"))
-            options().gl20 = true;
     }
     else if (opType == OperationType::DUMP) {
         if (cmd.HasOption("onlyFirstTechnique"))
