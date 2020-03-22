@@ -1,12 +1,21 @@
 **otools** - tools for importing/exporting EA Sports model format (.o)
 
-![](https://i.imgur.com/KIF4gzwm.png) ![](https://i.imgur.com/EZOPG6im.png) ![](https://i.imgur.com/ALQGlXzm.png)
+![](https://i.imgur.com/KIF4gzwm.png) ![](https://i.imgur.com/TQpYMp0m.png) ![](https://i.imgur.com/ALQGlXzm.png)
+
+
+**Note!** By using OTools, you are agree with following:
+
+* Files made with OTools can't be sold or used to get any profit from them.
+* Files made with OTools must be shared freely - without any paid links or paid file hosts.
+* When sharing files made with OTools, they must be available for anyone. Thus, it's not allowed to upload such files in closed communities or groups.
+
+If you are not agree with mentioned terms - simply do not use OTools.
 
 **Current progress and limitations**:
 
 * Shaders from FIFA (2003 - 2010), FIFA Manager 13 and Cricket 07 are implemented. Most of them are untested and may contain errors. Also they are not guaranteed to work with any other games
 
-otools is a command-line tool. First argument is operation type (export or import), second argument (`-i`) is input file/folder path. All other arguments are optional.
+otools is a command-line tool (but release also includes GUI version). First argument is operation type (export or import), second argument (`-i`) is input file/folder path. All other arguments are optional, but it's recommended to set the source/target game with `-game` option.
 
 **Usage examples:**
 
@@ -104,6 +113,12 @@ Additional import options:
 `-ignoreEmbeddedTextures` - ignore any embedded textures in the input model
 
 `-ord` - import to .ord and .orl files
+
+**Requirenents**
+
+* command-line tool: Windows XP SP3 or higher, 32-bit/64-bit
+
+* GUI tool: Windows 7 or higher, 32-bit/64-bit
 
 **Source code dependencies**
 
