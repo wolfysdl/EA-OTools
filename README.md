@@ -138,7 +138,7 @@ Additional import options:
 
 FSH packing options:
 
-`fshWriteToParentDir` - save .fsh in parent directory
+`-fshWriteToParentDir` - save .fsh in parent directory
 
 When packing .fsh files, FSH-related options like `-fshLevels`, `-fshFormat`, `-fshRescale`, `-padFsh` can be used.
 
