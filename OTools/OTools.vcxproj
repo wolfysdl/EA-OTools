@@ -85,6 +85,7 @@
     <ClCompile Include="dump.cpp" />
     <ClCompile Include="dumpshaders.cpp" />
     <ClCompile Include="elf.cpp" />
+    <ClCompile Include="fshop.cpp" />
     <ClCompile Include="message.cpp" />
     <ClCompile Include="export.cpp" />
     <ClCompile Include="Fsh\Buffer.cpp" />

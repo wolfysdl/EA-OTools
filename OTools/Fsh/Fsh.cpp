@@ -238,7 +238,7 @@ void ea::FshImage::WriteToFile(std::filesystem::path const &filepath, FileFormat
 	}
 	if (desc.Format != format) {
 		texture->Release();
-		throw Exception(FormatStatic("ReadFromFile: unsupported texture format (input format: %d, result format: %d)", format, desc.Format));
+		throw Exception(FormatStatic("WriteToFile: unsupported texture format (input format: %d, result format: %d)", format, desc.Format));
 	}
     unsigned char *pixels = (unsigned char *)imgData->Pixels().GetData();
     for (unsigned int i = 0; i < numLevels; i++) {
