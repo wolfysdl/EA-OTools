@@ -36,6 +36,22 @@ Import test.gltf to test.o
 otools import -i "test.gltf" -game fifa07
 ```
 
+Possible operations:
+
+`import` - converts models (.gltf, .glb, .fbx, .dae, .obj, .3ds) to .o or .ord/.orl format
+
+`export` - converts .o, .ord/.orl files to .gltf format
+
+`version` - outputs otools version and returns integer number of otools version
+
+`dump` - creates a dump text file with information from .o, .ord/.orl files
+
+`dumpshaders` - creates a dump file for shaders which are used in .o, .ord/.orl files
+
+`unpackfsh` - extracts textures from .fsh file
+
+`packfsh` - creates .fsh file from textures
+
 Additional options:
 
 `-o <output path>` - output filename (for single file as input) or output folder (for folder as input)
@@ -48,6 +64,8 @@ Additional options:
 
 `-recursive` - scan subfolders (when input is directory)
 
+`-hwnd` - sets specific window handle (might be needed for creating D3D Device). This option is used in OTools_GUI application to pass window handle of GUI application into console application
+
 Additional export options:
 
 `-noTextures` - do not attach textures to materials (a temporary fix for inbuilt .gltf preview in Windows which can't display models with images in external files)
@@ -57,6 +75,8 @@ Additional export options:
 `-jpegTextures` - dummy textures will be written in .jpeg instead of .png
 
 `-noMeshJoin` - do not merge same materials to one material
+
+`-keepTex0InMatOptions` - keep `tex` option in material name for texture slot with index 0 (`tex0`). By default, `tex` option is added only for texture slot indices higher than 0 
 
 Additional import options:
 
@@ -113,6 +133,19 @@ Additional import options:
 `-ignoreEmbeddedTextures` - ignore any embedded textures in the input model
 
 `-ord` - import to .ord and .orl files
+
+`-computationIndex` - set specific computation index. Default value is 2
+
+FSH packing options:
+
+`-fshWriteToParentDir` - save .fsh in parent directory
+
+When packing .fsh files, FSH-related options like `-fshLevels`, `-fshFormat`, `-fshRescale`, `-padFsh` can be used.
+
+FSH unpacking options:
+
+`-fshUnpackImageFormat` - image format for unpacked textures. Possible formats: `png`, `bmp`, `tga`, `dds`, `jpg`
+
 
 **Requirenents**
 
