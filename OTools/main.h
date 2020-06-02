@@ -50,6 +50,7 @@ struct GlobalOptions {
     unsigned int instances = 0;
     int computationIndex = -1;
     bool keepTex0InMatOptions = false;
+    string forceShader;
     // export options
     bool noTextures = false;
     bool dummyTextures = false;
@@ -65,6 +66,9 @@ struct GlobalOptions {
     bool fshKits = false;
     bool fshShoes = false;
     bool fshPatterns = false;
+    unsigned int fshId = 1;
+    unsigned int fshHash = 0;
+    bool useFshHash = false;
 };
 
 GlobalOptions &options();

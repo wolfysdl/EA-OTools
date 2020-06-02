@@ -2,6 +2,7 @@
 #include <fstream>
 #include "binbuf.h"
 #include "jsonwriter.h"
+#include "FifamReadWrite.h"
 
 class exporter {
     struct FileSymbol : public Elf32_Sym {
@@ -197,8 +198,14 @@ class exporter {
         float fNumPatchSegments;
         unsigned int nZWritesEnable;
     };
+
+    struct Prop {
+        Vector3 pos, dir;
+        unsigned int type = 0;
+        string name;
+    };
 public:
-    void convert_o_to_gltf(unsigned char *fileData, unsigned int fileDataSize, path const &outPath) {
+    void convert_o_to_gltf(unsigned char *fileData, unsigned int fileDataSize, path const &outPath, path const &inPath) {
 
         unsigned char *data = nullptr;
         unsigned int dataSize = 0;
@@ -285,6 +292,10 @@ public:
         vector<Material> materials;
         map<string, Texture *> textures;
         set<string> globalTextures;
+        vector<Prop> flags;
+        vector<Prop> lights;
+        vector<Buffer> colBuffers;
+        vector<Accessor> colAccessors;
 
         for (auto const &s : symbols) {
             if (isSymbolDataPresent(s)) {
@@ -324,6 +335,114 @@ public:
             model = models[0];
         }
 
+        auto originalFilePath = inPath;
+        error_code ec;
+        if (!originalFilePath.has_parent_path())
+            originalFilePath = absolute(inPath, ec);
+        auto originalFileName = originalFilePath.stem().string();
+
+        if (false && originalFileName.starts_with("m716__")) {
+            unsigned int stadiumId = 0;
+            unsigned int lightingId = 0;
+            if (sscanf(originalFileName.c_str(), "m716__%d_%d", &stadiumId, &lightingId) == 2) {
+                auto originalFolder = originalFilePath.parent_path();
+                // flags
+                path stadFlagsPath = originalFolder / Format("sle-%d-%d.loc", stadiumId, lightingId);
+                if (exists(stadFlagsPath)) {
+                    FifamReader reader(stadFlagsPath, 14, false, false);
+                    if (reader.Available()) {
+                        while (!reader.IsEof()) {
+                            if (!reader.EmptyLine()) {
+                                auto line = reader.ReadFullLine();
+                                float a = 0.0f; float b = 0.0f; float c = 0.0f; int d = 0; float e = 0.0f; float f = 0.0f; float g = 0.0f;
+                                auto numParams = swscanf(line.c_str(), L"%f %f %f %d %f %f %f", &a, &b, &c, &d, &e, &f, &g);
+                                bool isLineValid = false;
+                                if (numParams == 7)
+                                    isLineValid = true;
+                                else if (numParams == 3) {
+                                    d = 0;
+                                    e = 1.0f;
+                                    f = 1.0f;
+                                    g = 1.0f;
+                                    isLineValid = true;
+                                }
+                                if (isLineValid) {
+                                    Prop p;
+                                    p.pos.x = a * 100.0f; p.pos.y = b * 100.0f; p.pos.z = c * 100.0f; p.type = d; p.dir.x = e; p.dir.y = f; p.dir.z = g;
+                                    p.name = Format("flag_%d", flags.size() + 1);
+                                    flags.push_back(p);
+                                }
+                            }
+                            else
+                                reader.SkipLine();
+                        }
+                    }
+                }
+
+                // lights
+                path stadLightsPath = originalFolder / Format("tag-%d-%d.loc", stadiumId, lightingId);
+                if (exists(stadLightsPath)) {
+                    //FifamReader reader(stadLightsPath, 14, false, false);
+                    //if (reader.Available()) {
+                    //    auto l = reader.ReadFullLine();
+                    //    int numLightTypes;
+                    //    swscanf(l.c_str(), L"%d", &numLightTypes);
+                    //    if (numLightTypes > 0) {
+                    //
+                    //        for (unsigned int i = 0; i < numLightTypes; i++) {
+                    //
+                    //
+                    //            while (!reader.IsEof()) {
+                    //                if (!reader.EmptyLine()) {
+                    //                    auto line = reader.ReadFullLine();
+                    //                    float a = 0.0f; float b = 0.0f; float c = 0.0f; int d = 0; float e = 0.0f; float f = 0.0f; float g = 0.0f;
+                    //                    auto numParams = swscanf(line.c_str(), L"%f %f %f %d %f %f %f", &a, &b, &c, &d, &e, &f, &g);
+                    //                    bool isLineValid = false;
+                    //                    if (numParams == 7)
+                    //                        isLineValid = true;
+                    //                    else if (numParams == 3) {
+                    //                        d = 0;
+                    //                        e = 1.0f;
+                    //                        f = 1.0f;
+                    //                        g = 1.0f;
+                    //                        isLineValid = true;
+                    //                    }
+                    //                    if (isLineValid) {
+                    //                        Prop p;
+                    //                        p.pos.x = a * 100.0f; p.pos.y = b * 100.0f; p.pos.z = c * 100.0f; p.type = d; p.dir.x = e; p.dir.y = f; p.dir.z = g;
+                    //                        flags.push_back(p);
+                    //                    }
+                    //                }
+                    //                else
+                    //                    reader.SkipLine();
+                    //            }
+                    //        }
+                    //    }
+                    //}
+                }
+
+                // collision
+                path stadCollPath = originalFolder / Format("coll-%d-%d.bin", stadiumId, lightingId);
+                if (exists(stadCollPath)) {
+                    FILE *collFile = nullptr;
+                    _wfopen_s(&collFile, stadCollPath.c_str(), L"rb");
+                    if (collFile) {
+                        bool isFileValid = true;
+                        unsigned int collHeader[3] = { 0, 0, 0 };
+                        if (fread(collHeader, 4, 3, collFile) == 3 && collHeader[0] == 2) {
+                            for (unsigned int collg = 0; collg < collHeader[2]; collg++) {
+                                if (fseek(collFile, 24, SEEK_CUR) != 0)
+                                    break;
+
+                            }
+                        }
+
+                        fclose(collFile);
+                    }
+                }
+            }
+        }
+
         JsonWriter j(outPath);
         j.startScope();
         j.openScope("asset");
@@ -339,8 +458,15 @@ public:
                 j.writeFieldString("name", model->mName);
             j.openArray("nodes");
             unsigned int numNodes = (model ? model->mNumLayers : 0) + (skeleton ? 1 : 0);
+            unsigned int numWrittenNodes = 0;
             for (unsigned int i = 0; i < numNodes; i++)
                 j.writeValueInt(i);
+            if (!colAccessors.empty())
+                j.writeValueInt(numNodes + bones.size());
+            if (!flags.empty())
+                j.writeValueInt(numNodes + bones.size() + (!colAccessors.empty() ? 1 : 0));
+            if (!lights.empty())
+                j.writeValueInt(numNodes + bones.size() + (!colAccessors.empty() ? 1 : 0) + (flags.empty() ? 0 : 1));
             j.closeArray();
             j.closeScope();
             j.closeArray();
@@ -355,6 +481,7 @@ public:
                     if (model->mLayerNames[i])
                         j.writeFieldString("name", model->mLayerNames[i]);
                     j.closeScope();
+                    numWrittenNodes++;
                 }
             }
             if (skeleton) {
@@ -399,6 +526,7 @@ public:
                         j.writeValueInt(nodeIndex + 1 + skelRootNodes[i]);
                     j.closeArray();
                 }
+                numWrittenNodes++;
                 j.closeScope();
                 for (unsigned int i = 0; i < skelNodes.size(); i++) {
                     j.openScope();
@@ -429,7 +557,53 @@ public:
                         j.closeArray();
                     }
                     j.closeScope();
+                    numWrittenNodes++;
                 }
+            }
+            if (!colAccessors.empty()) {
+                j.openScope();
+                j.writeFieldString("name", "Collision");
+                j.openArray("children");
+                for (unsigned int i = 0; i < colAccessors.size(); i++)
+                    j.writeValueInt(numWrittenNodes + 1 + i);
+                j.closeArray();
+                j.closeScope();
+                numWrittenNodes++;
+                for (unsigned int i = 0; i < flags.size(); i++) {
+                    j.openScope();
+                    j.writeFieldString("name", "CollisionGeometry_" + to_string(i + 1));
+                    j.closeScope();
+                    numWrittenNodes++;
+                }
+            }
+            if (!flags.empty()) {
+                j.openScope();
+                j.writeFieldString("name", "Flags");
+                j.openArray("children");
+                for (unsigned int i = 0; i < flags.size(); i++)
+                    j.writeValueInt(numWrittenNodes + 1 + i);
+                j.closeArray();
+                j.closeScope();
+                numWrittenNodes++;
+                for (unsigned int i = 0; i < flags.size(); i++) {
+                    j.openScope();
+                    j.writeFieldString("name", flags[i].name);
+                    j.openArray("translation");
+                    j.writeValueFloat(flags[i].pos.x);
+                    j.writeValueFloat(flags[i].pos.y);
+                    j.writeValueFloat(flags[i].pos.z);
+                    j.closeArray();
+                    j.openArray("scale");
+                    j.writeValueFloat(flags[i].dir.x);
+                    j.writeValueFloat(flags[i].dir.y);
+                    j.writeValueFloat(flags[i].dir.z);
+                    j.closeArray();
+                    j.closeScope();
+                    numWrittenNodes++;
+                }
+            }
+            if (!lights.empty()) {
+
             }
             j.closeArray();
             vector<Buffer> buffers;
@@ -1216,7 +1390,7 @@ public:
     void convert_o_to_gltf(path const &inPath, path const &outPath) {
         auto fileData = readofile(inPath);
         if (fileData.first) {
-            convert_o_to_gltf(fileData.first, fileData.second, outPath);
+            convert_o_to_gltf(fileData.first, fileData.second, outPath, inPath);
             delete[] fileData.first;
         }
     }

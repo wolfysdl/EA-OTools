@@ -4,8 +4,8 @@
 #include "message.h"
 #include "Fsh/Fsh.h"
 
-const char *OTOOLS_VERSION = "0.152";
-const unsigned int OTOOLS_VERSION_INT = 152;
+const char *OTOOLS_VERSION = "0.154";
+const unsigned int OTOOLS_VERSION_INT = 154;
 
 GlobalOptions &options() {
     static GlobalOptions go;
@@ -23,7 +23,8 @@ enum ErrorType {
 
 int main(int argc, char *argv[]) {
     CommandLine cmd(argc, argv, { "i", "o", "game", "scale", "defaultVCol", "setVCol", "vColScale", "fshOutput", "fshLevels", "fshFormat", "fshTextures",
-        "fshAddTextures", "fshIgnoreTextures", "startsWith", "pad", "padFsh", "instances", "computationIndex", "hwnd", "fshUnpackImageFormat" },
+        "fshAddTextures", "fshIgnoreTextures", "startsWith", "pad", "padFsh", "instances", "computationIndex", "hwnd", "fshUnpackImageFormat",
+        "forceShader", "fshHash", "fshId" },
         { "tristrip", "noTextures", "recursive", "createSubDir", "silent", "console", "onlyFirstTechnique", "dummyTextures", "jpegTextures", "embeddedTextures", 
         "swapYZ", "forceLighting", "noMetadata", "genTexNames", "writeFsh", "fshRescale", "fshDisableTextureIgnore", "preTransformVertices", "sortByName", 
         "sortByAlpha", "ignoreMatColor", "noMeshJoin", "head", "ignoreEmbeddedTextures", "ord", "keepTex0InMatOptions", "fshWriteToParentDir" });
@@ -265,6 +266,8 @@ int main(int argc, char *argv[]) {
             options().instances = cmd.GetArgumentInt("instances");
         if (cmd.HasArgument("computationIndex"))
             options().computationIndex = cmd.GetArgumentInt("computationIndex");
+        if (cmd.HasArgument("forceShader"))
+            options().forceShader = cmd.GetArgumentString("forceShader");
     }
     else if (opType == OperationType::DUMP) {
         if (cmd.HasOption("onlyFirstTechnique"))
@@ -374,6 +377,12 @@ int main(int argc, char *argv[]) {
         }
         if (cmd.HasArgument("padFsh"))
             options().padFsh = cmd.GetArgumentInt("padFsh");
+        if (cmd.HasArgument("fshHash")) {
+            options().fshHash = cmd.GetArgumentInt("fshHash");
+            options().useFshHash = true;
+        }
+        if (cmd.HasArgument("fshId"))
+            options().fshId = cmd.GetArgumentInt("fshId");
     }
 
     path o;

@@ -133,9 +133,13 @@ void WriteFsh(path const &fshFilePath, path const &searchDir, map<string, Textur
                 image.AddData(new ea::FshName(img.name));
                 char comment[256];
                 static char idStr[260];
-                unsigned int texNameHash = Hash(fshFilePath.stem().string() + "_" + img.name);
+                unsigned int texNameHash = 0;
+                if (options().useFshHash)
+                    texNameHash = options().fshHash;
+                else
+                    texNameHash = Hash(fshFilePath.stem().string() + "_" + img.name);
                 sprintf_s(idStr, "0x%.8x", texNameHash);
-                sprintf_s(comment, "TXLY,%s,1,%d,%d,%d,%s", image.GetTag().c_str(), pixelsData->GetNumMipLevels() > 0 ? 1 : 0,
+                sprintf_s(comment, "TXLY,%s,%d,%d,%d,%d,%s", image.GetTag().c_str(), options().fshId, pixelsData->GetNumMipLevels() > 0 ? 1 : 0,
                     pixelsData->GetWidth(), pixelsData->GetHeight(), idStr);
                 image.AddData(new ea::FshComment(comment));
             }
@@ -156,6 +160,10 @@ void WriteFsh(path const &fshFilePath, path const &searchDir, map<string, Textur
                         hotSpot->Regions().push_back(ea::FshHotSpot::Region('clet', 0, 0, pixelsData->GetWidth(), pixelsData->GetHeight()));
                     else if (options().fshPatterns)
                         hotSpot->Regions().push_back(ea::FshHotSpot::Region('mowp', 0, 0, pixelsData->GetWidth(), pixelsData->GetHeight()));
+                    else if (image.GetTag() == "misc") {
+                        hotSpot->Regions().push_back(ea::FshHotSpot::Region('glov', 0, 0, pixelsData->GetWidth() / 2, pixelsData->GetHeight()));
+                        hotSpot->Regions().push_back(ea::FshHotSpot::Region('flag', pixelsData->GetWidth() / 2, 0, pixelsData->GetWidth() / 2, pixelsData->GetHeight()));
+                    }
                 }
                 if (hotSpot->Regions().empty()) {
                     fsh.ForAllImages([&](ea::FshImage &image2) {

@@ -926,12 +926,20 @@ void oimport(path const &out, path const &in) {
                 if (hasReflectionTex || hasSpecularTex)
                     isTextured[1] = true;
             }
+
             bool usesCustomShaderName = false;
-            auto optIt = matOptions.find("shader");
-            if (optIt != matOptions.end()) {
-                shader = target->FindShader((*optIt).second);
-                if (shader)
-                    usesCustomShaderName = true;
+
+            if (!options().forceShader.empty()) {
+                shader = target->FindShader(options().forceShader);
+            }
+
+            if (!shader) {
+                auto optIt = matOptions.find("shader");
+                if (optIt != matOptions.end()) {
+                    shader = target->FindShader((*optIt).second);
+                    if (shader)
+                        usesCustomShaderName = true;
+                }
             }
 
             if (!shader) {
@@ -2099,7 +2107,7 @@ void oimport(path const &out, path const &in) {
                 // writing t21__
 
                 options().fshLevels = 99;
-                options().fshFormat = D3DFMT_DXT1;
+                options().fshFormat = D3DFMT_DXT1; // D3DFMT_DXT1
                 if (targetName == "FIFA06" || targetName == "FIFA07" || targetName == "FIFA08" || targetName == "FIFA09")
                     options().fshLevels = 1;
                 else if (targetName == "FIFA10")
@@ -2131,7 +2139,7 @@ void oimport(path const &out, path const &in) {
                 // writing t22__
 
                 options().fshLevels = 99;
-                options().fshFormat = D3DFMT_DXT5;
+                options().fshFormat = D3DFMT_DXT5; // D3DFMT_DXT5
                 options().padFsh = storedPad;
                 //if (targetName == "FIFA06" || targetName == "FIFA07")
                 //    options().fshFormat = D3DFMT_A4R4G4B4;

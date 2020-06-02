@@ -192,6 +192,12 @@ unsigned char ea::FshImage::GetPixelFormat(unsigned int format) {
 }
 
 unsigned int ea::FshImage::GetPixelDataSize(unsigned short width, unsigned short height, unsigned char format) {
+	if (format == FshPixelData::PIXEL_DXT1 || format == FshPixelData::PIXEL_DXT3 || format == FshPixelData::PIXEL_DXT5) {
+		if (width < 4)
+			width = 4;
+		if (height < 4)
+			height = 4;
+	}
 	switch (format) {
 	case FshPixelData::PIXEL_DXT1:
 		return width * height / 2;
@@ -325,8 +331,8 @@ void ea::FshImage::ReadFromFile(std::filesystem::path const &filepath, unsigned 
 		}
 	}
 	else if (d3dformat == D3DFMT_FROM_FILE) {
-		unsigned char format = GetPixelFormat(imageInfo.Format);
-		if (format == 0)
+		unsigned char testFormat = GetPixelFormat(imageInfo.Format);
+		if (testFormat == 0 || testFormat == FshPixelData::PIXEL_888)
 			d3dformat = D3DFMT_A8R8G8B8;
 	}
     if (FAILED(D3DXCreateTextureFromFileExW(Fsh::GlobalDevice->Interface(), filepath.c_str(),
@@ -518,8 +524,8 @@ void ea::FshImage::Load(LoadingInfo const &loadingInfo, unsigned int d3dformat, 
 			}
 		}
 		else if (d3dformat == D3DFMT_FROM_FILE) {
-			unsigned char format = GetPixelFormat(imageInfo.Format);
-			if (format == 0)
+			unsigned char testFormat = GetPixelFormat(imageInfo.Format);
+			if (testFormat == 0 || testFormat == FshPixelData::PIXEL_888)
 				d3dformat = D3DFMT_A8R8G8B8;
 		}
 		if (FAILED(D3DXCreateTextureFromFileInMemoryEx(Fsh::GlobalDevice->Interface(), ddsData, ddsDataSize,
@@ -583,8 +589,8 @@ void ea::FshImage::Load(LoadingInfo const &loadingInfo, unsigned int d3dformat, 
 			}
 		}
 		else if (d3dformat == D3DFMT_FROM_FILE) {
-			unsigned char format = GetPixelFormat(imageInfo.Format);
-			if (format == 0)
+			unsigned char testFormat = GetPixelFormat(imageInfo.Format);
+			if (testFormat == 0 || testFormat == FshPixelData::PIXEL_888)
 				d3dformat = D3DFMT_A8R8G8B8;
 		}
 		if (FAILED(D3DXCreateTextureFromFileInMemoryEx(Fsh::GlobalDevice->Interface(), loadingInfo.fileData, loadingInfo.fileDataSize,
@@ -646,8 +652,8 @@ void ea::FshImage::Load(LoadingInfo const &loadingInfo, unsigned int d3dformat, 
 			}
 		}
 		else if (d3dformat == D3DFMT_FROM_FILE) {
-			unsigned char format = GetPixelFormat(imageInfo.Format);
-			if (format == 0)
+			unsigned char testFormat = GetPixelFormat(imageInfo.Format);
+			if (testFormat == 0 || testFormat == FshPixelData::PIXEL_888)
 				d3dformat = D3DFMT_A8R8G8B8;
 		}
 		if (FAILED(D3DXCreateTextureFromFileExW(Fsh::GlobalDevice->Interface(), loadingInfo.filepath.c_str(),
