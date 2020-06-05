@@ -1,5 +1,11 @@
 **otools** - tools for importing/exporting EA Sports model format (.o)
 
+**O** is a file extension in EA Sports games which is used for model and animation files. The file itself has an ELF structure.
+
+The file may contain model data, skeleton information, animations, rendering information and shaders.
+
+**O** files were used mostly in games developed by EA Vancouver, between 1999 and 2009.
+
 ![](https://i.imgur.com/KIF4gzwm.png) ![](https://i.imgur.com/TQpYMp0m.png) ![](https://i.imgur.com/ALQGlXzm.png)
 
 
