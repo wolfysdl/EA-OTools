@@ -6,20 +6,51 @@ The file may contain model data, skeleton information, animations, rendering inf
 
 **O** files were used mostly in games developed by EA Vancouver, between 1999 and 2009.
 
-![](https://i.imgur.com/KIF4gzwm.png) ![](https://i.imgur.com/TQpYMp0m.png) ![](https://i.imgur.com/ALQGlXzm.png)
+![](https://i.imgur.com/KIF4gzwm.png) ![](https://i.imgur.com/WtbqZAwm.png) ![](https://i.imgur.com/tzKCIWkm.png)
 
+## Current progress and limitations
 
-**Note!** By using OTools, you are agree with following:
+✅ General model/mesh
 
-* Files made with OTools can't be sold or used to get any profit from them.
-* Files made with OTools must be shared freely - without any paid links or paid file hosts.
-* When sharing files made with OTools, they must be available for anyone. Thus, it's not allowed to upload such files in closed communities or groups.
+✅ Skeleton and skinning
 
-If you are not agree with mentioned terms - simply do not use OTools.
+✅ Textures
 
-**Current progress and limitations**:
+❌ Morphing and shapekeys
 
-* Shaders from FIFA (2003 - 2010), FIFA Manager 13 and Cricket 07 are implemented. Most of them are untested and may contain errors. Also they are not guaranteed to work with any other games
+❌ Animations
+
+❌ Shaders and states
+
+**By game:**
+
+✅ FIFA series (FIFA 2003 ... FIFA 10)
+
+🟡 FIFA Manager series (only FIFA Manager 13)
+
+🟡 Cricket series (only Cricker 07; game-specific features are not implemented)
+
+❌ NBA series
+
+❌ NHL series
+
+❌ MLB series
+
+❌ Rugby series
+
+❌ Need For Speed series
+
+❌ Def Jam FFNY
+
+**By platform:**
+
+✅ PC
+
+❌ PlayStation 2
+
+❌ XBOX
+
+## Overview
 
 otools is a command-line tool (but release also includes GUI version). First argument is operation type (export or import), second argument (`-i`) is input file/folder path. All other arguments are optional, but it's recommended to set the source/target game with `-game` option.
 
@@ -153,13 +184,13 @@ FSH unpacking options:
 `-fshUnpackImageFormat` - image format for unpacked textures. Possible formats: `png`, `bmp`, `tga`, `dds`, `jpg`
 
 
-**Requirenents**
+## Requirements
 
 * command-line tool: Windows XP SP3 or higher, 32-bit/64-bit
 
 * GUI tool: Windows 7 or higher, 32-bit/64-bit
 
-**Source code dependencies**
+## Source code dependencies
 
 * Visual Studio 2017/2019
 

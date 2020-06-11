@@ -4,8 +4,8 @@
 #include "message.h"
 #include "Fsh/Fsh.h"
 
-const char *OTOOLS_VERSION = "0.154";
-const unsigned int OTOOLS_VERSION_INT = 154;
+const char *OTOOLS_VERSION = "0.156";
+const unsigned int OTOOLS_VERSION_INT = 156;
 
 GlobalOptions &options() {
     static GlobalOptions go;

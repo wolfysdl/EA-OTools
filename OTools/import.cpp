@@ -692,6 +692,7 @@ void oimport(path const &out, path const &in) {
     importer.SetPropertyInteger(AI_CONFIG_PP_SBP_REMOVE, aiPrimitiveType_POINT | aiPrimitiveType_LINE);
     //importer.SetPropertyInteger(AI_CONFIG_IMPORT_REMOVE_EMPTY_BONES, 0);
     importer.SetPropertyInteger(AI_CONFIG_PP_LBW_MAX_WEIGHTS, target->GetMaxBoneWeightsPerVertex());
+    importer.SetPropertyInteger(AI_CONFIG_PP_SLM_TRIANGLE_LIMIT, 32'767);
     unsigned int sceneLoadingFlags = aiProcess_Triangulate | aiProcess_GenSmoothNormals | aiProcess_GenUVCoords | aiProcess_SplitLargeMeshes |
         aiProcess_SortByPType | aiProcess_PopulateArmatureData | aiProcess_LimitBoneWeights;
     if (options().scale > 0.0f && options().scale != 1.0f) {
