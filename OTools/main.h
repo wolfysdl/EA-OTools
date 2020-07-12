@@ -44,6 +44,7 @@ struct GlobalOptions {
     bool sortByAlpha = false;
     bool ignoreMatColor = false;
     bool head = false;
+    bool hd = false;
     unsigned int pad = 0;
     unsigned int padFsh = 0;
     bool ignoreEmbeddedTextures = false;
@@ -51,6 +52,11 @@ struct GlobalOptions {
     int computationIndex = -1;
     bool keepTex0InMatOptions = false;
     string forceShader;
+    path boneRemap;
+    path skeletonFile;
+    path bonesFile;
+    unsigned int maxBonesPerVertex = 0; // default
+    unsigned int vertexWeightPaletteSize = 0; // default
     // export options
     bool noTextures = false;
     bool dummyTextures = false;

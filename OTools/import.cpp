@@ -436,30 +436,67 @@ struct IrradLight {
     }
 };
 
-union VertexBoneInfo {
+struct VertexBoneInfo {
+    float weight;
+    unsigned char boneIndex;
+};
+
+struct VertexWeightInfo {
+    vector<VertexBoneInfo> bones;
+};
+
+union VertexBoneInfoLayout {
     float fValue;
     unsigned int uiValue;
     unsigned char ucValue;
 };
 
-struct VertexWeightInfo {
-    VertexBoneInfo bones[3];
+struct VertexWeightInfoLayout {
+    VertexBoneInfoLayout bones[3]; // TODO: rework this
     unsigned int numBones;
 
-    VertexWeightInfo() {
+    VertexWeightInfoLayout() {
         Memory_Zero(*this);
+    }
+
+    VertexWeightInfoLayout(VertexWeightInfo const &w) {
+        Memory_Zero(*this);
+        if (w.bones.size() > 3)
+            throw runtime_error("more than 3 bones in VertexWeightInfo (VertexWeightInfoLayout(VertexWeightInfo const &w))");
+        numBones = w.bones.size();
+        for (unsigned int wb = 0; wb < w.bones.size(); wb++) {
+            bones[wb].fValue = w.bones[wb].weight;
+            bones[wb].ucValue = w.bones[wb].boneIndex;
+        }       
+    }
+
+    VertexWeightInfoLayout(VertexWeightInfoLayout const &w) {
+        Memory_Copy(this, &w, sizeof(VertexWeightInfoLayout));
+    }
+
+    VertexWeightInfoLayout &operator=(VertexWeightInfoLayout const &w) {
+        Memory_Copy(this, &w, sizeof(VertexWeightInfoLayout));
+        return *this;
     }
 };
 
 bool operator<(VertexBoneInfo const &a, VertexBoneInfo const &b) {
-    return a.uiValue > b.uiValue;
+    return a.weight > b.weight;
 }
 
 bool operator>(VertexBoneInfo const &a, VertexBoneInfo const &b) {
+    return a.weight < b.weight;
+}
+
+bool operator<(VertexBoneInfoLayout const &a, VertexBoneInfoLayout const &b) {
+    return a.uiValue > b.uiValue;
+}
+
+bool operator>(VertexBoneInfoLayout const &a, VertexBoneInfoLayout const &b) {
     return a.uiValue < b.uiValue;
 }
 
-bool operator<(VertexWeightInfo const &a, VertexWeightInfo const &b) {
+bool operator<(VertexWeightInfoLayout const &a, VertexWeightInfoLayout const &b) {
     if (a.numBones > b.numBones)
         return true;
     if (b.numBones > a.numBones)
@@ -488,7 +525,7 @@ struct BoneInfo {
 };
 
 struct MeshInfo {
-    map<VertexWeightInfo, vector<unsigned int>> weightsMap;
+    map<VertexWeightInfoLayout, vector<unsigned int>> weightsMap;
     map<unsigned int, unsigned int> verticesMap; // original vertex index > new vertex index
     unsigned int startFace = 0;
     unsigned int numFaces = 0;
@@ -504,6 +541,12 @@ unsigned int FshHash (string const &name) {
         hash = c + 32 * hash;
     }
     return hash;
+};
+
+struct BoneRemapTarget {
+    string boneName;
+    float multiply = 1.0f;
+    float add = 0.0f;
 };
 
 map<string, string> GetNameOptions(string const &name, bool isMaterial = false) {
@@ -691,10 +734,9 @@ void oimport(path const &out, path const &in) {
     Assimp::Importer importer;
     importer.SetPropertyInteger(AI_CONFIG_PP_SBP_REMOVE, aiPrimitiveType_POINT | aiPrimitiveType_LINE);
     //importer.SetPropertyInteger(AI_CONFIG_IMPORT_REMOVE_EMPTY_BONES, 0);
-    importer.SetPropertyInteger(AI_CONFIG_PP_LBW_MAX_WEIGHTS, target->GetMaxBoneWeightsPerVertex());
     importer.SetPropertyInteger(AI_CONFIG_PP_SLM_TRIANGLE_LIMIT, 32'767);
     unsigned int sceneLoadingFlags = aiProcess_Triangulate | aiProcess_GenSmoothNormals | aiProcess_GenUVCoords | aiProcess_SplitLargeMeshes |
-        aiProcess_SortByPType | aiProcess_PopulateArmatureData | aiProcess_LimitBoneWeights;
+        aiProcess_SortByPType | aiProcess_PopulateArmatureData;
     if (options().scale > 0.0f && options().scale != 1.0f) {
         importer.SetPropertyFloat(AI_CONFIG_GLOBAL_SCALE_FACTOR_KEY, options().scale);
         sceneLoadingFlags |= aiProcess_GlobalScale;
@@ -703,6 +745,17 @@ void oimport(path const &out, path const &in) {
         sceneLoadingFlags |= aiProcess_FlipUVs;
     if (options().preTransformVertices)
         sceneLoadingFlags |= aiProcess_PreTransformVertices;
+    unsigned int maxBones = target->GetMaxBoneWeightsPerVertex();
+    if (options().maxBonesPerVertex != 0) {
+        if (options().maxBonesPerVertex > 3)
+            maxBones = 3;
+        else
+            maxBones = options().maxBonesPerVertex;
+    }
+    if (options().boneRemap.empty()) {
+        importer.SetPropertyInteger(AI_CONFIG_PP_LBW_MAX_WEIGHTS, maxBones);
+        sceneLoadingFlags |= aiProcess_LimitBoneWeights;
+    }
     const aiScene *scene = importer.ReadFile(in.string(), sceneLoadingFlags);
     if (!scene)
         throw runtime_error("Unable to load scene");
@@ -749,6 +802,42 @@ void oimport(path const &out, path const &in) {
     vector<Node> nodes;
     map<string, BoneInfo> bones; // name -> [index, aiBone]
     map<string, Tex> textures;
+    map<string, BoneRemapTarget> boneRemap;
+    map<string, unsigned char> customBones;
+
+    if (!options().boneRemap.empty()) {
+        if (exists(options().boneRemap)) {
+            ifstream br(options().boneRemap);
+            for (string line; getline(br, line); ) {
+                auto info = Split(line, '\t');
+                if (info.size() >= 2) {
+                    BoneRemapTarget target;
+                    target.boneName = info[1];
+                    if (info.size() >= 3)
+                        target.multiply = SafeConvertFloat(info[2]);
+                    if (info.size() >= 4)
+                        target.add = SafeConvertFloat(info[3]);
+                    boneRemap[info[0]] = target;
+                }
+            }
+        }
+        else
+            throw runtime_error("File for bone remap doesn't exist");
+    }
+
+    if (!options().bonesFile.empty()) {
+        if (exists(options().bonesFile)) {
+            ifstream bf(options().bonesFile);
+            unsigned int boneIndex = 0;
+            for (string line; getline(bf, line); ) {
+                Trim(line);
+                if (!line.empty())
+                    customBones[line] = boneIndex++;
+            }
+        }
+        else
+            throw runtime_error("File for bones doesn't exist");
+    }
 
     NodeAddCallback(scene->mRootNode, nodes);
 
@@ -1009,76 +1098,177 @@ void oimport(path const &out, path const &in) {
                 if (!hasSkeleton)
                     hasSkeleton = true;
                 if (bones.empty()) {
-                    if (mesh->mNumBones > 255)
-                        throw runtime_error("Failed to load bones array: using more than 255 bones in skeleton is not allowed");
-                    unsigned char maxBoneIndex = 0;
-                    set<unsigned char> usedBoneIndices;
-                    for (unsigned int b = 0; b < mesh->mNumBones; b++) {
-                        unsigned int boneIndex = 0;
-                        string boneName;
-                        string bname = mesh->mBones[b]->mNode->mName.C_Str();
-                        auto idbp = bname.find('[');
-                        if (idbp != string::npos) {
-                            auto idbe = bname.find(']', idbp + 1);
-                            if (idbe != string::npos) {
-                                string idstr = bname.substr(idbp + 1, idbe - idbp - 1);
-                                if (!idstr.empty()) {
-                                    try {
-                                        boneIndex = stoi(idstr);
+                    if (options().boneRemap.empty()) {
+                        if (mesh->mNumBones > 255)
+                            throw runtime_error("Failed to load bones array: using more than 255 bones in skeleton is not allowed");
+                        unsigned char maxBoneIndex = 0;
+                        set<unsigned char> usedBoneIndices;
+                        for (unsigned int b = 0; b < mesh->mNumBones; b++) {
+                            unsigned int boneIndex = 0;
+                            string boneName;
+                            string bname = mesh->mBones[b]->mNode->mName.C_Str();
+                            auto idbp = bname.find('[');
+                            if (idbp != string::npos) {
+                                auto idbe = bname.find(']', idbp + 1);
+                                if (idbe != string::npos) {
+                                    string idstr = bname.substr(idbp + 1, idbe - idbp - 1);
+                                    if (!idstr.empty()) {
+                                        try {
+                                            boneIndex = stoi(idstr);
+                                        }
+                                        catch (...) {
+                                            throw runtime_error("Failed to get bone index: index is incorrect");
+                                        }
+                                        if (boneIndex > 255)
+                                            throw runtime_error("Failed to load bones array: bone with index greater than 255 is not allowed");
                                     }
-                                    catch (...) {
+                                    else
                                         throw runtime_error("Failed to get bone index: index is incorrect");
-                                    }
-                                    if (boneIndex > 255)
-                                        throw runtime_error("Failed to load bones array: bone with index greater than 255 is not allowed");
                                 }
                                 else
-                                    throw runtime_error("Failed to get bone index: index is incorrect");
+                                    throw runtime_error("Failed to get bone index: index format is incorrect");
                             }
                             else
-                                throw runtime_error("Failed to get bone index: index format is incorrect");
+                                throw runtime_error("Failed to get bone index: index is not present");
+                            if (!usedBoneIndices.contains(boneIndex))
+                                usedBoneIndices.insert(boneIndex);
+                            else
+                                throw runtime_error("Failed to load bones array: duplicated bone index in bones array");
+                            boneName = bname.substr(0, idbp);
+                            Trim(boneName);
+                            bones[bname] = { unsigned char(boneIndex), mesh->mBones[b], boneName };
+                            if (maxBoneIndex < boneIndex)
+                                maxBoneIndex = boneIndex;
                         }
-                        else
-                            throw runtime_error("Failed to get bone index: index is not present");
-                        if (!usedBoneIndices.contains(boneIndex))
-                            usedBoneIndices.insert(boneIndex);
-                        else
-                            throw runtime_error("Failed to load bones array: duplicated bone index in bones array");
-                        boneName = bname.substr(0, idbp);
-                        Trim(boneName);
-                        bones[bname] = { unsigned char(boneIndex), mesh->mBones[b], boneName };
-                        if (maxBoneIndex < boneIndex)
-                            maxBoneIndex = boneIndex;
+                        if (!bones.empty()) {
+                            if (bones.size() != (maxBoneIndex + 1))
+                                throw runtime_error(Format("Failed to load bones array: bones array size (%d) does not match the highest bone index (%d)", bones.size(), maxBoneIndex));
+                        }
                     }
-                    if (!bones.empty()) {
-                        if (bones.size() != (maxBoneIndex + 1))
-                            throw runtime_error(Format("Failed to load bones array: bones array size (%d) does not match the highest bone index (%d)", bones.size(), maxBoneIndex));
+                    else {
+                        for (unsigned int b = 0; b < mesh->mNumBones; b++) {
+                            string bname = mesh->mBones[b]->mNode->mName.C_Str();
+                            string boneName;
+                            auto idbp = bname.find('[');
+                            if (idbp != string::npos)
+                                boneName = bname.substr(0, idbp);
+                            else
+                                boneName = bname;
+                            Trim(boneName);
+                            bones[bname] = { 0, mesh->mBones[b], boneName };
+                        }
                     }
                 }
                 // Find weights for all vertices
                 allMeshesVertexWeights.resize(mesh->mNumVertices);
                 for (unsigned int b = 0; b < mesh->mNumBones; b++) {
                     aiBone *bone = mesh->mBones[b];
-                    auto bit = bones.find(bone->mNode->mName.C_Str());
-                    if (bit != bones.end()) {
-                        for (unsigned int w = 0; w < bone->mNumWeights; w++) {
-                            if (bone->mWeights[w].mWeight > 0) {
-                                auto &vw = allMeshesVertexWeights[bone->mWeights[w].mVertexId];
-                                if (vw.numBones == 3)
-                                    throw runtime_error("More than 3 bone weights on vertex");
-                                vw.bones[vw.numBones].fValue = bone->mWeights[w].mWeight;
-                                vw.bones[vw.numBones].ucValue = (*bit).second.index;
-                                vw.numBones++;
+                    if (bone->mNumWeights > 1 || (bone->mNumWeights == 1 && bone->mWeights[0].mWeight > 0.0f)) {
+                        auto bit = bones.find(bone->mNode->mName.C_Str());
+                        if (bit != bones.end()) {
+                            float multiply = 1.0f;
+                            float add = 0.0f;
+                            unsigned char targetIndex = (*bit).second.index;
+                            bool use = true;
+                            if (!options().boneRemap.empty()) {
+                                auto br = boneRemap.find((*bit).second.name);
+                                if (br != boneRemap.end()) {
+                                    multiply = (*br).second.multiply;
+                                    add = (*br).second.add;
+                                    auto rit = customBones.find((*br).second.boneName);
+                                    if (rit != customBones.end())
+                                        targetIndex = (*rit).second;
+                                    else {
+                                        use = false; // false
+                                        //throw runtime_error(Format("Failed to find bone for remap (%s)", (*br).second.boneName));
+                                    }
+                                }
+                                else {
+                                    use = false; // false
+                                    //throw runtime_error(Format("No remap info for bone %s", bone->mNode->mName.C_Str()));
+                                    //Error(Format("No remap info for bone %s (%d weights)", bone->mNode->mName.C_Str(), bone->mNumWeights));
+                                }
+                            }
+                            if (use) {
+                                for (unsigned int w = 0; w < bone->mNumWeights; w++) {
+                                    if (bone->mWeights[w].mWeight > 0) {
+                                        float weight = bone->mWeights[w].mWeight;
+                                        if (multiply != 1.0f)
+                                            weight *= multiply;
+                                        if (add != 0.0f)
+                                            weight += add;
+                                        if (weight <= 0.0f)
+                                            continue;
+                                        auto &vw = allMeshesVertexWeights[bone->mWeights[w].mVertexId];
+                                        bool found = false;
+                                        for (auto &b : vw.bones) {
+                                            if (b.boneIndex == targetIndex) {
+                                                b.weight += weight;
+                                                found = true;
+                                                break;
+                                            }
+                                        }
+                                        if (!found) {
+                                            VertexBoneInfo vwi;
+                                            vwi.weight = weight;
+                                            vwi.boneIndex = targetIndex;
+                                            vw.bones.push_back(vwi);
+                                        }
+                                    }
+                                }
                             }
                         }
+                        else
+                            throw runtime_error("Unable to find bone in bones array");
                     }
-                    else
-                        throw runtime_error("Unable to find bone in bones array");
                 }
                 // Sort weights in vertices
-                for (unsigned int v = 0; v < mesh->mNumVertices; v++) {
-                    if (allMeshesVertexWeights[v].numBones > 1)
-                        sort(&allMeshesVertexWeights[v].bones[0], &allMeshesVertexWeights[v].bones[allMeshesVertexWeights[v].numBones]);
+                for (auto &vw : allMeshesVertexWeights) {
+                    if (vw.bones.empty()) {
+                        VertexBoneInfo bi;
+                        bi.boneIndex = 0;
+                        bi.weight = 1.0f;
+                        vw.bones.push_back(bi);
+                    }
+                    if (vw.bones.size() > 1)
+                        sort(vw.bones.begin(), vw.bones.end());
+                    if (vw.bones.size() > maxBones)
+                        vw.bones.resize(maxBones);
+                    float totalBoneWeights = 0.0f;
+                    for (auto &b : vw.bones)
+                        totalBoneWeights += b.weight;
+                    if (totalBoneWeights != 1.0f) {
+                        for (auto &b : vw.bones)
+                            b.weight /= totalBoneWeights;
+                    }
+                    if (options().vertexWeightPaletteSize > 0) {
+                        if (options().vertexWeightPaletteSize == 1) {
+                            for (auto &b : vw.bones)
+                                b.weight = 1.0f;
+                        }
+                        else {
+                            VertexWeightInfo newvw;
+                            for (VertexBoneInfo b : vw.bones) {
+                                b.weight = floor(b.weight * options().vertexWeightPaletteSize);
+                                if (b.weight > 0.0f)
+                                    newvw.bones.push_back(b);
+                            }
+                            if (newvw.bones.empty()) {
+                                VertexBoneInfo bi;
+                                bi.boneIndex = vw.bones[0].boneIndex;
+                                bi.weight = 1.0f;
+                                newvw.bones.push_back(bi);
+                            }
+                            vw = newvw;
+                        }
+                        totalBoneWeights = 0.0f;
+                        for (auto &b : vw.bones)
+                            totalBoneWeights += b.weight;
+                        if (totalBoneWeights != 1.0f) {
+                            for (auto &b : vw.bones)
+                                b.weight /= totalBoneWeights;
+                        }
+                    }
                 }
             }
 
@@ -1106,7 +1296,8 @@ void oimport(path const &out, path const &in) {
                         unsigned int maxNumBoneWeightsToAdd = target->GetMaxVertexWeightsPerMesh() - numBoneWeights;
                         unsigned int numWeightsToAdd = 0;
                         for (unsigned int ind = 0; ind < 3; ind++) {
-                            if (!meshes.back().weightsMap.contains(allMeshesVertexWeights[tri[ind]])) {
+                            VertexWeightInfoLayout vwl(allMeshesVertexWeights[tri[ind]]);
+                            if (!meshes.back().weightsMap.contains(vwl)) {
                                 numWeightsToAdd++;
                                 if (numWeightsToAdd > maxNumBoneWeightsToAdd) {
                                     meshes.back().numFaces = f - meshes.back().startFace;
@@ -1117,8 +1308,10 @@ void oimport(path const &out, path const &in) {
                             }
                         }
                     }
-                    for (unsigned int ind = 0; ind < 3; ind++)
-                        meshes.back().weightsMap[allMeshesVertexWeights[tri[ind]]].push_back(tri[ind]);
+                    for (unsigned int ind = 0; ind < 3; ind++) {
+                        VertexWeightInfoLayout vwl(allMeshesVertexWeights[tri[ind]]);
+                        meshes.back().weightsMap[vwl].push_back(tri[ind]);
+                    }
                 }
                 for (unsigned int ind = 0; ind < 3; ind++)
                     meshes.back().verticesMap[tri[ind]] = 0;
@@ -1153,7 +1346,7 @@ void oimport(path const &out, path const &in) {
 
                 // generate tristrips
                 if (options().tristrip) {
-                    SetListsOnly(true);
+                    SetListsOnly(false);
                     SetCacheSize(CACHESIZE_GEFORCE3);
                     PrimitiveGroup *prims = nullptr;
                     unsigned short numprims = 0;
@@ -1166,7 +1359,7 @@ void oimport(path const &out, path const &in) {
                     delete[] prims;
                 }
 
-                vector<VertexWeightInfo> skinVertexWeights;
+                vector<VertexWeightInfoLayout> skinVertexWeights;
                 vector<unsigned int> skinVertexWeightsIndices;
 
                 if (useSkinning && !m.weightsMap.empty()) {
@@ -1175,13 +1368,17 @@ void oimport(path const &out, path const &in) {
                     unsigned int weightInfoIndex = 0;
                     for (auto const &[w, vertIndices] : m.weightsMap) {
                         skinVertexWeights[weightInfoIndex] = w;
-                        if (skinVertexWeights[weightInfoIndex].numBones == 3)
+                        if (w.numBones == 3)
                             vertexWeightsNumBones3++;
-                        else if (skinVertexWeights[weightInfoIndex].numBones == 2)
+                        else if (w.numBones == 2)
                             vertexWeightsNumBones2++;
-                        else if (skinVertexWeights[weightInfoIndex].numBones == 1)
+                        else if (w.numBones == 1)
                             vertexWeightsNumBones1++;
                         skinVertexWeights[weightInfoIndex].numBones = 0;
+                        //for (int b = 0; b < 3; b++) {
+                        //    if (skinVertexWeights[weightInfoIndex].bones[b].ucValue > 51)
+                        //        Error("Incorrect bone struct");
+                        //}
                         for (auto const vertIndex : vertIndices)
                             skinVertexWeightsIndices[m.verticesMap[vertIndex]] = weightInfoIndex;
                         weightInfoIndex++;
@@ -1315,7 +1512,7 @@ void oimport(path const &out, path const &in) {
                         break;
                     case Shader::VertexSkinData:
                         globalArgs.emplace_back(bufData.Position(), skinVertexWeights.size());
-                        bufData.Put(skinVertexWeights.data(), skinVertexWeights.size() * sizeof(VertexWeightInfo));
+                        bufData.Put(skinVertexWeights.data(), skinVertexWeights.size() * sizeof(VertexWeightInfoLayout));
                         bufData.Put(ZERO);
                         break;
                     case Shader::ModelMatrix:
@@ -1680,49 +1877,77 @@ void oimport(path const &out, path const &in) {
     if (hasSkeleton) {
         bufData.Align(16);
         vector<BoneInfo> vecBones;
-        if (!bones.empty()) {
-            vecBones.resize(bones.size());
-            for (auto const &[name, info] : bones)
-                vecBones[info.index] = info;
-            // bones
-            for (auto const &b : vecBones) {
-                symbols.emplace_back("__Bone:::" + modelName + "." + b.name, bufData.Position());
-                bufData.Put(unsigned int(b.index));
-                bufData.Put(ZERO);
-                bufData.Put(ZERO);
-                bufData.Put(ZERO);
+        if (customBones.empty()) {
+            if (!bones.empty()) {
+                vecBones.resize(bones.size());
+                for (auto const &[name, info] : bones)
+                    vecBones[info.index] = info;
             }
+        }
+        else {
+            vecBones.resize(customBones.size());
+            for (auto const &[name, index] : customBones) {
+                vecBones[index].name = name;
+                vecBones[index].index = index;
+                vecBones[index].bone = nullptr;
+            }
+        }
+        // bones
+        for (auto const &b : vecBones) {
+            symbols.emplace_back("__Bone:::" + modelName + "." + b.name, bufData.Position());
+            bufData.Put(unsigned int(b.index));
+            bufData.Put(ZERO);
+            bufData.Put(ZERO);
+            bufData.Put(ZERO);
         }
         // skeleton
         symbols.emplace_back("__Skeleton:::" + modelName, bufData.Position());
-        bufData.Put(unsigned short(ANIM_VERSION));
-        bufData.Put(unsigned short(510));
-        bufData.Put(unsigned short(ANIM_VERSION));
-        bufData.Put(unsigned short(ZERO));
-        bufData.Put(vecBones.size());
-        bufData.Put(ZERO);
-        for (auto const &b : vecBones) {
-            auto bnode = b.bone->mNode;
-            aiVector3D scaling, position;
-            aiQuaternion rotation;
-            bnode->mTransformation.Decompose(scaling, rotation, position);
-            bufData.Put(scaling);
-            int parentId = -1;
-            if (bnode->mParent) {
-                auto pit = bones.find(bnode->mParent->mName.C_Str());
-                if (pit != bones.end())
-                    parentId = (*pit).second.index;
-            }
-            bufData.Put(parentId);
-            bufData.Put(rotation.x);
-            bufData.Put(rotation.y);
-            bufData.Put(rotation.z);
-            bufData.Put(rotation.w);
-            bufData.Put(position);
+        if (options().skeletonFile.empty()) {
+            bufData.Put(unsigned short(ANIM_VERSION));
+            bufData.Put(unsigned short(510));
+            bufData.Put(unsigned short(ANIM_VERSION));
+            bufData.Put(unsigned short(ZERO));
+            bufData.Put(vecBones.size());
             bufData.Put(ZERO);
-            auto mat = b.bone->mOffsetMatrix;
-            mat.Transpose();
-            bufData.Put(mat);
+            for (auto const &b : vecBones) {
+                auto bnode = b.bone->mNode;
+                aiVector3D scaling, position;
+                aiQuaternion rotation;
+                bnode->mTransformation.Decompose(scaling, rotation, position);
+                bufData.Put(scaling);
+                int parentId = -1;
+                if (bnode->mParent) {
+                    auto pit = bones.find(bnode->mParent->mName.C_Str());
+                    if (pit != bones.end())
+                        parentId = (*pit).second.index;
+                }
+                bufData.Put(parentId);
+                bufData.Put(rotation.x);
+                bufData.Put(rotation.y);
+                bufData.Put(rotation.z);
+                bufData.Put(rotation.w);
+                bufData.Put(position);
+                bufData.Put(ZERO);
+                auto mat = b.bone->mOffsetMatrix;
+                mat.Transpose();
+                bufData.Put(mat);
+            }
+        }
+        else {
+            FILE *skelFile = nullptr;
+            _wfopen_s(&skelFile, options().skeletonFile.c_str(), L"rb");
+            if (skelFile) {
+                fseek(skelFile, 0, SEEK_END);
+                auto fileSize = ftell(skelFile);
+                fseek(skelFile, 0, SEEK_SET);
+                unsigned char *skelData = new unsigned char[fileSize];
+                fread(skelData, fileSize, 1, skelFile);
+                fclose(skelFile);
+                bufData.Put(skelData, fileSize);
+                delete[] skelData;
+            }
+            else
+                throw runtime_error("Unable to open skeleton file");
         }
     }
     static unsigned char TTARSig[] = { 'T', 'T', 'A', 'R' };
@@ -2082,8 +2307,13 @@ void oimport(path const &out, path const &in) {
     bufElf.Put(Elf32_Shdr(sectionNamesOffets[5], SHT_REL, 0, 0, sectionOffsets[5], bufRelocations.Size(), 4, 1, 4, sizeof(Elf32_Rel)));
     if (!options().noMetadata)
         bufElf.Put(Elf32_Shdr(sectionNamesOffets[6], SHT_PROGBITS, 0, 0, sectionOffsets[6], bufMetadata.Size(), 0, 0, 1, 0));
-    if (options().pad > 0 && bufElf.Size() < options().pad) {
-        unsigned int numPaddingBytes = options().pad - bufElf.Size();
+    unsigned int pad = 0;
+    if (options().pad > 0)
+        pad = options().pad;
+    else if (options().hd)
+        pad = 1'048'576;
+    if (pad > 0 && bufElf.Size() < pad) {
+        unsigned int numPaddingBytes = pad - bufElf.Size();
         for (unsigned int i = 0; i < numPaddingBytes; i++)
             bufElf.Put<unsigned char>(0);
     }
@@ -2109,16 +2339,21 @@ void oimport(path const &out, path const &in) {
 
                 options().fshLevels = 99;
                 options().fshFormat = D3DFMT_DXT1; // D3DFMT_DXT1
-                if (targetName == "FIFA06" || targetName == "FIFA07" || targetName == "FIFA08" || targetName == "FIFA09")
+                if (!options().hd) {
+                    if (targetName == "FIFA06" || targetName == "FIFA07" || targetName == "FIFA08" || targetName == "FIFA09")
+                        options().fshLevels = 1;
+                    if (targetName == "FIFA06" || targetName == "FIFA07")
+                        options().padFsh = 16'656;
+                    else if (targetName == "FIFA08" || targetName == "FIFA09")
+                        options().padFsh = 65'808;
+                    else if (targetName == "FIFA10")
+                        options().padFsh = 87'648;
+                }
+                else {
                     options().fshLevels = 1;
-                else if (targetName == "FIFA10")
-                    options().fshLevels = 99;
-                if (targetName == "FIFA06" || targetName == "FIFA07")
-                    options().padFsh = 16'656;
-                else if (targetName == "FIFA08" || targetName == "FIFA09")
-                    options().padFsh = 65'808;
-                else if (targetName == "FIFA10")
-                    options().padFsh = 87'648;
+                    options().padFsh = 352'256;
+                }
+
                 string t21filesuffix = "_0_0_0_0";
                 if (targetName == "FIFA06" || targetName == "FIFA07" || targetName == "FIFA08")
                     t21filesuffix = "_0_0";
@@ -2142,16 +2377,23 @@ void oimport(path const &out, path const &in) {
                 options().fshLevels = 99;
                 options().fshFormat = D3DFMT_DXT5; // D3DFMT_DXT5
                 options().padFsh = storedPad;
-                //if (targetName == "FIFA06" || targetName == "FIFA07")
-                //    options().fshFormat = D3DFMT_A4R4G4B4;
-                //else if (targetName == "FIFA08" || targetName == "FIFA09" || targetName == "FIFA10")
-                //    options().fshFormat = D3DFMT_DXT1;
-                if (targetName == "FIFA06" || targetName == "FIFA07")
-                    options().padFsh = 43'920;
-                else if (targetName == "FIFA08")
-                    options().padFsh = 11'168;
-                else if (targetName == "FIFA09" || targetName == "FIFA10")
-                    options().padFsh = 43'936;
+                if (!options().hd) {
+                    if (targetName == "FIFA06" || targetName == "FIFA07")
+                        options().fshFormat = D3DFMT_A4R4G4B4;
+                    else if (targetName == "FIFA08" || targetName == "FIFA09" || targetName == "FIFA10")
+                        options().fshFormat = D3DFMT_DXT1;
+                    if (targetName == "FIFA06" || targetName == "FIFA07")
+                        options().padFsh = 43'920;
+                    else if (targetName == "FIFA08")
+                        options().padFsh = 11'168;
+                    else if (targetName == "FIFA09" || targetName == "FIFA10")
+                        options().padFsh = 43'936;
+                }
+                else {
+                    //options().fshLevels = 1;
+                    options().padFsh = 700'416;
+                }
+                
                 if (options().fshFormat != D3DFMT_UNKNOWN) {
                     map<string, TextureToAdd> fshTextures2;
                     fshTextures2["tp02"] = { "tp02", "tp02@" + playerIdStr };

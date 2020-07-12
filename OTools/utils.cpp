@@ -200,3 +200,39 @@ wchar_t *FormattingUtils::GetBufW() {
         currentBufW = 0;
     return result;
 }
+
+float SafeConvertFloat(std::wstring const &str) {
+    float result = 0.0f;
+    try {
+        result = std::stof(str);
+    }
+    catch (...) {}
+    return result;
+}
+
+float SafeConvertFloat(std::string const &str) {
+    float result = 0.0f;
+    try {
+        result = std::stof(str);
+    }
+    catch (...) {}
+    return result;
+}
+
+double SafeConvertDouble(std::wstring const &str) {
+    double result = 0.0;
+    try {
+        result = std::stod(str);
+    }
+    catch (...) {}
+    return result;
+}
+
+double SafeConvertDouble(std::string const &str) {
+    double result = 0.0;
+    try {
+        result = std::stod(str);
+    }
+    catch (...) {}
+    return result;
+}

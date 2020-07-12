@@ -3,6 +3,7 @@
 #include "binbuf.h"
 #include "jsonwriter.h"
 #include "FifamReadWrite.h"
+#include <assimp\scene.h>
 
 class exporter {
     struct FileSymbol : public Elf32_Sym {
@@ -204,6 +205,37 @@ class exporter {
         unsigned int type = 0;
         string name;
     };
+
+    struct CollisionGeometry {
+        struct Triangle {
+            unsigned short normal;
+            unsigned short verts[3];
+        };
+        
+        struct Edge {
+            unsigned short verts[2];
+        };
+
+        struct TriVertex {
+            Vector3 pos;
+            Vector3 normal;
+        };
+
+        struct EdgeVertex {
+            Vector3 pos;
+        };
+
+        vector<Vector3> positions;
+        vector<Vector3> normals;
+        vector<Triangle> triangles;
+        vector<Edge> edges;
+        string name;
+
+        vector<TriVertex> triVertBuffer;
+        vector<EdgeVertex> edgeVertBuffer;
+        vector<unsigned short> triIndexBuffer;
+        vector<unsigned short> edgeIndexBuffer;
+    };
 public:
     void convert_o_to_gltf(unsigned char *fileData, unsigned int fileDataSize, path const &outPath, path const &inPath) {
 
@@ -293,9 +325,9 @@ public:
         map<string, Texture *> textures;
         set<string> globalTextures;
         vector<Prop> flags;
-        vector<Prop> lights;
+        vector<Prop> effects;
         vector<Buffer> colBuffers;
-        vector<Accessor> colAccessors;
+        vector<CollisionGeometry> colGeometries;
 
         for (auto const &s : symbols) {
             if (isSymbolDataPresent(s)) {
@@ -341,7 +373,11 @@ public:
             originalFilePath = absolute(inPath, ec);
         auto originalFileName = originalFilePath.stem().string();
 
-        if (false && originalFileName.starts_with("m716__")) {
+        bool hasFlags = false;
+        bool hasEffects = false;
+        bool hasCollision = false;
+
+        if (true && originalFileName.starts_with("m716__")) {
             unsigned int stadiumId = 0;
             unsigned int lightingId = 0;
             if (sscanf(originalFileName.c_str(), "m716__%d_%d", &stadiumId, &lightingId) == 2) {
@@ -351,6 +387,7 @@ public:
                 if (exists(stadFlagsPath)) {
                     FifamReader reader(stadFlagsPath, 14, false, false);
                     if (reader.Available()) {
+                        hasFlags = true;
                         while (!reader.IsEof()) {
                             if (!reader.EmptyLine()) {
                                 auto line = reader.ReadFullLine();
@@ -369,7 +406,7 @@ public:
                                 if (isLineValid) {
                                     Prop p;
                                     p.pos.x = a * 100.0f; p.pos.y = b * 100.0f; p.pos.z = c * 100.0f; p.type = d; p.dir.x = e; p.dir.y = f; p.dir.z = g;
-                                    p.name = Format("flag_%d", flags.size() + 1);
+                                    p.name = "Flag_" + to_string(flags.size() + 1);
                                     flags.push_back(p);
                                 }
                             }
@@ -379,46 +416,66 @@ public:
                     }
                 }
 
-                // lights
+                // effects
                 path stadLightsPath = originalFolder / Format("tag-%d-%d.loc", stadiumId, lightingId);
                 if (exists(stadLightsPath)) {
-                    //FifamReader reader(stadLightsPath, 14, false, false);
-                    //if (reader.Available()) {
-                    //    auto l = reader.ReadFullLine();
-                    //    int numLightTypes;
-                    //    swscanf(l.c_str(), L"%d", &numLightTypes);
-                    //    if (numLightTypes > 0) {
-                    //
-                    //        for (unsigned int i = 0; i < numLightTypes; i++) {
-                    //
-                    //
-                    //            while (!reader.IsEof()) {
-                    //                if (!reader.EmptyLine()) {
-                    //                    auto line = reader.ReadFullLine();
-                    //                    float a = 0.0f; float b = 0.0f; float c = 0.0f; int d = 0; float e = 0.0f; float f = 0.0f; float g = 0.0f;
-                    //                    auto numParams = swscanf(line.c_str(), L"%f %f %f %d %f %f %f", &a, &b, &c, &d, &e, &f, &g);
-                    //                    bool isLineValid = false;
-                    //                    if (numParams == 7)
-                    //                        isLineValid = true;
-                    //                    else if (numParams == 3) {
-                    //                        d = 0;
-                    //                        e = 1.0f;
-                    //                        f = 1.0f;
-                    //                        g = 1.0f;
-                    //                        isLineValid = true;
-                    //                    }
-                    //                    if (isLineValid) {
-                    //                        Prop p;
-                    //                        p.pos.x = a * 100.0f; p.pos.y = b * 100.0f; p.pos.z = c * 100.0f; p.type = d; p.dir.x = e; p.dir.y = f; p.dir.z = g;
-                    //                        flags.push_back(p);
-                    //                    }
-                    //                }
-                    //                else
-                    //                    reader.SkipLine();
-                    //            }
-                    //        }
-                    //    }
-                    //}
+                    FifamReader reader(stadLightsPath, 14, false, false);
+                    if (reader.Available()) {
+                        hasEffects = true;
+                        if (!reader.IsEof()) {
+                            auto l = reader.ReadFullLine();
+                            unsigned int numEffectTypes;
+                            if (swscanf(l.c_str(), L"%d", &numEffectTypes) == 1 && numEffectTypes > 0) {
+                                map<wstring, size_t> effectTypes;
+                                for (unsigned int i = 0; i < numEffectTypes; i++) {
+                                    if (reader.IsEof())
+                                        break;
+                                    l = reader.ReadFullLine();
+                                    wchar_t effectType[32];
+                                    unsigned int numEffects = 0;
+                                    if (swscanf(l.c_str(), L"%s %d", effectType, &numEffects) == 2 && effectType[0] && numEffects > 0) {
+                                        bool hasPosition = wcsstr(l.c_str(), L"Position");
+                                        bool hasDirection = wcsstr(l.c_str(), L"Direction");
+                                        bool eof = false;
+                                        unsigned int effectId = 1;
+                                        for (unsigned int e = 0; e < numEffects; e++) {
+                                            if (reader.IsEof())
+                                                break;
+                                            l = reader.ReadFullLine();
+                                            Prop p;
+                                            if (hasPosition) {
+                                                if (hasDirection) {
+                                                    if (swscanf(l.c_str(), L"%f %f %f %f %f %f", &p.pos.x, &p.pos.y, &p.pos.z, &p.dir.x, &p.dir.y, &p.dir.z) != 6)
+                                                        break;
+                                                    p.type = 2;
+                                                    p.name = WtoA(effectType) + "_" + to_string(++effectTypes[effectType]) + " [dir]";
+                                                    p.pos.x *= 1.12f;
+                                                    p.pos.y *= 1.12f;
+                                                    p.pos.z *= 1.12f;
+                                                    p.dir.x *= 1.12f;
+                                                    p.dir.y *= 1.12f;
+                                                    p.dir.z *= 1.12f;
+                                                    effects.push_back(p);
+                                                }
+                                                else {
+                                                    if (swscanf(l.c_str(), L"%f %f %f", &p.pos.x, &p.pos.y, &p.pos.z) != 3)
+                                                        break;
+                                                    p.type = 1;
+                                                    p.name = WtoA(effectType) + "_" + to_string(++effectTypes[effectType]);
+                                                    p.pos.x *= 1.12f;
+                                                    p.pos.y *= 1.12f;
+                                                    p.pos.z *= 1.12f;
+                                                    effects.push_back(p);
+                                                }
+                                            }
+                                        }
+                                        if (eof)
+                                            break;
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
 
                 // collision
@@ -427,16 +484,56 @@ public:
                     FILE *collFile = nullptr;
                     _wfopen_s(&collFile, stadCollPath.c_str(), L"rb");
                     if (collFile) {
-                        bool isFileValid = true;
+                        bool isFileValid = false;
                         unsigned int collHeader[3] = { 0, 0, 0 };
                         if (fread(collHeader, 4, 3, collFile) == 3 && collHeader[0] == 2) {
+                            isFileValid = true;
+                            colGeometries.resize(collHeader[2]);
                             for (unsigned int collg = 0; collg < collHeader[2]; collg++) {
-                                if (fseek(collFile, 24, SEEK_CUR) != 0)
+                                if (fseek(collFile, 24, SEEK_CUR) != 0) {
+                                    isFileValid = false;
                                     break;
-
+                                }
+                                unsigned short desc[4] = { 0, 0, 0, 0 };
+                                if (fread(desc, 2, 4, collFile) != 4) {
+                                    isFileValid = false;
+                                    break;
+                                }
+                                if (desc[0] > 0) {
+                                    colGeometries[collg].positions.resize(desc[0]);
+                                    if (fread(colGeometries[collg].positions.data(), 12, desc[0], collFile) != desc[0]) {
+                                        isFileValid = false;
+                                        break;
+                                    }
+                                }
+                                if (desc[1] > 0) {
+                                    colGeometries[collg].normals.resize(desc[1]);
+                                    if (fread(colGeometries[collg].normals.data(), 12, desc[1], collFile) != desc[1]) {
+                                        isFileValid = false;
+                                        break;
+                                    }
+                                }
+                                if (desc[2] > 0) {
+                                    colGeometries[collg].triangles.resize(desc[2]);
+                                    if (fread(colGeometries[collg].triangles.data(), 8, desc[2], collFile) != desc[2]) {
+                                        isFileValid = false;
+                                        break;
+                                    }
+                                }
+                                if (desc[3] > 0) {
+                                    colGeometries[collg].edges.resize(desc[3]);
+                                    if (fread(colGeometries[collg].edges.data(), 4, desc[3], collFile) != desc[3]) {
+                                        isFileValid = false;
+                                        break;
+                                    }
+                                }
+                                colGeometries[collg].name = "CollisionGeometry_" + to_string(collg + 1);
                             }
                         }
-
+                        if (isFileValid)
+                            hasCollision = true;
+                        else
+                            colGeometries.clear();
                         fclose(collFile);
                     }
                 }
@@ -461,12 +558,12 @@ public:
             unsigned int numWrittenNodes = 0;
             for (unsigned int i = 0; i < numNodes; i++)
                 j.writeValueInt(i);
-            if (!colAccessors.empty())
+            if (hasCollision)
                 j.writeValueInt(numNodes + bones.size());
-            if (!flags.empty())
-                j.writeValueInt(numNodes + bones.size() + (!colAccessors.empty() ? 1 : 0));
-            if (!lights.empty())
-                j.writeValueInt(numNodes + bones.size() + (!colAccessors.empty() ? 1 : 0) + (flags.empty() ? 0 : 1));
+            if (hasFlags)
+                j.writeValueInt(numNodes + bones.size() + (hasCollision ? 1 : 0));
+            if (hasEffects)
+                j.writeValueInt(numNodes + bones.size() + (hasCollision ? 1 : 0) + (hasFlags ? 1 : 0));
             j.closeArray();
             j.closeScope();
             j.closeArray();
@@ -560,29 +657,34 @@ public:
                     numWrittenNodes++;
                 }
             }
-            if (!colAccessors.empty()) {
+            if (hasCollision) {
                 j.openScope();
                 j.writeFieldString("name", "Collision");
-                j.openArray("children");
-                for (unsigned int i = 0; i < colAccessors.size(); i++)
-                    j.writeValueInt(numWrittenNodes + 1 + i);
-                j.closeArray();
+                if (!colGeometries.empty()) {
+                    j.openArray("children");
+                    for (unsigned int i = 0; i < colGeometries.size(); i++)
+                        j.writeValueInt(numWrittenNodes + 1 + i);
+                    j.closeArray();
+                }
                 j.closeScope();
                 numWrittenNodes++;
-                for (unsigned int i = 0; i < flags.size(); i++) {
+                for (unsigned int i = 0; i < colGeometries.size(); i++) {
                     j.openScope();
-                    j.writeFieldString("name", "CollisionGeometry_" + to_string(i + 1));
+                    j.writeFieldString("name", colGeometries[i].name);
+                    j.writeFieldInt("mesh", i + (model? model->mNumLayers : 0));
                     j.closeScope();
                     numWrittenNodes++;
                 }
             }
-            if (!flags.empty()) {
+            if (hasFlags) {
                 j.openScope();
                 j.writeFieldString("name", "Flags");
-                j.openArray("children");
-                for (unsigned int i = 0; i < flags.size(); i++)
-                    j.writeValueInt(numWrittenNodes + 1 + i);
-                j.closeArray();
+                if (!flags.empty()) {
+                    j.openArray("children");
+                    for (unsigned int i = 0; i < flags.size(); i++)
+                        j.writeValueInt(numWrittenNodes + 1 + i);
+                    j.closeArray();
+                }
                 j.closeScope();
                 numWrittenNodes++;
                 for (unsigned int i = 0; i < flags.size(); i++) {
@@ -602,8 +704,65 @@ public:
                     numWrittenNodes++;
                 }
             }
-            if (!lights.empty()) {
-
+            if (hasEffects) {
+                j.openScope();
+                j.writeFieldString("name", "Effects");
+                if (!effects.empty()) {
+                    j.openArray("children");
+                    for (unsigned int i = 0; i < effects.size(); i++)
+                        j.writeValueInt(numWrittenNodes + 1 + i);
+                    j.closeArray();
+                }
+                j.closeScope();
+                numWrittenNodes++;
+                for (unsigned int i = 0; i < effects.size(); i++) {
+                    j.openScope();
+                    j.writeFieldString("name", effects[i].name);
+                    if (effects[i].type == 2) {
+                        j.openArray("matrix");
+                        aiMatrix4x4 m;
+                        auto Cross = [](aiVector3D &a, aiVector3D &b) {
+                            float ni = a.y * b.z - a.z * b.y;
+                            float nj = a.z * b.x - a.x * b.z;
+                            float nk = a.x * b.y - a.y * b.x;
+                            return aiVector3D(ni, nj, nk);
+                        };
+                        aiVector3D up(0, 0, 1);
+                        aiVector3D direction(effects[i].dir.x, effects[i].dir.y, effects[i].dir.z);
+                        aiVector3D xaxis = Cross(up, direction);
+                        xaxis.Normalize();
+                        aiVector3D yaxis = Cross(direction, xaxis);
+                        yaxis.Normalize();
+                        m.a1 = xaxis.x;
+                        m.a2 = yaxis.x;
+                        m.a3 = direction.x;
+                        m.b1 = xaxis.y;
+                        m.b2 = yaxis.y;
+                        m.b3 = direction.y;
+                        m.c1 = xaxis.z;
+                        m.c2 = yaxis.z;
+                        m.c3 = direction.z;
+                        //aiMatrix4x4::FromToMatrix(aiVector3D(0, 1, 0), aiVector3D(effects[i].dir.x, effects[i].dir.y, effects[i].dir.z), m);
+                        m.d1 = effects[i].pos.x;
+                        m.d2 = effects[i].pos.y;
+                        m.d3 = effects[i].pos.z;
+                        m.d4 = 1;
+                        for (unsigned int i = 0; i < 4; i++) {
+                            for (unsigned int k = 0; k < 4; k++)
+                                j.writeValueFloat(m[i][k]);
+                        }
+                        j.closeArray();
+                    }
+                    else {
+                        j.openArray("translation");
+                        j.writeValueFloat(effects[i].pos.x);
+                        j.writeValueFloat(effects[i].pos.y);
+                        j.writeValueFloat(effects[i].pos.z);
+                        j.closeArray();
+                    }
+                    j.closeScope();
+                    numWrittenNodes++;
+                }
             }
             j.closeArray();
             vector<Buffer> buffers;
@@ -654,134 +813,135 @@ public:
 
             // TODO: embedded textures export (check for embedded textures symbols)
 
-            if (model && model->mNumLayers) {
+            if ((model && model->mNumLayers) || !colGeometries.empty()) {
                 j.openArray("meshes");
-                unsigned int *modelLayers = (unsigned int *)(model->mLayers);
-                unsigned int modelLayersHeader = *modelLayers;
-                bool isOldFormat = modelLayersHeader == 0xA0000000;
-                modelLayers++;
-                if (isOldFormat)
-                    modelLayers += 2;
-                for (unsigned int i = 0; i < model->mNumLayers; i++) {
-                    j.openScope();
-                    if (model->mLayerNames[i])
-                        j.writeFieldString("name", model->mLayerNames[i]);
-                    j.openArray("primitives");
+                if ((model && model->mNumLayers)) {
+                    unsigned int *modelLayers = (unsigned int *)(model->mLayers);
+                    unsigned int modelLayersHeader = *modelLayers;
+                    bool isOldFormat = modelLayersHeader == 0xA0000000;
+                    modelLayers++;
                     if (isOldFormat)
                         modelLayers += 2;
-                    unsigned int numPrimitives = *modelLayers;
-                    if (isOldFormat)
-                        numPrimitives /= 2;
-                    modelLayers++;
-                    for (unsigned int p = 0; p < numPrimitives; p++) {
-                        void *renderDescriptor = GetAt<void *>(modelLayers, isOldFormat ? (p * 8 + 4) : (p * 4));
-                        void *renderMethod = GetAt<void *>(renderDescriptor, 0);
-                        void *globalParameters = At<void *>(renderDescriptor, 4);
-                        GeometryInfo *geometryInfo = GetAt<GeometryInfo *>(globalParameters, 4);
-                        unsigned int rmCodeOffset = At<unsigned char>(renderMethod, 8) - data;
-                        void *vertexBuffer = nullptr;
-                        unsigned int vertexSize = 0;
-                        unsigned int numVertices = 0;
-                        void *indexBuffer = nullptr;
-                        unsigned int indexSize = 0;
-                        unsigned int numIndices = 0;
-                        VertexSkinDataPacked *skinVertexDataBuffer = nullptr;
-                        unsigned int numSkinVertexInfos = 0;
-                        GeoPrimState *geoPrimState = nullptr;
-                        unsigned int geoPrimMode = 5;
-                        Shader *shader = nullptr;
-                        string shaderName;
-                        int color1Offset = -1;
-                        Material mat;
-                        //Error("%X", rmCodeOffset);
-                        auto it = symbolRelocations.find(rmCodeOffset);
-                        if (it != symbolRelocations.end() && (*it).second.st_info == 0x10) {
-                            string codeName = (*it).second.name;
-                            if (codeName.ends_with("__EAGLMicroCode")) {
-                                shaderName = codeName.substr(0, codeName.length() - 15);
-                                mat.shader = shaderName;
-                                string shaderLowered = ToLower(mat.shader);
-                                if (shaderLowered == "cliptextureaddnodepthwrite" || shaderLowered == "cliptexturealphablend" || shaderLowered.find("transparent") != string::npos)
-                                    mat.alphaMode = "BLEND";
-                                shader = globalVars().target->FindShader(shaderName);
-                                void *renderCode = GetAt<void *>(renderMethod, 0);
-                                unsigned int numCommands = 0;
-                                unsigned int commandOffset = 0;
-                                unsigned short id = GetAt<unsigned short>(renderCode, commandOffset + 2);
-                                unsigned short size = GetAt<unsigned short>(renderCode, commandOffset);
-                                while (id != 0 && (!vertexBuffer || !indexBuffer)) {
-                                    switch (id) {
-                                    case 4:
-                                    case 75: //TODO
-                                        if (!vertexBuffer) {
-                                            vertexBuffer = GetAt<void *>(globalParameters, 4);
-                                            numVertices = GetAt<unsigned int>(globalParameters, 0);
-                                            vertexSize = GetAt<unsigned int>(renderCode, commandOffset + 8);
-                                        }
-                                        break;
-                                    case 7:
-                                        if (!indexBuffer) {
-                                            indexBuffer = GetAt<void *>(globalParameters, 4);
-                                            numIndices = GetAt<unsigned int>(globalParameters, 0); // GetAt<unsigned int>(renderCode, commandOffset + 20) - 1;
-                                            indexSize = GetAt<unsigned int>(renderCode, commandOffset + 4);
-                                        }
-                                        break;
-                                    case 28:
-                                        if (!skinVertexDataBuffer) {
-                                            numSkinVertexInfos = GetAt<unsigned int>(globalParameters, 0);
-                                            skinVertexDataBuffer = GetAt<VertexSkinDataPacked *>(globalParameters, 4);
-                                        }
-                                        break;
-                                    case 33:
-                                        geoPrimState = GetAt<GeoPrimState *>(globalParameters, 4);
-                                        if (geoPrimState) {
-                                            if (geoPrimState->nPrimitiveType == 1)
-                                                geoPrimMode = 0;
-                                            else if (geoPrimState->nPrimitiveType == 2)
-                                                geoPrimMode = 1;
-                                            else if (geoPrimState->nPrimitiveType == 3)
-                                                geoPrimMode = 3;
-                                            else if (geoPrimState->nPrimitiveType == 4)
-                                                geoPrimMode = 4;
-                                            else if (geoPrimState->nPrimitiveType == 5)
-                                                geoPrimMode = 5;
-                                            else if (geoPrimState->nPrimitiveType == 6)
-                                                geoPrimMode = 6;
-                                            if (geoPrimState->bCullEnable == 1)
-                                                mat.doubleSided = false;
-                                        }
-                                        else {
-                                            it = symbolRelocations.find(unsigned int(At<GeoPrimState *>(globalParameters, 4)) - unsigned int(data));
-                                            if (it != symbolRelocations.end() && (*it).second.st_info == 0x10) {
-                                                string format = (*it).second.name;
-                                                auto primTypePos = format.rfind("SetPrimitiveType=");
-                                                if (primTypePos != string::npos) {
-                                                    string primTypeStr = format.substr(primTypePos + 17);
-                                                    if (primTypeStr.starts_with("EAGL::PT_POINTLIST"))
-                                                        geoPrimMode = 0;
-                                                    else if (primTypeStr.starts_with("EAGL::PT_LINELIST"))
-                                                        geoPrimMode = 1;
-                                                    else if (primTypeStr.starts_with("EAGL::PT_LINESTRIP"))
-                                                        geoPrimMode = 3;
-                                                    else if (primTypeStr.starts_with("EAGL::PT_TRIANGLELIST"))
-                                                        geoPrimMode = 4;
-                                                    else if (primTypeStr.starts_with("EAGL::PT_TRIANGLESTRIP"))
-                                                        geoPrimMode = 5;
-                                                    else if (primTypeStr.starts_with("EAGL::PT_TRIANGLEFAN"))
-                                                        geoPrimMode = 6;
-                                                }
+                    for (unsigned int i = 0; i < model->mNumLayers; i++) {
+                        j.openScope();
+                        if (model->mLayerNames[i])
+                            j.writeFieldString("name", model->mLayerNames[i]);
+                        j.openArray("primitives");
+                        if (isOldFormat)
+                            modelLayers += 2;
+                        unsigned int numPrimitives = *modelLayers;
+                        if (isOldFormat)
+                            numPrimitives /= 2;
+                        modelLayers++;
+                        for (unsigned int p = 0; p < numPrimitives; p++) {
+                            void *renderDescriptor = GetAt<void *>(modelLayers, isOldFormat ? (p * 8 + 4) : (p * 4));
+                            void *renderMethod = GetAt<void *>(renderDescriptor, 0);
+                            void *globalParameters = At<void *>(renderDescriptor, 4);
+                            GeometryInfo *geometryInfo = GetAt<GeometryInfo *>(globalParameters, 4);
+                            unsigned int rmCodeOffset = At<unsigned char>(renderMethod, 8) - data;
+                            void *vertexBuffer = nullptr;
+                            unsigned int vertexSize = 0;
+                            unsigned int numVertices = 0;
+                            void *indexBuffer = nullptr;
+                            unsigned int indexSize = 0;
+                            unsigned int numIndices = 0;
+                            VertexSkinDataPacked *skinVertexDataBuffer = nullptr;
+                            unsigned int numSkinVertexInfos = 0;
+                            GeoPrimState *geoPrimState = nullptr;
+                            unsigned int geoPrimMode = 5;
+                            Shader *shader = nullptr;
+                            string shaderName;
+                            int color1Offset = -1;
+                            Material mat;
+                            //Error("%X", rmCodeOffset);
+                            auto it = symbolRelocations.find(rmCodeOffset);
+                            if (it != symbolRelocations.end() && (*it).second.st_info == 0x10) {
+                                string codeName = (*it).second.name;
+                                if (codeName.ends_with("__EAGLMicroCode")) {
+                                    shaderName = codeName.substr(0, codeName.length() - 15);
+                                    mat.shader = shaderName;
+                                    string shaderLowered = ToLower(mat.shader);
+                                    if (shaderLowered == "cliptextureaddnodepthwrite" || shaderLowered == "cliptexturealphablend" || shaderLowered.find("transparent") != string::npos)
+                                        mat.alphaMode = "BLEND";
+                                    shader = globalVars().target->FindShader(shaderName);
+                                    void *renderCode = GetAt<void *>(renderMethod, 0);
+                                    unsigned int numCommands = 0;
+                                    unsigned int commandOffset = 0;
+                                    unsigned short id = GetAt<unsigned short>(renderCode, commandOffset + 2);
+                                    unsigned short size = GetAt<unsigned short>(renderCode, commandOffset);
+                                    while (id != 0 && (!vertexBuffer || !indexBuffer)) {
+                                        switch (id) {
+                                        case 4:
+                                        case 75: //TODO
+                                            if (!vertexBuffer) {
+                                                vertexBuffer = GetAt<void *>(globalParameters, 4);
+                                                numVertices = GetAt<unsigned int>(globalParameters, 0);
+                                                vertexSize = GetAt<unsigned int>(renderCode, commandOffset + 8);
+                                            }
+                                            break;
+                                        case 7:
+                                            if (!indexBuffer) {
+                                                indexBuffer = GetAt<void *>(globalParameters, 4);
+                                                numIndices = GetAt<unsigned int>(globalParameters, 0); // GetAt<unsigned int>(renderCode, commandOffset + 20) - 1;
+                                                indexSize = GetAt<unsigned int>(renderCode, commandOffset + 4);
+                                            }
+                                            break;
+                                        case 28:
+                                            if (!skinVertexDataBuffer) {
+                                                numSkinVertexInfos = GetAt<unsigned int>(globalParameters, 0);
+                                                skinVertexDataBuffer = GetAt<VertexSkinDataPacked *>(globalParameters, 4);
+                                            }
+                                            break;
+                                        case 33:
+                                            geoPrimState = GetAt<GeoPrimState *>(globalParameters, 4);
+                                            if (geoPrimState) {
+                                                if (geoPrimState->nPrimitiveType == 1)
+                                                    geoPrimMode = 0;
+                                                else if (geoPrimState->nPrimitiveType == 2)
+                                                    geoPrimMode = 1;
+                                                else if (geoPrimState->nPrimitiveType == 3)
+                                                    geoPrimMode = 3;
+                                                else if (geoPrimState->nPrimitiveType == 4)
+                                                    geoPrimMode = 4;
+                                                else if (geoPrimState->nPrimitiveType == 5)
+                                                    geoPrimMode = 5;
+                                                else if (geoPrimState->nPrimitiveType == 6)
+                                                    geoPrimMode = 6;
+                                                if (geoPrimState->bCullEnable == 1)
+                                                    mat.doubleSided = false;
+                                            }
+                                            else {
+                                                it = symbolRelocations.find(unsigned int(At<GeoPrimState *>(globalParameters, 4)) - unsigned int(data));
+                                                if (it != symbolRelocations.end() && (*it).second.st_info == 0x10) {
+                                                    string format = (*it).second.name;
+                                                    auto primTypePos = format.rfind("SetPrimitiveType=");
+                                                    if (primTypePos != string::npos) {
+                                                        string primTypeStr = format.substr(primTypePos + 17);
+                                                        if (primTypeStr.starts_with("EAGL::PT_POINTLIST"))
+                                                            geoPrimMode = 0;
+                                                        else if (primTypeStr.starts_with("EAGL::PT_LINELIST"))
+                                                            geoPrimMode = 1;
+                                                        else if (primTypeStr.starts_with("EAGL::PT_LINESTRIP"))
+                                                            geoPrimMode = 3;
+                                                        else if (primTypeStr.starts_with("EAGL::PT_TRIANGLELIST"))
+                                                            geoPrimMode = 4;
+                                                        else if (primTypeStr.starts_with("EAGL::PT_TRIANGLESTRIP"))
+                                                            geoPrimMode = 5;
+                                                        else if (primTypeStr.starts_with("EAGL::PT_TRIANGLEFAN"))
+                                                            geoPrimMode = 6;
+                                                    }
 
-                                                auto cullEnablePos = format.rfind("SetCullEnable=");
-                                                if (cullEnablePos != string::npos) {
-                                                    string cullEnableValue = format.substr(cullEnablePos + 14);
-                                                    if (cullEnableValue == "true")
-                                                        mat.doubleSided = false;
+                                                    auto cullEnablePos = format.rfind("SetCullEnable=");
+                                                    if (cullEnablePos != string::npos) {
+                                                        string cullEnableValue = format.substr(cullEnablePos + 14);
+                                                        if (cullEnableValue == "true")
+                                                            mat.doubleSided = false;
+                                                    }
                                                 }
                                             }
-                                        }
-                                        break;
-                                    case 9:
-                                    case 32:
+                                            break;
+                                        case 9:
+                                        case 32:
                                         {
                                             unsigned int samplerIndex = GetAt<unsigned int>(renderCode, commandOffset + 4);
                                             if (samplerIndex < 4) {
@@ -934,224 +1094,428 @@ public:
                                             }
                                         }
                                         break;
+                                        }
+                                        if (numCommands != 0)
+                                            globalParameters = At<void *>(globalParameters, 8);
+                                        numCommands++;
+                                        commandOffset += size * 4;
+                                        id = GetAt<unsigned short>(renderCode, commandOffset + 2);
+                                        size = GetAt<unsigned short>(renderCode, commandOffset);
                                     }
-                                    if (numCommands != 0)
-                                        globalParameters = At<void *>(globalParameters, 8);
-                                    numCommands++;
-                                    commandOffset += size * 4;
-                                    id = GetAt<unsigned short>(renderCode, commandOffset + 2);
-                                    size = GetAt<unsigned short>(renderCode, commandOffset);
                                 }
                             }
-                        }
-                        j.openScope();
-                        if (vertexBuffer) {
-                            if (!shader) {
-                                if (skinVertexDataBuffer)
-                                    shader = &DummyShader_Skin;
-                                else
-                                    shader = &DummyShader;
-                            }
-                            j.openScope("attributes");
-                            unsigned int attrOffset = 0;
-                            bool hasBlendIndices = false;
-                            bool hasBlendWeights = false;
-                            for (auto const &d : shader->declaration) {
-                                if (d.usage == Shader::BlendIndices)
-                                    hasBlendIndices = true;
-                                else if (d.usage == Shader::BlendWeight)
-                                    hasBlendWeights = true;
-                            }
-                            bool uses2Streams = skinVertexDataBuffer && hasBlendIndices && hasBlendWeights;
-                            unsigned int streamNumber = 0;
-                            for (auto const &d : shader->declaration) {
-                                switch (d.usage) {
-                                case Shader::Position:
-                                    j.writeFieldInt("POSITION", accessors.size());
-                                    break;
-                                case Shader::Normal:
-                                    j.writeFieldInt("NORMAL", accessors.size());
-                                    break;
-                                case Shader::Texcoord0:
-                                    j.writeFieldInt("TEXCOORD_0", accessors.size());
-                                    break;
-                                case Shader::Texcoord1:
-                                    j.writeFieldInt("TEXCOORD_1", accessors.size());
-                                    break;
-                                case Shader::Texcoord2:
-                                    j.writeFieldInt("TEXCOORD_2", accessors.size());
-                                    break;
-                                case Shader::Color0:
-                                    j.writeFieldInt("COLOR_0", accessors.size());
-                                    break;
-                                case Shader::Color1:
-                                    //j.writeFieldInt("COLOR_1", accessors.size());
-                                    color1Offset = attrOffset;
-                                    attrOffset += 4;
-                                    continue;
-                                case Shader::BlendIndices:
-                                    j.writeFieldInt("JOINTS_0", accessors.size());
-                                    if (uses2Streams) {
-                                        attrOffset = 0;
-                                        streamNumber = 1;
-                                    }
-                                    break;
-                                case Shader::BlendWeight:
-                                    j.writeFieldInt("WEIGHTS_0", accessors.size());
-                                    break;
+                            j.openScope();
+                            if (vertexBuffer) {
+                                if (!shader) {
+                                    if (skinVertexDataBuffer)
+                                        shader = &DummyShader_Skin;
+                                    else
+                                        shader = &DummyShader;
                                 }
+                                j.openScope("attributes");
+                                unsigned int attrOffset = 0;
+                                bool hasBlendIndices = false;
+                                bool hasBlendWeights = false;
+                                for (auto const &d : shader->declaration) {
+                                    if (d.usage == Shader::BlendIndices)
+                                        hasBlendIndices = true;
+                                    else if (d.usage == Shader::BlendWeight)
+                                        hasBlendWeights = true;
+                                }
+                                bool uses2Streams = skinVertexDataBuffer && hasBlendIndices && hasBlendWeights;
+                                unsigned int streamNumber = 0;
+                                for (auto const &d : shader->declaration) {
+                                    switch (d.usage) {
+                                    case Shader::Position:
+                                        j.writeFieldInt("POSITION", accessors.size());
+                                        break;
+                                    case Shader::Normal:
+                                        j.writeFieldInt("NORMAL", accessors.size());
+                                        break;
+                                    case Shader::Texcoord0:
+                                        j.writeFieldInt("TEXCOORD_0", accessors.size());
+                                        break;
+                                    case Shader::Texcoord1:
+                                        j.writeFieldInt("TEXCOORD_1", accessors.size());
+                                        break;
+                                    case Shader::Texcoord2:
+                                        j.writeFieldInt("TEXCOORD_2", accessors.size());
+                                        break;
+                                    case Shader::Color0:
+                                        j.writeFieldInt("COLOR_0", accessors.size());
+                                        break;
+                                    case Shader::Color1:
+                                        //j.writeFieldInt("COLOR_1", accessors.size());
+                                        color1Offset = attrOffset;
+                                        attrOffset += 4;
+                                        continue;
+                                    case Shader::BlendIndices:
+                                        j.writeFieldInt("JOINTS_0", accessors.size());
+                                        if (uses2Streams) {
+                                            attrOffset = 0;
+                                            streamNumber = 1;
+                                        }
+                                        break;
+                                    case Shader::BlendWeight:
+                                        j.writeFieldInt("WEIGHTS_0", accessors.size());
+                                        break;
+                                    }
+                                    Accessor a;
+                                    a.offset = attrOffset;
+                                    auto declType = d.type;
+                                    if (d.usage == Shader::BlendWeight && declType == Shader::Float3)
+                                        declType = Shader::Float4;
+                                    switch (declType) {
+                                    case Shader::Float4:
+                                        a.type = "VEC4";
+                                        a.componentType = 5126;
+                                        attrOffset += 16;
+                                        break;
+                                    case Shader::Float3:
+                                        a.type = "VEC3";
+                                        a.componentType = 5126;
+                                        attrOffset += 12;
+                                        break;
+                                    case Shader::Float2:
+                                        a.type = "VEC2";
+                                        a.componentType = 5126;
+                                        attrOffset += 8;
+                                        break;
+                                    case Shader::D3DColor:
+                                    case Shader::UByte4:
+                                        a.type = "VEC4";
+                                        a.componentType = 5121;
+                                        attrOffset += 4;
+                                        break;
+                                    }
+                                    a.buffer = buffers.size() + streamNumber;
+                                    a.count = numVertices;
+                                    a.length = numVertices * (streamNumber ? 20 : vertexSize);
+                                    a.stride = streamNumber ? 20 : vertexSize;
+                                    a.bufferType = streamNumber ? Buffer::VertexSkin : Buffer::Vertex;
+                                    a.normalized = d.usage == Shader::Color0;
+                                    if (d.usage == Shader::Position) {
+                                        a.usesMinMax = true;
+                                        Vector3 boundMin = { 0.0f, 0.0f, 0.0f };
+                                        Vector3 boundMax = { 0.0f, 0.0f, 0.0f };
+                                        bool anyVertexProcessed = false;
+                                        Vector3 *posn = (Vector3 *)(unsigned int(vertexBuffer) + a.offset);
+                                        for (unsigned int vert = 0; vert < numVertices; vert++) {
+                                            if (!anyVertexProcessed) {
+                                                boundMin = *posn;
+                                                boundMax = *posn;
+                                                anyVertexProcessed = true;
+                                            }
+                                            else {
+                                                if (posn->x < boundMin.x)
+                                                    boundMin.x = posn->x;
+                                                if (posn->y < boundMin.y)
+                                                    boundMin.y = posn->y;
+                                                if (posn->z < boundMin.z)
+                                                    boundMin.z = posn->z;
+                                                if (posn->x > boundMax.x)
+                                                    boundMax.x = posn->x;
+                                                if (posn->y > boundMax.y)
+                                                    boundMax.y = posn->y;
+                                                if (posn->z > boundMax.z)
+                                                    boundMax.z = posn->z;
+                                            }
+                                            posn = (Vector3 *)(unsigned int(posn) + a.stride);
+                                        }
+                                        a.min = boundMin;
+                                        a.max = boundMax;
+                                    }
+                                    else if (d.usage == Shader::Color0) {
+                                        unsigned char *clr = (unsigned char *)(unsigned int(vertexBuffer) + a.offset);
+                                        for (unsigned int vert = 0; vert < numVertices; vert++) {
+                                            swap(clr[0], clr[2]);
+                                            clr = (unsigned char *)(unsigned int(clr) + a.stride);
+                                        }
+                                    }
+                                    accessors.push_back(a);
+                                }
+                                j.closeScope();
+                                Buffer b;
+                                b.data = vertexBuffer;
+                                b.length = vertexSize * numVertices;
+                                b.type = Buffer::Vertex;
+                                b.stride = vertexSize;
+                                buffers.push_back(b);
+                                if (uses2Streams) {
+                                    Buffer b2;
+                                    VertexSkinData *vsb = new VertexSkinData[numVertices];
+                                    Memory_Zero(vsb, numVertices * sizeof(VertexSkinData));
+                                    b2.data = vsb;
+                                    if (color1Offset != -1) {
+                                        for (unsigned int v = 0; v < numVertices; v++) {
+                                            unsigned int boneIndex = GetAt<unsigned char>(vertexBuffer, vertexSize * v + color1Offset);
+                                            vsb[v].indices[0] = GetAt<unsigned char>(&skinVertexDataBuffer[boneIndex].packedData.x, 0);
+                                            vsb[v].indices[1] = GetAt<unsigned char>(&skinVertexDataBuffer[boneIndex].packedData.y, 0);
+                                            vsb[v].indices[2] = GetAt<unsigned char>(&skinVertexDataBuffer[boneIndex].packedData.z, 0);
+                                            vsb[v].indices[3] = 0;
+                                            vsb[v].weights.x = skinVertexDataBuffer[boneIndex].packedData.x;
+                                            vsb[v].weights.y = skinVertexDataBuffer[boneIndex].packedData.y;
+                                            vsb[v].weights.z = skinVertexDataBuffer[boneIndex].packedData.z;
+                                            vsb[v].weights.w = 0.0f;
+                                            *(unsigned char *)(&vsb[v].weights.x) = 0;
+                                            *(unsigned char *)(&vsb[v].weights.y) = 0;
+                                            *(unsigned char *)(&vsb[v].weights.z) = 0;
+                                            //Error(L"%d %d-%d-%d %.2f %.2f %.2f", boneIndex, vsb[v].indices[0], vsb[v].indices[1], vsb[v].indices[2],
+                                            //    vsb[v].weights.x, vsb[v].weights.y, vsb[v].weights.z);
+                                        }
+                                    }
+                                    vertexSkinBuffers.push_back(vsb);
+                                    b2.length = 20 * numVertices;
+                                    b2.type = Buffer::VertexSkin;
+                                    b2.stride = 20;
+                                    buffers.push_back(b2);
+                                }
+                            }
+                            if (indexBuffer) {
                                 Accessor a;
-                                a.offset = attrOffset;
-                                auto declType = d.type;
-                                if (d.usage == Shader::BlendWeight && declType == Shader::Float3)
-                                    declType = Shader::Float4;
-                                switch (declType) {
-                                case Shader::Float4:
-                                    a.type = "VEC4";
-                                    a.componentType = 5126;
-                                    attrOffset += 16;
-                                    break;
-                                case Shader::Float3:
-                                    a.type = "VEC3";
-                                    a.componentType = 5126;
-                                    attrOffset += 12;
-                                    break;
-                                case Shader::Float2:
-                                    a.type = "VEC2";
-                                    a.componentType = 5126;
-                                    attrOffset += 8;
-                                    break;
-                                case Shader::D3DColor:
-                                case Shader::UByte4:
-                                    a.type = "VEC4";
-                                    a.componentType = 5121;
-                                    attrOffset += 4;
-                                    break;
+                                a.buffer = buffers.size();
+                                a.componentType = 5123;
+                                a.count = numIndices;
+                                a.length = numIndices * 2;
+                                a.offset = 0;
+                                a.type = "SCALAR";
+                                a.stride = 2;
+                                a.bufferType = Buffer::Index;
+                                j.writeFieldInt("indices", accessors.size());
+                                accessors.push_back(a);
+                                Buffer b;
+                                b.data = indexBuffer;
+                                b.length = 2 * numIndices;
+                                b.type = Buffer::Index;
+                                b.stride = 2;
+                                buffers.push_back(b);
+                            }
+                            j.writeFieldInt("mode", geoPrimMode);
+                            unsigned int materialId = 0;
+                            bool materialFound = false;
+                            if (!options().noMeshJoin) {
+                                for (unsigned int mid = 0; mid < materials.size(); mid++) {
+                                    if (materials[mid].Compare(mat)) {
+                                        materialId = mid;
+                                        materialFound = true;
+                                        break;
+                                    }
                                 }
-                                a.buffer = buffers.size() + streamNumber;
-                                a.count = numVertices;
-                                a.length = numVertices * (streamNumber ? 20 : vertexSize);
-                                a.stride = streamNumber ? 20 : vertexSize;
-                                a.bufferType = streamNumber ? Buffer::VertexSkin : Buffer::Vertex;
-                                a.normalized = d.usage == Shader::Color0;
-                                if (d.usage == Shader::Position) {
-                                    a.usesMinMax = true;
-                                    Vector3 boundMin = { 0.0f, 0.0f, 0.0f };
-                                    Vector3 boundMax = { 0.0f, 0.0f, 0.0f };
-                                    bool anyVertexProcessed = false;
-                                    Vector3 *posn = (Vector3 *)(unsigned int(vertexBuffer) + a.offset);
-                                    for (unsigned int vert = 0; vert < numVertices; vert++) {
+                            }
+                            if (!materialFound) {
+                                materialId = materials.size();
+                                materials.push_back(mat);
+                            }
+                            j.writeFieldInt("material", materialId);
+                            j.closeScope();
+                        }
+                        modelLayers += numPrimitives * (isOldFormat ? 2 : 1);
+                        j.closeArray();
+                        j.closeScope();
+                    }
+                }
+                if (!colGeometries.empty()) {
+                    for (unsigned int i = 0; i < colGeometries.size(); i++) {
+                        // for each coll mesh:
+                        //// trilist primitive:
+                        ////// index buffer
+                        ////// vertex buffer
+                        //// linelist primitive:
+                        ////// index buffer
+                        ////// vertex buffer
+                        auto &g = colGeometries[i];
+                        j.openScope();
+                        j.writeFieldString("name", g.name);
+                        j.openArray("primitives");
+                        if (!g.triangles.empty()) {
+                            j.openScope();
+                            j.openScope("attributes");
+                            // create vertex buffer
+                            map<pair<unsigned short, unsigned short>, unsigned int> usedVerts;
+                            Vector3 vertMin, vertMax;
+                            bool anyVertexProcessed = false;
+                            for (auto const &t : g.triangles) {
+                                for (unsigned int vi = 0; vi < 3; vi++) {
+                                    auto key = make_pair(t.verts[vi], t.normal);
+                                    if (!usedVerts.contains(key)) {
+                                        auto newIndex = usedVerts.size();
+                                        usedVerts[key] = newIndex;
+                                        auto const &posn = g.positions[t.verts[vi]];
                                         if (!anyVertexProcessed) {
-                                            boundMin = *posn;
-                                            boundMax = *posn;
+                                            vertMin = posn;
+                                            vertMax = posn;
                                             anyVertexProcessed = true;
                                         }
                                         else {
-                                            if (posn->x < boundMin.x)
-                                                boundMin.x = posn->x;
-                                            if (posn->y < boundMin.y)
-                                                boundMin.y = posn->y;
-                                            if (posn->z < boundMin.z)
-                                                boundMin.z = posn->z;
-                                            if (posn->x > boundMax.x)
-                                                boundMax.x = posn->x;
-                                            if (posn->y > boundMax.y)
-                                                boundMax.y = posn->y;
-                                            if (posn->z > boundMax.z)
-                                                boundMax.z = posn->z;
+                                            if (posn.x < vertMin.x)
+                                                vertMin.x = posn.x;
+                                            if (posn.y < vertMin.y)
+                                                vertMin.y = posn.y;
+                                            if (posn.z < vertMin.z)
+                                                vertMin.z = posn.z;
+                                            if (posn.x > vertMax.x)
+                                                vertMax.x = posn.x;
+                                            if (posn.y > vertMax.y)
+                                                vertMax.y = posn.y;
+                                            if (posn.z > vertMax.z)
+                                                vertMax.z = posn.z;
                                         }
-                                        posn = (Vector3 *)(unsigned int(posn) + a.stride);
-                                    }
-                                    a.min = boundMin;
-                                    a.max = boundMax;
-                                }
-                                else if (d.usage == Shader::Color0) {
-                                    unsigned char *clr = (unsigned char *)(unsigned int(vertexBuffer) + a.offset);
-                                    for (unsigned int vert = 0; vert < numVertices; vert++) {
-                                        swap(clr[0], clr[2]);
-                                        clr = (unsigned char *)(unsigned int(clr) + a.stride);
                                     }
                                 }
-                                accessors.push_back(a);
                             }
+                            g.triIndexBuffer.resize(g.triangles.size() * 3);
+                            unsigned int ibcounter = 0;
+                            for (auto const &t : g.triangles) {
+                                for (unsigned int vi = 0; vi < 3; vi++)
+                                    g.triIndexBuffer[ibcounter++] = usedVerts[make_pair(t.verts[vi], t.normal)];
+                            }
+                            g.triVertBuffer.resize(usedVerts.size());
+                            for (auto const &[k, v] : usedVerts) {
+                                g.triVertBuffer[v].pos = g.positions[k.first];
+                                g.triVertBuffer[v].normal = g.normals[k.second];
+                            }
+                            j.writeFieldInt("POSITION", accessors.size());
+                            Accessor colGeoAccessor;
+                            colGeoAccessor.buffer = buffers.size();
+                            colGeoAccessor.bufferType = exporter::Buffer::Type::Vertex;
+                            colGeoAccessor.componentType = 5126;
+                            colGeoAccessor.count = usedVerts.size();
+                            colGeoAccessor.length = usedVerts.size() * 24;
+                            colGeoAccessor.max = vertMax;
+                            colGeoAccessor.min = vertMin;
+                            colGeoAccessor.normalized = false;
+                            colGeoAccessor.offset = 0;
+                            colGeoAccessor.stride = 24;
+                            colGeoAccessor.type = "VEC3";
+                            colGeoAccessor.usesMinMax = true;
+                            accessors.push_back(colGeoAccessor);
+                            j.writeFieldInt("NORMAL", accessors.size());
+                            colGeoAccessor.offset = 12;
+                            colGeoAccessor.usesMinMax = false;
+                            accessors.push_back(colGeoAccessor);
+                            Buffer vb;
+                            vb.data = g.triVertBuffer.data();
+                            vb.length = g.triVertBuffer.size() * 24;
+                            vb.type = Buffer::Vertex;
+                            vb.stride = 24;
+                            buffers.push_back(vb);
                             j.closeScope();
-                            Buffer b;
-                            b.data = vertexBuffer;
-                            b.length = vertexSize * numVertices;
-                            b.type = Buffer::Vertex;
-                            b.stride = vertexSize;
-                            buffers.push_back(b);
-                            if (uses2Streams) {
-                                Buffer b2;
-                                VertexSkinData *vsb = new VertexSkinData[numVertices];
-                                Memory_Zero(vsb, numVertices * sizeof(VertexSkinData));
-                                b2.data = vsb;
-                                if (color1Offset != -1) {
-                                    for (unsigned int v = 0; v < numVertices; v++) {
-                                        unsigned int boneIndex = GetAt<unsigned char>(vertexBuffer, vertexSize * v + color1Offset);
-                                        vsb[v].indices[0] = GetAt<unsigned char>(&skinVertexDataBuffer[boneIndex].packedData.x, 0);
-                                        vsb[v].indices[1] = GetAt<unsigned char>(&skinVertexDataBuffer[boneIndex].packedData.y, 0);
-                                        vsb[v].indices[2] = GetAt<unsigned char>(&skinVertexDataBuffer[boneIndex].packedData.z, 0);
-                                        vsb[v].indices[3] = 0;
-                                        vsb[v].weights.x = skinVertexDataBuffer[boneIndex].packedData.x;
-                                        vsb[v].weights.y = skinVertexDataBuffer[boneIndex].packedData.y;
-                                        vsb[v].weights.z = skinVertexDataBuffer[boneIndex].packedData.z;
-                                        vsb[v].weights.w = 0.0f;
-                                        *(unsigned char *)(&vsb[v].weights.x) = 0;
-                                        *(unsigned char *)(&vsb[v].weights.y) = 0;
-                                        *(unsigned char *)(&vsb[v].weights.z) = 0;
-                                        //Error(L"%d %d-%d-%d %.2f %.2f %.2f", boneIndex, vsb[v].indices[0], vsb[v].indices[1], vsb[v].indices[2],
-                                        //    vsb[v].weights.x, vsb[v].weights.y, vsb[v].weights.z);
+                            Accessor colIndicesAccessor;
+                            colIndicesAccessor.buffer = buffers.size();
+                            colIndicesAccessor.bufferType = Buffer::Index;
+                            colIndicesAccessor.componentType = 5123;
+                            colIndicesAccessor.count = g.triIndexBuffer.size();
+                            colIndicesAccessor.length = g.triIndexBuffer.size() * 2;
+                            colIndicesAccessor.normalized = false;
+                            colIndicesAccessor.offset = 0;
+                            colIndicesAccessor.stride = 2;
+                            colIndicesAccessor.type = "SCALAR";
+                            colIndicesAccessor.usesMinMax = false;
+                            j.writeFieldInt("indices", accessors.size());
+                            accessors.push_back(colIndicesAccessor);
+                            Buffer ib;
+                            ib.data = g.triIndexBuffer.data();
+                            ib.length = g.triIndexBuffer.size() * 2;
+                            ib.type = Buffer::Index;
+                            ib.stride = 2;
+                            buffers.push_back(ib);
+                            j.writeFieldInt("mode", 4);
+                            j.writeFieldInt("material", 0);
+                            j.closeScope();
+                        }
+                        if (!g.edges.empty()) {
+                            j.openScope();
+                            j.openScope("attributes");
+                            // create vertex buffer
+                            map<unsigned short, unsigned int> usedVerts;
+                            Vector3 vertMin, vertMax;
+                            bool anyVertexProcessed = false;
+                            for (auto const &e : g.edges) {
+                                for (unsigned int vi = 0; vi < 2; vi++) {
+                                    auto key = e.verts[vi];
+                                    if (!usedVerts.contains(key)) {
+                                        auto newIndex = usedVerts.size();
+                                        usedVerts[key] = newIndex;
+                                        auto const &posn = g.positions[e.verts[vi]];
+                                        if (!anyVertexProcessed) {
+                                            vertMin = posn;
+                                            vertMax = posn;
+                                            anyVertexProcessed = true;
+                                        }
+                                        else {
+                                            if (posn.x < vertMin.x)
+                                                vertMin.x = posn.x;
+                                            if (posn.y < vertMin.y)
+                                                vertMin.y = posn.y;
+                                            if (posn.z < vertMin.z)
+                                                vertMin.z = posn.z;
+                                            if (posn.x > vertMax.x)
+                                                vertMax.x = posn.x;
+                                            if (posn.y > vertMax.y)
+                                                vertMax.y = posn.y;
+                                            if (posn.z > vertMax.z)
+                                                vertMax.z = posn.z;
+                                        }
                                     }
                                 }
-                                vertexSkinBuffers.push_back(vsb);
-                                b2.length = 20 * numVertices;
-                                b2.type = Buffer::VertexSkin;
-                                b2.stride = 20;
-                                buffers.push_back(b2);
                             }
-                        }
-                        if (indexBuffer) {
-                            Accessor a;
-                            a.buffer = buffers.size();
-                            a.componentType = 5123;
-                            a.count = numIndices;
-                            a.length = numIndices * 2;
-                            a.offset = 0;
-                            a.type = "SCALAR";
-                            a.stride = 2;
-                            a.bufferType = Buffer::Index;
+                            g.edgeIndexBuffer.resize(g.edges.size() * 2);
+                            unsigned int ibcounter = 0;
+                            for (auto const &e : g.edges) {
+                                for (unsigned int vi = 0; vi < 2; vi++)
+                                    g.edgeIndexBuffer[ibcounter++] = usedVerts[e.verts[vi]];
+                            }
+                            g.edgeVertBuffer.resize(usedVerts.size());
+                            for (auto const &[k, v] : usedVerts)
+                                g.edgeVertBuffer[v].pos = g.positions[k];
+                            j.writeFieldInt("POSITION", accessors.size());
+                            Accessor colGeoAccessor;
+                            colGeoAccessor.buffer = buffers.size();
+                            colGeoAccessor.bufferType = exporter::Buffer::Type::Vertex;
+                            colGeoAccessor.componentType = 5126;
+                            colGeoAccessor.count = usedVerts.size();
+                            colGeoAccessor.length = usedVerts.size() * 12;
+                            colGeoAccessor.max = vertMax;
+                            colGeoAccessor.min = vertMin;
+                            colGeoAccessor.normalized = false;
+                            colGeoAccessor.offset = 0;
+                            colGeoAccessor.stride = 12;
+                            colGeoAccessor.type = "VEC3";
+                            colGeoAccessor.usesMinMax = true;
+                            accessors.push_back(colGeoAccessor);
+                            Buffer vb;
+                            vb.data = g.edgeVertBuffer.data();
+                            vb.length = g.edgeVertBuffer.size() * 12;
+                            vb.type = Buffer::Vertex;
+                            vb.stride = 12;
+                            buffers.push_back(vb);
+                            j.closeScope();
+                            Accessor colIndicesAccessor;
+                            colIndicesAccessor.buffer = buffers.size();
+                            colIndicesAccessor.bufferType = Buffer::Index;
+                            colIndicesAccessor.componentType = 5123;
+                            colIndicesAccessor.count = g.edgeIndexBuffer.size();
+                            colIndicesAccessor.length = g.edgeIndexBuffer.size() * 2;
+                            colIndicesAccessor.normalized = false;
+                            colIndicesAccessor.offset = 0;
+                            colIndicesAccessor.stride = 2;
+                            colIndicesAccessor.type = "SCALAR";
+                            colIndicesAccessor.usesMinMax = false;
                             j.writeFieldInt("indices", accessors.size());
-                            accessors.push_back(a);
-                            Buffer b;
-                            b.data = indexBuffer;
-                            b.length = 2 * numIndices;
-                            b.type = Buffer::Index;
-                            b.stride = 2;
-                            buffers.push_back(b);
+                            accessors.push_back(colIndicesAccessor);
+                            Buffer ib;
+                            ib.data = g.edgeIndexBuffer.data();
+                            ib.length = g.edgeIndexBuffer.size() * 2;
+                            ib.type = Buffer::Index;
+                            ib.stride = 2;
+                            buffers.push_back(ib);
+                            j.writeFieldInt("mode", 1);
+                            j.writeFieldInt("material", 1);
+                            j.closeScope();
                         }
-                        j.writeFieldInt("mode", geoPrimMode);
-                        unsigned int materialId = 0;
-                        bool materialFound = false;
-                        if (!options().noMeshJoin) {
-                            for (unsigned int mid = 0; mid < materials.size(); mid++) {
-                                if (materials[mid].Compare(mat)) {
-                                    materialId = mid;
-                                    materialFound = true;
-                                    break;
-                                }
-                            }
-                        }
-                        if (!materialFound) {
-                            materialId = materials.size();
-                            materials.push_back(mat);
-                        }
-                        j.writeFieldInt("material", materialId);
+                        j.closeArray();
                         j.closeScope();
                     }
-                    modelLayers += numPrimitives * (isOldFormat? 2 : 1);
-                    j.closeArray();
-                    j.closeScope();
                 }
                 j.closeArray();
             }

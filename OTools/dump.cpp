@@ -756,17 +756,17 @@ unsigned int WriteBoneWeightsBuffer(void *baseObj, string const &name, unsigned 
     struct boneweight { union boneref { float weight; unsigned char boneIndex; }; boneref bones[4]; };
     boneweight *weights = At<boneweight>(currentData, GetAt<unsigned int>(baseObj, 4));
     Writer::writeLine(to_string(numBoneWeights) + " bone weights [...]");
-    //for (unsigned int i = 0; i < numBoneWeights; i++) {
-    //    string line;
-    //    for (unsigned int b = 0; b < 4; b++) {
-    //        float weight = weights[i].bones[b].weight;
-    //        *(unsigned char *)(&weight) = 0;
-    //        line += Format("bone %2d %.4f", weights[i].bones[b].boneIndex, weight);
-    //        if (b != 3)
-    //            line += "   ";
-    //    }
-    //    Writer::writeLine(line);
-    //}
+    for (unsigned int i = 0; i < numBoneWeights; i++) {
+        string line;
+        for (unsigned int b = 0; b < 4; b++) {
+            float weight = weights[i].bones[b].weight;
+            *(unsigned char *)(&weight) = 0;
+            line += Format("bone %2d %.4f", weights[i].bones[b].boneIndex, weight);
+            if (b != 3)
+                line += "   ";
+        }
+        Writer::writeLine(line);
+    }
     Writer::closeScope();
     return numBoneWeights * 16;
 }

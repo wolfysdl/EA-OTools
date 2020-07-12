@@ -4,8 +4,8 @@
 #include "message.h"
 #include "Fsh/Fsh.h"
 
-const char *OTOOLS_VERSION = "0.156";
-const unsigned int OTOOLS_VERSION_INT = 156;
+const char *OTOOLS_VERSION = "0.159";
+const unsigned int OTOOLS_VERSION_INT = 159;
 
 GlobalOptions &options() {
     static GlobalOptions go;
@@ -24,10 +24,10 @@ enum ErrorType {
 int main(int argc, char *argv[]) {
     CommandLine cmd(argc, argv, { "i", "o", "game", "scale", "defaultVCol", "setVCol", "vColScale", "fshOutput", "fshLevels", "fshFormat", "fshTextures",
         "fshAddTextures", "fshIgnoreTextures", "startsWith", "pad", "padFsh", "instances", "computationIndex", "hwnd", "fshUnpackImageFormat",
-        "forceShader", "fshHash", "fshId" },
+        "forceShader", "fshHash", "fshId", "boneRemap", "skeletonFile", "bonesFile", "maxBonesPerVertex", "vertexWeightPaletteSize" },
         { "tristrip", "noTextures", "recursive", "createSubDir", "silent", "console", "onlyFirstTechnique", "dummyTextures", "jpegTextures", "embeddedTextures", 
         "swapYZ", "forceLighting", "noMetadata", "genTexNames", "writeFsh", "fshRescale", "fshDisableTextureIgnore", "preTransformVertices", "sortByName", 
-        "sortByAlpha", "ignoreMatColor", "noMeshJoin", "head", "ignoreEmbeddedTextures", "ord", "keepTex0InMatOptions", "fshWriteToParentDir" });
+        "sortByAlpha", "ignoreMatColor", "noMeshJoin", "head", "hd", "ignoreEmbeddedTextures", "ord", "keepTex0InMatOptions", "fshWriteToParentDir" });
     if (cmd.HasOption("silent"))
         SetMessageDisplayType(MessageDisplayType::MSG_NONE);
     else {
@@ -258,6 +258,8 @@ int main(int argc, char *argv[]) {
             options().ignoreMatColor = true;
         if (cmd.HasOption("head"))
             options().head = true;
+        if (cmd.HasOption("hd"))
+            options().hd = true;
         if (cmd.HasArgument("pad"))
             options().pad = cmd.GetArgumentInt("pad");
         if (cmd.HasOption("ignoreEmbeddedTextures"))
@@ -268,6 +270,16 @@ int main(int argc, char *argv[]) {
             options().computationIndex = cmd.GetArgumentInt("computationIndex");
         if (cmd.HasArgument("forceShader"))
             options().forceShader = cmd.GetArgumentString("forceShader");
+        if (cmd.HasArgument("boneRemap"))
+            options().boneRemap = cmd.GetArgumentString("boneRemap");
+        if (cmd.HasArgument("skeletonFile"))
+            options().skeletonFile = cmd.GetArgumentString("skeletonFile");
+        if (cmd.HasArgument("bonesFile"))
+            options().bonesFile = cmd.GetArgumentString("bonesFile");
+        if (cmd.HasArgument("maxBonesPerVertex"))
+            options().maxBonesPerVertex = cmd.GetArgumentInt("maxBonesPerVertex");
+        if (cmd.HasArgument("vertexWeightPaletteSize"))
+            options().vertexWeightPaletteSize = cmd.GetArgumentInt("vertexWeightPaletteSize");
     }
     else if (opType == OperationType::DUMP) {
         if (cmd.HasOption("onlyFirstTechnique"))

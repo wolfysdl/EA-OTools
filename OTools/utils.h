@@ -93,3 +93,29 @@ bool Warning(std::wstring const &format, ArgTypes... args) {
 }
 
 unsigned int Hash(std::string const &str);
+
+template<typename T>
+T SafeConvertInt(std::wstring const &str, bool isHex = false) {
+    T result = 0;
+    try {
+        result = static_cast<T>(std::stoull(str, 0, isHex ? 16 : 10));
+    }
+    catch (...) {}
+    return result;
+}
+
+float SafeConvertFloat(std::wstring const &str);
+double SafeConvertDouble(std::wstring const &str);
+
+template<typename T>
+T SafeConvertInt(std::string const &str, bool isHex = false) {
+    T result = 0;
+    try {
+        result = static_cast<T>(std::stoull(str, 0, isHex ? 16 : 10));
+    }
+    catch (...) {}
+    return result;
+}
+
+float SafeConvertFloat(std::string const &str);
+double SafeConvertDouble(std::string const &str);
