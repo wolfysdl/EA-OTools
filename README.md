@@ -91,6 +91,8 @@ Possible operations:
 
 Additional options:
 
+`-game <gameId>` - set the source/target game. Currently implemented games are: `fifa2003`, `fifa2004`, `fifa2005`, `fifa06`, `fifa07`, `fifa08`, `fifa09`, `fifa10`, `euro2004`, `euro2008`, `wc2006`, `cl0405`, `cl0607`, `fm13`, `cricket07`, `nhl04`
+
 `-o <output path>` - output filename (for single file as input) or output folder (for folder as input)
 
 `-silent` - do not display error messages (by default, all messages are displayed as message boxes)
@@ -118,8 +120,6 @@ Additional export options:
 `-skeleton <filePath>` - skeleton in external file (.o)
 
 Additional import options:
-
-`-game <gameId>` - set the source/target game. Currently implemented games are: `fifa2003`, `fifa2004`, `fifa2005`, `fifa06`, `fifa07`, `fifa08`, `fifa09`, `fifa10`, `euro2004`, `euro2008`, `wc2006`, `cl0405`, `cl0607`, `fm13`, `cricket07`
 
 `-scale <scaling>` - scale model by given floating-point factor
 
