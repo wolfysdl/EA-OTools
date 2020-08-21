@@ -6259,7 +6259,7 @@ Shader shaders_FM13[31] = {
     Shader::IndexData
     }
     },
-    { "PlanarShadow_Skin", 15, { { Shader::Float3, Shader::Position }, { Shader::UByte4, Shader::BlendIndices }, { Shader::D3DColor, Shader::Color0 } },
+    { "PlanarShadow_Skin", 15, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color1 }, { Shader::D3DColor, Shader::Color0 }, { Shader::UByte4, Shader::BlendIndices }, { Shader::Float3, Shader::BlendWeight } },
     {
     { SETUP_RENDER, { 0, -1 } },
     { NOP_1, {  } },

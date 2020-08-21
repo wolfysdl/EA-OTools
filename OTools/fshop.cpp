@@ -4,8 +4,8 @@
 
 TextureToAdd::TextureToAdd() {};
 
-TextureToAdd::TextureToAdd(string const &_name, string const &_filepath, TexEmbedded const &_embedded) {
-    name = _name; filepath = _filepath; embedded = _embedded;
+TextureToAdd::TextureToAdd(string const &_name, string const &_filepath, unsigned int _format, int _levels, TexEmbedded const &_embedded) {
+    name = _name; filepath = _filepath; format = _format; levels = _levels; embedded = _embedded;
 }
 
 void packfsh_collect(path const &out, path const &in) {
@@ -88,45 +88,58 @@ void WriteFsh(path const &fshFilePath, path const &searchDir, map<string, Textur
             }
             if (!loadingInfo.fileData && !loadingInfo.data) {
                 path imgPath = img.filepath;
-                loadingInfo.filepath = imgPath;
-                bool hasExtension = false;
-                if (imgPath.has_extension()) {
-                    string ext = ToLower(imgPath.extension().string());
-                    for (auto const &ie : imgExt) {
-                        if (ext == ie) {
-                            hasExtension = true;
-                            break;
+                auto imgParentDir = imgPath.parent_path();
+                auto imgFileName = imgPath.filename().string();
+                auto atPos = imgFileName.find('@');
+                unsigned int numSearchPasses = 1;
+                if (atPos != string::npos && atPos != 0)
+                    numSearchPasses = 2;
+
+                for (unsigned int searchPass = 0; searchPass < numSearchPasses; searchPass++) {
+                    if (searchPass == 1)
+                        imgPath = imgParentDir / imgFileName.substr(0, atPos);
+                    loadingInfo.filepath = imgPath;
+                    bool hasExtension = false;
+                    if (imgPath.has_extension()) {
+                        string ext = ToLower(imgPath.extension().string());
+                        for (auto const &ie : imgExt) {
+                            if (ext == ie) {
+                                hasExtension = true;
+                                break;
+                            }
                         }
                     }
-                }
-                if (hasExtension) {
-                    loadingInfo.fileExists = exists(imgPath);
-                    if (!loadingInfo.fileExists) {
-                        loadingInfo.filepath = searchDir / imgPath;
-                        loadingInfo.fileExists = exists(loadingInfo.filepath);
+                    if (hasExtension) {
+                        loadingInfo.fileExists = exists(imgPath);
                         if (!loadingInfo.fileExists) {
-                            imgPath.replace_extension();
-                            hasExtension = false;
+                            loadingInfo.filepath = searchDir / imgPath;
+                            loadingInfo.fileExists = exists(loadingInfo.filepath);
+                            if (!loadingInfo.fileExists) {
+                                imgPath.replace_extension();
+                                hasExtension = false;
+                            }
                         }
                     }
-                }
-                if (!loadingInfo.fileExists && !hasExtension) {
-                    for (auto const &ie : imgExt) {
-                        string filePathWithExt = imgPath.string() + ie;
-                        loadingInfo.filepath = filePathWithExt;
-                        loadingInfo.fileExists = exists(loadingInfo.filepath);
-                        if (loadingInfo.fileExists)
-                            break;
-                        loadingInfo.filepath = searchDir / filePathWithExt;
-                        loadingInfo.fileExists = exists(loadingInfo.filepath);
-                        if (loadingInfo.fileExists)
-                            break;
+                    if (!loadingInfo.fileExists && !hasExtension) {
+                        for (auto const &ie : imgExt) {
+                            string filePathWithExt = imgPath.string() + ie;
+                            loadingInfo.filepath = filePathWithExt;
+                            loadingInfo.fileExists = exists(loadingInfo.filepath);
+                            if (loadingInfo.fileExists)
+                                break;
+                            loadingInfo.filepath = searchDir / filePathWithExt;
+                            loadingInfo.fileExists = exists(loadingInfo.filepath);
+                            if (loadingInfo.fileExists)
+                                break;
+                        }
                     }
+                    if (searchPass == 0 && loadingInfo.fileExists)
+                        break;
                 }
             }
             if (loadingInfo.fileData || loadingInfo.data || loadingInfo.fileExists) {
                 auto &image = fsh.AddImage();
-                image.Load(loadingInfo, options().fshFormat, options().fshLevels, options().fshRescale);
+                image.Load(loadingInfo, img.format, img.levels, options().fshRescale);
                 ea::FshPixelData *pixelsData = image.FindFirstData(ea::FshData::PIXELDATA)->As<ea::FshPixelData>();
                 image.AddData(new ea::FshMetalBin(metalBinData, 0x10));
                 image.SetTag(img.name);
@@ -149,7 +162,24 @@ void WriteFsh(path const &fshFilePath, path const &searchDir, map<string, Textur
                 auto hotSpot = image.AddData(new ea::FshHotSpot())->As<ea::FshHotSpot>();
                 ea::FshPixelData *pixelsData = image.FindFirstData(ea::FshData::PIXELDATA)->As<ea::FshPixelData>();
                 if (pixelsData) {
-                    if (options().fshBalls)
+                    if (options().head) {
+                        if (globalVars().target) {
+                            string targetName = globalVars().target->Name();
+                            if (targetName == "CL0405") {
+                                if (image.GetTag() == "glos") {
+                                    hotSpot->Regions().push_back(ea::FshHotSpot::Region('sphi', 102, 0, 154, 128));
+                                    hotSpot->Regions().push_back(ea::FshHotSpot::Region('spsk', 0, 0, 102, 128));
+                                }
+                                else if (image.GetTag() == "face") {
+                                    hotSpot->Regions().push_back(ea::FshHotSpot::Region('hifa', 102, 0, 154, 128));
+                                    hotSpot->Regions().push_back(ea::FshHotSpot::Region('skin', 0, 0, 102, 128));
+                                }
+                                else if (image.GetTag() == "tp02")
+                                    hotSpot->Regions().push_back(ea::FshHotSpot::Region('hair', 0, 0, pixelsData->GetWidth(), pixelsData->GetHeight()));
+                            }
+                        }
+                    }
+                    else if (options().fshBalls)
                         hotSpot->Regions().push_back(ea::FshHotSpot::Region('ball', 0, 0, pixelsData->GetWidth(), pixelsData->GetHeight()));
                     else if (options().fshKits) {
                         unsigned int shortsHeight = unsigned int(roundf(float(pixelsData->GetHeight()) * 0.333f));
@@ -183,6 +213,12 @@ void WriteFsh(path const &fshFilePath, path const &searchDir, map<string, Textur
             });
             if (!fshDir.empty())
                 create_directories(fshDir);
+            fsh.SetAddBuyERTS(true);
+            if (globalVars().target) {
+                string targetName = globalVars().target->Name();
+                if (targetName == "CL0405")
+                    fsh.SetAlignment(8);
+            }
             fsh.Write(fshFilePath);
             if (options().padFsh > 0) {
                 FILE *fshFile = _wfopen(fshFilePath.c_str(), L"a+");

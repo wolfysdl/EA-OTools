@@ -41,7 +41,7 @@ ea::Buffer & ea::FshMetalBin::Buffer() { return mBuffer; }
 
 ea::FshData::DataType ea::FshComment::GetDataType() const { return FshData::COMMENT; }
 
-size_t ea::FshComment::GetDataSize() const { return 4 + mComment.length(); }
+size_t ea::FshComment::GetDataSize() const { return 4 + mComment.length() + 1; }
 
 ea::FshComment::FshComment(std::string const & comment) { mComment = comment; }
 
@@ -944,7 +944,7 @@ void ea::Fsh::Read(std::filesystem::path const & filepath) {
 void ea::Fsh::Write(std::filesystem::path const & filepath) {
 	File f(filepath, File::WRITE);
 	size_t fileHeaderSizeNotAligned = 16 + mImages.size() * 8;
-	size_t fileHeaderSize = File::GetAlignedSize(fileHeaderSizeNotAligned, mWritingOptions.mAlignment);
+	size_t fileHeaderSize = File::GetAlignedSize(fileHeaderSizeNotAligned, 16);
 	size_t totalFileSize = fileHeaderSize;
 	std::vector<size_t> sectionSizes(mImages.size(), 0);
 	for (size_t i = 0; i < mImages.size(); i++) {
@@ -1010,6 +1010,7 @@ void ea::Fsh::Write(std::filesystem::path const & filepath) {
 				f.Write(commentSize);
 				if (commentSize > 0)
 					f.Write(data->As<FshComment>()->GetComment().c_str(), commentSize);
+				f.WriteNull(1);
 			} break;
 			case FshData::NAME: {
 				f.Write(data->As<FshName>()->GetName().c_str(), data->As<FshName>()->GetName().length() + 1);

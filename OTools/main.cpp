@@ -4,8 +4,8 @@
 #include "message.h"
 #include "Fsh/Fsh.h"
 
-const char *OTOOLS_VERSION = "0.159";
-const unsigned int OTOOLS_VERSION_INT = 159;
+const char *OTOOLS_VERSION = "0.160";
+const unsigned int OTOOLS_VERSION_INT = 160;
 
 GlobalOptions &options() {
     static GlobalOptions go;
@@ -24,10 +24,12 @@ enum ErrorType {
 int main(int argc, char *argv[]) {
     CommandLine cmd(argc, argv, { "i", "o", "game", "scale", "defaultVCol", "setVCol", "vColScale", "fshOutput", "fshLevels", "fshFormat", "fshTextures",
         "fshAddTextures", "fshIgnoreTextures", "startsWith", "pad", "padFsh", "instances", "computationIndex", "hwnd", "fshUnpackImageFormat",
-        "forceShader", "fshHash", "fshId", "boneRemap", "skeletonFile", "bonesFile", "maxBonesPerVertex", "vertexWeightPaletteSize" },
+        "forceShader", "fshHash", "fshId", "boneRemap", "skeletonData", "skeleton", "bonesFile", "maxBonesPerVertex", "vertexWeightPaletteSize",
+        "translate" },
         { "tristrip", "noTextures", "recursive", "createSubDir", "silent", "console", "onlyFirstTechnique", "dummyTextures", "jpegTextures", "embeddedTextures", 
         "swapYZ", "forceLighting", "noMetadata", "genTexNames", "writeFsh", "fshRescale", "fshDisableTextureIgnore", "preTransformVertices", "sortByName", 
-        "sortByAlpha", "ignoreMatColor", "noMeshJoin", "head", "hd", "ignoreEmbeddedTextures", "ord", "keepTex0InMatOptions", "fshWriteToParentDir" });
+        "sortByAlpha", "ignoreMatColor", "noMeshJoin", "head", "hd", "ignoreEmbeddedTextures", "ord", "keepTex0InMatOptions", "fshWriteToParentDir",
+        "conformant" });
     if (cmd.HasOption("silent"))
         SetMessageDisplayType(MessageDisplayType::MSG_NONE);
     else {
@@ -125,6 +127,10 @@ int main(int argc, char *argv[]) {
         static TargetCRICKET07 defaultCricketTarget;
         globalVars().target = &defaultCricketTarget;
     }
+    else if (game == "nhl") {
+        static TargetNHL04 defaultNHLTarget;
+        globalVars().target = &defaultNHLTarget;
+    }
     else if (game == "fm13") {
         static TargetFM13 targetFM13;
         globalVars().target = &targetFM13;
@@ -185,6 +191,10 @@ int main(int argc, char *argv[]) {
         static TargetCRICKET07 targetCRICKET07;
         globalVars().target = &targetCRICKET07;
     }
+    else if (game == "nhl04" || game == "nhl2004") {
+        static TargetNHL04 targetNHL04;
+        globalVars().target = &targetNHL04;
+    }
     else {
         static TargetFM13 defaultTarget;
         globalVars().target = &defaultTarget;
@@ -200,12 +210,25 @@ int main(int argc, char *argv[]) {
             options().noMeshJoin = true;
         if (cmd.HasOption("keepTex0InMatOptions"))
             options().keepTex0InMatOptions = true;
+        if (cmd.HasArgument("skeleton"))
+            options().skeleton = cmd.GetArgumentString("skeleton");
     }
     else if (opType == OperationType::IMPORT) {
+        if (cmd.HasOption("conformant"))
+            options().conformant = true;
         if (cmd.HasOption("noMetadata"))
             options().noMetadata = true;
         if (cmd.HasArgument("scale"))
             options().scale = cmd.GetArgumentFloat("scale");
+        if (cmd.HasArgument("translate")) {
+            auto translateLine = cmd.GetArgumentString("translate");
+            auto translateParts = Split(translateLine, ',');
+            if (translateParts.size() == 3) {
+                options().translate.x = SafeConvertFloat(translateParts[0]);
+                options().translate.y = SafeConvertFloat(translateParts[1]);
+                options().translate.z = SafeConvertFloat(translateParts[2]);
+            }
+        }
         if (cmd.HasOption("tristrip"))
             options().tristrip = true;
         if (cmd.HasOption("embeddedTextures"))
@@ -272,8 +295,8 @@ int main(int argc, char *argv[]) {
             options().forceShader = cmd.GetArgumentString("forceShader");
         if (cmd.HasArgument("boneRemap"))
             options().boneRemap = cmd.GetArgumentString("boneRemap");
-        if (cmd.HasArgument("skeletonFile"))
-            options().skeletonFile = cmd.GetArgumentString("skeletonFile");
+        if (cmd.HasArgument("skeletonData"))
+            options().skeletonData = cmd.GetArgumentString("skeletonData");
         if (cmd.HasArgument("bonesFile"))
             options().bonesFile = cmd.GetArgumentString("bonesFile");
         if (cmd.HasArgument("maxBonesPerVertex"))
@@ -431,6 +454,7 @@ int main(int argc, char *argv[]) {
                                 out = out / targetFileNameWithExt;
                         }
                         create_directories(out.parent_path());
+                        globalVars().currentFilePath = in;
                         callback(out, in);
                     }
                 }
@@ -455,8 +479,10 @@ int main(int argc, char *argv[]) {
         else
             processFile(i, false);
     }
-    else
+    else {
+        globalVars().currentFilePath = i;
         callback(o, i);
+    }
 
     if (opType == PACKFSH)
         packfsh_pack();

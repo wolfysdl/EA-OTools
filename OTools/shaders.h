@@ -21,6 +21,7 @@ enum ShaderCommand {
     SET_VERTEX_SHADER_TRANSPOSED_MATRIX = 35,
     SET_ANIMATION_BUFFER = 40,
     SET_VERTEX_SHADER_CONSTANT_L_46 = 46,
+    DRAW_INDEXED_PRIM_57 = 57,
     DRAW_INDEXED_PRIM_AND_END = 65,
     SETUP_RENDER = 69,
     SET_PIXEL_SHADER_CONTANT_G_72 = 72,
@@ -118,7 +119,15 @@ struct Shader {
         PlaneEquation,
         FresnelColour,
         Fresnel,
-        LightMultipliers
+        LightMultipliers,
+        Irradiance,
+        FaceIrradiance,
+        Vec3E30B0B1Local,
+        Vec3DA0A0A1Local,
+        UVOffset,
+        UVMatrix,
+        ColourScale,
+        ColourScaleFactor
     };
 
     struct Command {

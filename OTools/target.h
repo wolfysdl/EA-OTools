@@ -14,6 +14,7 @@ struct MaterialProperties {
     bool isShiny = false;
     bool isMetallic = false;
     bool isAdditive = false;
+    unsigned int numUVs = 0;
 };
 
 class Target abstract {
@@ -153,3 +154,13 @@ class TargetCRICKET07 : public Target {
     unsigned int NumShaders();
     Shader *DecideShader(MaterialProperties const &properties);
 };
+
+class TargetNHL04 : public Target {
+    char const *Name();
+    int Version();
+    unsigned short AnimVersion();
+    Shader *Shaders();
+    unsigned int NumShaders();
+    Shader *DecideShader(MaterialProperties const &properties);
+};
+

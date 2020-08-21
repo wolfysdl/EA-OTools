@@ -8,6 +8,7 @@
 #include "memory.h"
 #include "utils.h"
 #include <assimp/color4.h>
+#include <assimp/vector3.h>
 #include "target.h"
 #include "Fsh/Fsh.h"
 
@@ -18,7 +19,9 @@ struct GlobalOptions {
     bool processingFolders = false;
     // import options
     unsigned int hwnd = 0;
+    bool conformant = false;
     float scale = 1.0f;
+    aiVector3D translate = { 0.0f, 0.0f, 0.0f };
     bool tristrip = false;
     bool embeddedTextures = false;
     bool swapYZ = false;
@@ -53,7 +56,8 @@ struct GlobalOptions {
     bool keepTex0InMatOptions = false;
     string forceShader;
     path boneRemap;
-    path skeletonFile;
+    path skeletonData;
+    path skeleton;
     path bonesFile;
     unsigned int maxBonesPerVertex = 0; // default
     unsigned int vertexWeightPaletteSize = 0; // default
@@ -89,10 +93,12 @@ struct TexEmbedded {
 struct TextureToAdd {
     string name;
     string filepath;
+    unsigned int format;
+    int levels;
     TexEmbedded embedded;
 
     TextureToAdd();
-    TextureToAdd(string const &_name, string const &_filepath, TexEmbedded const &_embedded = TexEmbedded());
+    TextureToAdd(string const &_name, string const &_filepath, unsigned int _format, int _levels, TexEmbedded const &_embedded = TexEmbedded());
 };
 
 struct GlobalVars {
@@ -101,6 +107,7 @@ struct GlobalVars {
     map<string, map<vector<unsigned char>, vector<string>>> shaders;
     ea::FshImage::FileFormat fshUnpackImageFormat = ea::FshImage::PNG;
     map<path, map<string, TextureToAdd>> fshToBuild;
+    path currentFilePath;
 };
 
 GlobalVars &globalVars();

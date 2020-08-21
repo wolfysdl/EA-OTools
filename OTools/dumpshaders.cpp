@@ -52,6 +52,8 @@ string CommandName(unsigned int id) {
         return "SET_ANIMATION_BUFFER";
     case 46:
         return "SET_VERTEX_SHADER_CONSTANT_L_46";
+    case 57:
+        return "DRAW_INDEXED_PRIM_57";
     case 65:
         return "DRAW_INDEXED_PRIM_AND_END";
     case 69:
@@ -144,6 +146,14 @@ string GetShaderAttributeName(int attr) {
     case Shader::FresnelColour:             return "Shader::FresnelColour";
     case Shader::Fresnel:                   return "Shader::Fresnel";
     case Shader::LightMultipliers:          return "Shader::LightMultipliers";
+    case Shader::Irradiance:                return "Shader::Irradiance";
+    case Shader::FaceIrradiance:            return "Shader::FaceIrradiance";
+    case Shader::Vec3E30B0B1Local:          return "Shader::Vec3E30B0B1Local";
+    case Shader::Vec3DA0A0A1Local:          return "Shader::Vec3DA0A0A1Local";
+    case Shader::UVOffset:                  return "Shader::UVOffset";
+    case Shader::UVMatrix:                  return "Shader::UVMatrix";
+    case Shader::ColourScale:               return "Shader::ColourScale";
+    case Shader::ColourScaleFactor:         return "Shader::ColourScaleFactor";
     }
     return string();
 }
@@ -188,7 +198,10 @@ int GetShaderAttributeFromSymbolName(string const &symbolName) {
         { "__COORD4:::RM::Globe::PlaneEquation", Shader::PlaneEquation },
         { "__COORD4:::RM::Globe::FresnelColour", Shader::FresnelColour },
         { "__COORD4:::ColourTranslate", Shader::ColourTranslate },
-        { "__COORD4:::Hbs::Render::Fresnel", Shader::Fresnel }
+        { "__COORD4:::Hbs::Render::Fresnel", Shader::Fresnel },
+        { "__COORD4:::gpIrradiance", Shader::Irradiance },
+        { "__COORD4:::gpFaceIrradiance", Shader::FaceIrradiance },
+        { "__COORD4:::ColourScaleFactor", Shader::ColourScaleFactor }
     };
     auto it = attrMap.find(symbolName);
     if (it != attrMap.end())
@@ -452,12 +465,16 @@ public:
                         if (!shaderName.empty()) {
                             void *m = At<void *>(data, s.st_value);
                             auto &def = shadersDef[shaderName];
-                            unsigned int numVD = GetAt<unsigned int>(m, 8);
+                            unsigned int maxSelected = GetAt<unsigned int>(m, 0);
+                            unsigned int baseOffset = 4;
+                            if (maxSelected == 0)
+                                baseOffset = 0;
+                            unsigned int numVD = GetAt<unsigned int>(m, baseOffset + 4);
                             unsigned int texCoordIndex = 0;
                             bool isSkinned = false;
                             bool hasPositions = false;
                             for (unsigned int i = 0; i < numVD; i++) {
-                                unsigned char *pDecl = At<unsigned char>(m, 12 + i * 4);
+                                unsigned char *pDecl = At<unsigned char>(m, baseOffset + 8 + i * 4);
                                 if (pDecl[3] == 0x40) {
                                     Shader::VertexDeclElement decl;
                                     switch (pDecl[2]) {
@@ -511,7 +528,7 @@ public:
                                 bw.usage = Shader::BlendWeight;
                                 def.second.push_back(bw);
                             }
-                            def.first = GetAt<unsigned int>(m, 12 + numVD * 4);
+                            def.first = GetAt<unsigned int>(m, baseOffset + 8 + numVD * 4);
                         }
                     }
                 }
@@ -537,6 +554,8 @@ public:
                 static float vec0123[4] = { 0, 1, 2, 3 };
                 static float vecEnvMapCoeff[4] = { 1.0f, 0.25f, 0.5f, 0.75f };
                 static unsigned int vec0505051[4] = { 0x3EFEFF00, 0x3EFEFF00, 0x3EFEFF00, 0x3F800000 };
+                static unsigned int vec3E30B0B1[4] = { 0x3E30B0B1, 0x3E30B0B1, 0x3E30B0B1, 0x3E30B0B1};
+                static unsigned int vec3DA0A0A1[4] = { 0x3DA0A0A1, 0x3DA0A0A1, 0x3DA0A0A1, 0x3DA0A0A1 };
                 map<void const *, ModifiableData const *> modifiables;
                 for (unsigned int m = 0; m < model->mNumModifiableDatas; m++)
                     modifiables[model->mModifiableData[m].mEntries] = &model->mModifiableData[m];
@@ -593,6 +612,9 @@ public:
                                                     firstTechniqueCommandId = firstTechniqueCommands[commandIndex];
                                                 unsigned int numArguments = size - 1;
                                                 vector<int> args(numArguments);
+                                                vector<int> originalArgs(numArguments);
+                                                for (unsigned int a = 0; a < numArguments; a++)
+                                                    originalArgs[a] = GetAt<unsigned int>(renderCode, commandOffset + 4 + a * 4);
                                                 for (unsigned int a = 0; a < numArguments; a++) {
                                                     args[a] = GetAt<unsigned int>(renderCode, commandOffset + 4 + a * 4);
                                                     if (firstTechniqueCommandId == 4 || firstTechniqueCommandId == 75) {
@@ -607,7 +629,7 @@ public:
                                                         if (t == 0 && a == 1)
                                                             info.debugVertexSize = args[a];
                                                     }
-                                                    else if (firstTechniqueCommandId == 65) {
+                                                    else if (firstTechniqueCommandId == 65 || firstTechniqueCommandId == 57) {
                                                         if (a == 6)
                                                             args[a] = Shader::VertexData;
                                                         else if (a == 7)
@@ -616,26 +638,60 @@ public:
                                                             args[a] = Shader::VariationsCount;
                                                         else if (a == 9)
                                                             args[a] = Shader::VertexBufferIndex;
-                                                        else if (a >= 25) {
-                                                            if (args[18] == args[19]) {
-                                                                if (a == 26)
+                                                        else if (a >= 22) {
+                                                            if (numArguments == 43) {
+                                                                if (originalArgs[6] == originalArgs[28] && originalArgs[7] == originalArgs[29] && originalArgs[8] == originalArgs[30] && originalArgs[9] == originalArgs[31]) {
+                                                                    if (a == 28)
+                                                                        args[a] = Shader::VertexData;
+                                                                    else if (a == 29)
+                                                                        args[a] = Shader::VertexCount;
+                                                                    else if (a == 30)
+                                                                        args[a] = Shader::VariationsCount;
+                                                                    else if (a == 31)
+                                                                        args[a] = Shader::VertexBufferIndex;
+                                                                }
+                                                                else if (originalArgs[6] == originalArgs[26] && originalArgs[7] == originalArgs[27] && originalArgs[8] == originalArgs[28] && originalArgs[9] == originalArgs[29]) {
+                                                                    if (a == 26)
+                                                                        args[a] = Shader::VertexData;
+                                                                    else if (a == 27)
+                                                                        args[a] = Shader::VertexCount;
+                                                                    else if (a == 28)
+                                                                        args[a] = Shader::VariationsCount;
+                                                                    else if (a == 29)
+                                                                        args[a] = Shader::VertexBufferIndex;
+                                                                }
+                                                            }
+                                                            else if (numArguments == 35 && originalArgs[6] == originalArgs[22] && originalArgs[7] == originalArgs[23] && originalArgs[8] == originalArgs[24] && originalArgs[9] == originalArgs[25]) {
+                                                                if (a == 22)
                                                                     args[a] = Shader::VertexData;
-                                                                else if (a == 27)
+                                                                else if (a == 23)
                                                                     args[a] = Shader::VertexCount;
-                                                                else if (a == 28)
+                                                                else if (a == 24)
                                                                     args[a] = Shader::VariationsCount;
-                                                                else if (a == 29)
+                                                                else if (a == 25)
                                                                     args[a] = Shader::VertexBufferIndex;
                                                             }
                                                             else {
-                                                                if (a == 25)
-                                                                    args[a] = Shader::VertexData;
-                                                                else if (a == 26)
-                                                                    args[a] = Shader::VertexCount;
-                                                                else if (a == 27)
-                                                                    args[a] = Shader::VariationsCount;
-                                                                else if (a == 28)
-                                                                    args[a] = Shader::VertexBufferIndex;
+                                                                if (args[18] == args[19]) {
+                                                                    if (a == 26)
+                                                                        args[a] = Shader::VertexData;
+                                                                    else if (a == 27)
+                                                                        args[a] = Shader::VertexCount;
+                                                                    else if (a == 28)
+                                                                        args[a] = Shader::VariationsCount;
+                                                                    else if (a == 29)
+                                                                        args[a] = Shader::VertexBufferIndex;
+                                                                }
+                                                                else {
+                                                                    if (a == 25)
+                                                                        args[a] = Shader::VertexData;
+                                                                    else if (a == 26)
+                                                                        args[a] = Shader::VertexCount;
+                                                                    else if (a == 27)
+                                                                        args[a] = Shader::VariationsCount;
+                                                                    else if (a == 28)
+                                                                        args[a] = Shader::VertexBufferIndex;
+                                                                }
                                                             }
                                                         }
                                                     }
@@ -770,6 +826,12 @@ public:
                                                                                 info.globalArguments[g].type = Shader::CrowdTintA;
                                                                             else if (mname == "Coordinate4::LightMultipliers")
                                                                                 info.globalArguments[g].type = Shader::LightMultipliers;
+                                                                            else if (mname == "Coordinate4::UVOffset")
+                                                                                info.globalArguments[g].type = Shader::UVOffset;
+                                                                            else if (mname == "Matrix::UVMatrix")
+                                                                                info.globalArguments[g].type = Shader::UVMatrix;
+                                                                            else if (mname == "Coordinate4::ColourScale")
+                                                                                info.globalArguments[g].type = Shader::ColourScale;
                                                                         }
                                                                         else {
                                                                             if (!memcmp(argData, vec0123, 16))
@@ -785,6 +847,12 @@ public:
                                                                             else if (shaderName == "GouraudApt") {
                                                                                 if (!memcmp(argData, vec0505051, 16))
                                                                                     info.globalArguments[g].type = Shader::Vec0505051Local;
+                                                                            }
+                                                                            else if (shaderName == "IrradTextureEnvmapLS_Skin") {
+                                                                                if (!memcmp(argData, vec3E30B0B1, 16))
+                                                                                    info.globalArguments[g].type = Shader::Vec3E30B0B1Local;
+                                                                                else if (!memcmp(argData, vec3DA0A0A1, 16))
+                                                                                    info.globalArguments[g].type = Shader::Vec3DA0A0A1Local;
                                                                             }
                                                                         }
                                                                     }
@@ -846,7 +914,7 @@ public:
             cout << "Scanning folders for .o files" << endl;
             for (auto const &i : recursive_directory_iterator(inPath)) {
                 auto const &p = i.path();
-                if (is_regular_file(p) && p.extension() == ".o" && p.filename() != "eaglrm.o") {
+                if (is_regular_file(p) && (ToLower(p.extension().string()) == ".o" || ToLower(p.extension().string()) == ".ord") && p.filename() != "eaglrm.o") {
                     try {
                         get_o_info(p, false);
                     }

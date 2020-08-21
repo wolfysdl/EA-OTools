@@ -13,6 +13,8 @@
 #include "shaders.h"
 #include "NvTriStrip/NvTriStrip.h"
 #include "Fsh\Fsh.h"
+#include "FifamReadWrite.h"
+#include "igl/ambient_occlusion.h"
 
 struct Vector4D {
     float x = 0.0f;
@@ -26,6 +28,10 @@ struct Vector4D_int {
     int y = 0;
     int z = 0;
     int w = 0;
+};
+
+struct Matrix4x4 {
+    Vector4D a, b, c, d;
 };
 
 enum AlphaMode {
@@ -60,6 +66,15 @@ struct GlobalArg {
         offset = 0;
         count = _count;
     }
+};
+
+struct CollTriangle {
+    unsigned short normal;
+    unsigned short vertPos[3];
+};
+
+struct CollLine {
+    unsigned short vertPos[2];
 };
 
 void GetMatColorAndAlphaProperties(aiMaterial *mat, aiColor3D &matColor, float &alpha, AlphaMode &alphaMode, int &blendFunc) {
@@ -555,21 +570,21 @@ map<string, string> GetNameOptions(string const &name, bool isMaterial = false) 
     if (be != string::npos) {
         auto en = name.find(']', be + 1);
         if (en != string::npos) {
-            auto options = Split(name.substr(be + 1, en - be - 1), ',', true, true);
-            for (unsigned int i = 0; i < options.size(); i++) {
+            auto nameOptions = Split(name.substr(be + 1, en - be - 1), ',', true, true);
+            for (unsigned int i = 0; i < nameOptions.size(); i++) {
                 string optionName, optionValue;
-                auto dd = options[i].find(':');
+                auto dd = nameOptions[i].find(':');
                 if (dd != string::npos) {
-                    optionName = ToLower(options[i].substr(0, dd));
-                    optionValue = options[i].substr(dd + 1);
+                    optionName = ToLower(nameOptions[i].substr(0, dd));
+                    optionValue = nameOptions[i].substr(dd + 1);
                 }
                 else {
                     if (isMaterial && i == 0) {
                         optionName = "shader";
-                        optionValue = options[i];
+                        optionValue = nameOptions[i];
                     }
                     else
-                        optionName = options[i];
+                        optionName = nameOptions[i];
                 }
                 if (!result.contains(optionName))
                     result[optionName] = optionValue;
@@ -580,31 +595,90 @@ map<string, string> GetNameOptions(string const &name, bool isMaterial = false) 
 }
 
 bool ShouldIgnoreThisNode(aiNode *node) {
-    auto options = GetNameOptions(node->mName.C_Str());
-    return options.contains("ignore");
+    auto nameOptions = GetNameOptions(node->mName.C_Str());
+    return nameOptions.contains("ignore");
 }
 
 bool IsSkeletonNode(aiNode *node) {
     if (!ShouldIgnoreThisNode(node)) {
-        string nodeName = node->mName.C_Str();
-        if (nodeName.length() >= 8) {
-            nodeName = ToLower(nodeName);
-            if (nodeName.starts_with("skeleton")) {
-                auto c = nodeName.c_str()[8];
-                return c == '\0' || c == '.' || c == '_'; // 'Skeleton', 'Skeleton.001', 'Skeleton_001'
-            }
+        string nodeName = ToLower(node->mName.C_Str());
+        if (nodeName.starts_with("skeleton")) {
+            auto c = nodeName.c_str()[8];
+            return c == '\0' || c == '.' || c == '_'; // 'Skeleton', 'Skeleton.001', 'Skeleton_001'
         }
     }
     return false;
 }
 
-void NodeAddCallback(aiNode *node, vector<Node> &nodes) {
+bool IsFlagsNode(aiNode *node) {
     if (!ShouldIgnoreThisNode(node)) {
-        if (node->mNumMeshes)
-            nodes.emplace_back(node);
+        string nodeName = ToLower(node->mName.C_Str());
+        if (nodeName.starts_with("flags")) {
+            auto c = nodeName.c_str()[5];
+            return c == '\0' || c == '.' || c == '_'; // 'Flags', 'Flags.001', 'Flags_001'
+        }
     }
-    for (unsigned int c = 0; c < node->mNumChildren; c++)
-        NodeAddCallback(node->mChildren[c], nodes);
+    return false;
+}
+
+bool IsEffectsNode(aiNode *node) {
+    if (!ShouldIgnoreThisNode(node)) {
+        string nodeName = ToLower(node->mName.C_Str());
+        if (nodeName.starts_with("effects")) {
+            auto c = nodeName.c_str()[7];
+            return c == '\0' || c == '.' || c == '_'; // 'Effects', 'Effects.001', 'Effects_001'
+        }
+    }
+    return false;
+}
+
+bool IsCollisionNode(aiNode *node) {
+    if (!ShouldIgnoreThisNode(node)) {
+        string nodeName = ToLower(node->mName.C_Str());
+        if (nodeName.starts_with("collision")) {
+            auto c = nodeName.c_str()[9];
+            return c == '\0' || c == '.' || c == '_'; // 'Collision', 'Collision.001', 'Collision_001'
+        }
+    }
+    return false;
+}
+
+struct StadiumExtra {
+    bool used = false;
+    unsigned int stadiumId = 0;
+    unsigned int lightingId = 0;
+    aiNode *flags = nullptr;
+    aiNode *effects = nullptr;
+    aiNode *collision = nullptr;
+};
+
+void NodeAddCallback(aiNode *node, vector<Node> &nodes, StadiumExtra &stadExtra) {
+    if (!ShouldIgnoreThisNode(node)) {
+        bool isExtra = false;
+        if (stadExtra.used) {
+            if (IsFlagsNode(node)) {
+                if (!stadExtra.flags)
+                    stadExtra.flags = node;
+                isExtra = true;
+            }
+            else if (IsEffectsNode(node)) {
+                if (!stadExtra.effects)
+                    stadExtra.effects = node;
+                isExtra = true;
+            }
+            else if (IsCollisionNode(node)) {
+                if (!stadExtra.collision)
+                    stadExtra.collision = node;
+                isExtra = true;
+            }
+        }
+        if (!isExtra) {
+            if (node->mNumMeshes)
+                nodes.emplace_back(node);
+            for (unsigned int c = 0; c < node->mNumChildren; c++)
+                NodeAddCallback(node->mChildren[c], nodes, stadExtra);
+        }
+    }
 }
 
 void ProcessBoundBox(aiVector3D &boundMin, aiVector3D &boundMax, bool &anyVertexProcessed, aiVector3D const &pos) {
@@ -773,7 +847,11 @@ void oimport(path const &out, path const &in) {
     Vector4D vec1111 = { 1, 1, 1, 1 };
     Vector4D vecEnvMapConstants = { 1.0f, 0.25f, 0.5f, 0.75f };
     Vector4D_int vec0505051 = { 0x3EFEFF00, 0x3EFEFF00, 0x3EFEFF00, 0x3F800000 };
+    Vector4D_int vec3E30B0B1 = { 0x3E30B0B1, 0x3E30B0B1, 0x3E30B0B1, 0x3E30B0B1 };
+    Vector4D_int vec3DA0A0A1 = { 0x3DA0A0A1, 0x3DA0A0A1, 0x3DA0A0A1, 0x3DA0A0A1 };
+
     bool flipAxis = options().swapYZ;
+    bool doTranslate = options().translate.x != 0 || options().translate.y != 0 || options().translate.z != 0;
     bool hasSkeleton = false;
     bool hasMorph = false;
     bool hasLights = /*scene->HasLights() ||*/ options().forceLighting;
@@ -839,7 +917,14 @@ void oimport(path const &out, path const &in) {
             throw runtime_error("File for bones doesn't exist");
     }
 
-    NodeAddCallback(scene->mRootNode, nodes);
+    StadiumExtra stadExtra;
+
+    if (true && modelName.starts_with("m716__")) {
+        if (sscanf(modelName.c_str(), "m716__%d_%d", &stadExtra.stadiumId, &stadExtra.lightingId) == 2)
+            stadExtra.used = true;
+    }
+
+    NodeAddCallback(scene->mRootNode, nodes, stadExtra);
 
     unsigned int nodeCounter = 0;
     unsigned int meshCounter = 0;
@@ -944,6 +1029,15 @@ void oimport(path const &out, path const &in) {
             }
         }
     }
+
+    Eigen::MatrixXd AO_CAST_positions;
+    Eigen::MatrixXd AO_positions;
+    Eigen::MatrixXd AO_normals;
+    Eigen::MatrixXi AO_faces;
+    Eigen::VectorXd AO_result_colors;
+
+    // generate AO_CAST_positions
+
 
     for (auto &n : nodes) {
         for (unsigned int m = 0; m < n.node->mNumMeshes; m++) {
@@ -1052,6 +1146,7 @@ void oimport(path const &out, path const &in) {
                 matProps.isTextured = hasDiffuseTex;
                 matProps.isTransparent = usesAlphaBlending;
                 matProps.isUnlit = isUnlit;
+                matProps.numUVs = mesh->GetNumUVChannels();
                 shader = target->DecideShader(matProps);
             }
 
@@ -1061,12 +1156,18 @@ void oimport(path const &out, path const &in) {
             if (!shader)
                 throw runtime_error("Unable to decide shader");
 
+            auto shaderName = shader->name;
+            auto shaderExt = shaderName.find('.');
+            if (shaderExt != string::npos)
+                shaderName = shaderName.substr(0, shaderExt);
+            auto shaderNameLowered = ToLower(shaderName);
+
             if (!isTextured[1]) {
                 if (!hasReflectionTex && !hasSpecularTex &&
                     (
-                    shader->nameLowered == "littextureirradenvmap" ||
-                    shader->nameLowered == "irradlittextureenvmaptransparent2x" ||
-                    shader->nameLowered == "littextureirradenvmap_skin"
+                    shaderNameLowered == "littextureirradenvmap" ||
+                    shaderNameLowered == "irradlittextureenvmaptransparent2x" ||
+                    shaderNameLowered == "littextureirradenvmap_skin"
                     )
                     )
                 {
@@ -1074,17 +1175,17 @@ void oimport(path const &out, path const &in) {
                         hasSpecularTex = true;
                         isTextured[1] = true;
                     }
-                } else if (shader->nameLowered == "littexture4head_skin") {
+                } else if (shaderNameLowered == "littexture4head_skin") {
                     if (LoadTextureIntoTexSlot(scene, nullptr, aiTextureType_NONE, textures, &texAlreadyPresent[1], &tex[1], generatedTexNames, "tp02"))
                         isTextured[1] = true;
                 }
-                else if (shader->nameLowered == "littexture2irradskinsubsurfspec") {
+                else if (shaderNameLowered == "littexture2irradskinsubsurfspec") {
                     if (LoadTextureIntoTexSlot(scene, nullptr, aiTextureType_NONE, textures, &texAlreadyPresent[1], &tex[1], generatedTexNames, "glos"))
                         isTextured[1] = true;
                 }
             }
 
-            if (shader->nameLowered == "xfadescrolltexture") {
+            if (shaderNameLowered == "xfadescrolltexture") {
                 if (!n.name.starts_with("sortgroup"))
                     n.name = "sortgroup_" + n.name;
             }
@@ -1392,6 +1493,11 @@ void oimport(path const &out, path const &in) {
                         case Shader::Position:
                             if (d.type == Shader::Float3 && mesh->mVertices) {
                                 aiVector3D vecPos = mesh->mVertices[v];
+                                if (doTranslate) {
+                                    vecPos.x += options().translate.x;
+                                    vecPos.y += options().translate.y;
+                                    vecPos.z += options().translate.z;
+                                }
                                 if (flipAxis)
                                     swap(vecPos.y, vecPos.z);
                                 Memory_Copy(&vertexBuffer.data()[vertexOffset], &vecPos, 12);
@@ -1561,6 +1667,16 @@ void oimport(path const &out, path const &in) {
                         bufData.Put(vec0505051);
                         bufData.Put(ZERO);
                         break;
+                    case Shader::Vec3E30B0B1Local:
+                        globalArgs.emplace_back(bufData.Position());
+                        bufData.Put(vec3E30B0B1);
+                        bufData.Put(ZERO);
+                        break;
+                    case Shader::Vec3DA0A0A1Local:
+                        globalArgs.emplace_back(bufData.Position());
+                        bufData.Put(vec3DA0A0A1);
+                        bufData.Put(ZERO);
+                        break;
                     case Shader::EnvmapColour:
                         globalArgs.emplace_back("__COORD4:::EnvmapColour");
                         break;
@@ -1669,6 +1785,15 @@ void oimport(path const &out, path const &in) {
                     case Shader::FresnelColour:
                         globalArgs.emplace_back("__COORD4:::RM::Globe::FresnelColour");
                         break;
+                    case Shader::Irradiance:
+                        globalArgs.emplace_back("__COORD4:::gpIrradiance");
+                        break;
+                    case Shader::FaceIrradiance:
+                        globalArgs.emplace_back("__COORD4:::gpFaceIrradiance");
+                        break;
+                    case Shader::ColourScaleFactor:
+                        globalArgs.emplace_back("__COORD4:::ColourScaleFactor");
+                        break;
                     case Shader::UVOffset0:
                     {
                         Vector4D uvOffset0;
@@ -1745,6 +1870,25 @@ void oimport(path const &out, path const &in) {
                         globalArgs.emplace_back(modifiables.GetArg("State::State", bufData, state, true));
                     }
                     break;
+                    case Shader::UVOffset:
+                    {
+                        Vector4D uvOffset;
+                        globalArgs.emplace_back(modifiables.GetArg("Coordinate4::UVOffset", bufData, uvOffset, true, false));
+                    }
+                    break;
+                    case Shader::UVMatrix:
+                    {
+                        Matrix4x4 uvMatrix;
+                        SetAt<unsigned int>(&uvMatrix, 0, 0x01000000);
+                        globalArgs.emplace_back(modifiables.GetArg("Matrix::UVMatrix", bufData, uvMatrix, true, false));
+                    }
+                    break;
+                    case Shader::ColourScale:
+                    {
+                        Vector4D_int colourScale = { -1, -1, -1, -1 };
+                        globalArgs.emplace_back(modifiables.GetArg("Coordinate4::ColourScale", bufData, colourScale, true, false));
+                    }
+                    break;
                     }
                 }
                 unsigned int geoPrimDataBufferOffset = bufData.Position();
@@ -1810,7 +1954,7 @@ void oimport(path const &out, path const &in) {
                 unsigned int shaderNameOffset = 0;
                 if (target->Version() >= 3) {
                     shaderNameOffset = bufData.Position();
-                    bufData.Put(shader->name);
+                    bufData.Put(shaderName);
                 }
                 // RenderMethod
                 bufData.Align(16);
@@ -1819,10 +1963,10 @@ void oimport(path const &out, path const &in) {
                 relocations[""].push_back(bufData.Position());
                 bufData.Put(codeBlockOffset);
                 bufData.Put(ZERO);
-                relocations[shader->name + "__EAGLMicroCode"].push_back(bufData.Position());
+                relocations[shaderName + "__EAGLMicroCode"].push_back(bufData.Position());
                 bufData.Put(ZERO);
                 bufData.Put(ZERO);
-                relocations["ParentRM_" + shader->name].push_back(bufData.Position());
+                relocations["ParentRM_" + shaderName].push_back(bufData.Position());
                 bufData.Put(ZERO);
                 bufData.Put(ZERO);
                 bufData.Put(ZERO);
@@ -1875,7 +2019,6 @@ void oimport(path const &out, path const &in) {
     bufData.Put(boundMax);
     // Skeleton
     if (hasSkeleton) {
-        bufData.Align(16);
         vector<BoneInfo> vecBones;
         if (customBones.empty()) {
             if (!bones.empty()) {
@@ -1892,62 +2035,65 @@ void oimport(path const &out, path const &in) {
                 vecBones[index].bone = nullptr;
             }
         }
-        // bones
-        for (auto const &b : vecBones) {
-            symbols.emplace_back("__Bone:::" + modelName + "." + b.name, bufData.Position());
-            bufData.Put(unsigned int(b.index));
-            bufData.Put(ZERO);
-            bufData.Put(ZERO);
-            bufData.Put(ZERO);
-        }
-        // skeleton
-        symbols.emplace_back("__Skeleton:::" + modelName, bufData.Position());
-        if (options().skeletonFile.empty()) {
-            bufData.Put(unsigned short(ANIM_VERSION));
-            bufData.Put(unsigned short(510));
-            bufData.Put(unsigned short(ANIM_VERSION));
-            bufData.Put(unsigned short(ZERO));
-            bufData.Put(vecBones.size());
-            bufData.Put(ZERO);
+        if (ToLower(options().skeletonData.string()) != "none") {
+            bufData.Align(16);
+            // bones
             for (auto const &b : vecBones) {
-                auto bnode = b.bone->mNode;
-                aiVector3D scaling, position;
-                aiQuaternion rotation;
-                bnode->mTransformation.Decompose(scaling, rotation, position);
-                bufData.Put(scaling);
-                int parentId = -1;
-                if (bnode->mParent) {
-                    auto pit = bones.find(bnode->mParent->mName.C_Str());
-                    if (pit != bones.end())
-                        parentId = (*pit).second.index;
-                }
-                bufData.Put(parentId);
-                bufData.Put(rotation.x);
-                bufData.Put(rotation.y);
-                bufData.Put(rotation.z);
-                bufData.Put(rotation.w);
-                bufData.Put(position);
+                symbols.emplace_back("__Bone:::" + modelName + "." + b.name, bufData.Position());
+                bufData.Put(unsigned int(b.index));
                 bufData.Put(ZERO);
-                auto mat = b.bone->mOffsetMatrix;
-                mat.Transpose();
-                bufData.Put(mat);
+                bufData.Put(ZERO);
+                bufData.Put(ZERO);
             }
-        }
-        else {
-            FILE *skelFile = nullptr;
-            _wfopen_s(&skelFile, options().skeletonFile.c_str(), L"rb");
-            if (skelFile) {
-                fseek(skelFile, 0, SEEK_END);
-                auto fileSize = ftell(skelFile);
-                fseek(skelFile, 0, SEEK_SET);
-                unsigned char *skelData = new unsigned char[fileSize];
-                fread(skelData, fileSize, 1, skelFile);
-                fclose(skelFile);
-                bufData.Put(skelData, fileSize);
-                delete[] skelData;
+            // skeleton
+            symbols.emplace_back("__Skeleton:::" + modelName, bufData.Position());
+            if (options().skeletonData.empty()) {
+                bufData.Put(unsigned short(ANIM_VERSION));
+                bufData.Put(unsigned short(510));
+                bufData.Put(unsigned short(ANIM_VERSION));
+                bufData.Put(unsigned short(ZERO));
+                bufData.Put(vecBones.size());
+                bufData.Put(ZERO);
+                for (auto const &b : vecBones) {
+                    auto bnode = b.bone->mNode;
+                    aiVector3D scaling, position;
+                    aiQuaternion rotation;
+                    bnode->mTransformation.Decompose(scaling, rotation, position);
+                    bufData.Put(scaling);
+                    int parentId = -1;
+                    if (bnode->mParent) {
+                        auto pit = bones.find(bnode->mParent->mName.C_Str());
+                        if (pit != bones.end())
+                            parentId = (*pit).second.index;
+                    }
+                    bufData.Put(parentId);
+                    bufData.Put(rotation.x);
+                    bufData.Put(rotation.y);
+                    bufData.Put(rotation.z);
+                    bufData.Put(rotation.w);
+                    bufData.Put(position);
+                    bufData.Put(ZERO);
+                    auto mat = b.bone->mOffsetMatrix;
+                    mat.Transpose();
+                    bufData.Put(mat);
+                }
             }
-            else
-                throw runtime_error("Unable to open skeleton file");
+            else {
+                FILE *skelFile = nullptr;
+                _wfopen_s(&skelFile, options().skeletonData.c_str(), L"rb");
+                if (skelFile) {
+                    fseek(skelFile, 0, SEEK_END);
+                    auto fileSize = ftell(skelFile);
+                    fseek(skelFile, 0, SEEK_SET);
+                    unsigned char *skelData = new unsigned char[fileSize];
+                    fread(skelData, fileSize, 1, skelFile);
+                    fclose(skelFile);
+                    bufData.Put(skelData, fileSize);
+                    delete[] skelData;
+                }
+                else
+                    throw runtime_error("Unable to open skeleton file");
+            }
         }
     }
     static unsigned char TTARSig[] = { 'T', 'T', 'A', 'R' };
@@ -2184,7 +2330,8 @@ void oimport(path const &out, path const &in) {
         sectionNamesOffets.push_back(bufSectionNames.Position());
         bufSectionNames.Put(sn);
     }
-    if (!options().noMetadata) {
+    bool noMetadata = options().noMetadata || options().conformant;
+    if (!noMetadata) {
         sectionNamesOffets.push_back(bufSectionNames.Position());
         bufSectionNames.Put(".comment");
     }
@@ -2200,8 +2347,11 @@ void oimport(path const &out, path const &in) {
     bufSymbolNames.Put("");
     bufSymbols.Put(Elf32_Sym(0, 0, 0, 0x03, 0, 1));
     bufSymbolNames.Put("");
-    bufSymbols.Put(Elf32_Sym(bufSymbolNames.Position(), 0, 4, 0x21, 0, 1));
-    bufSymbolNames.Put(string("__OTOOLS_VERSION:::OTOOLS_VERSION-") + OTOOLS_VERSION);
+    
+    if (!options().conformant) {
+        bufSymbols.Put(Elf32_Sym(bufSymbolNames.Position(), 0, 4, 0x21, 0, 1));
+        bufSymbolNames.Put(string("__OTOOLS_VERSION:::OTOOLS_VERSION-") + OTOOLS_VERSION);
+    }
     bufSymbols.Put(Elf32_Sym(bufSymbolNames.Position(), 0, 4, 0x21, 0, 1));
     if (target->Version() >= 3)
         bufSymbolNames.Put("__EAGL_TOOLLIB_VERSION:::EAGL_TOOLLIB_VERSION-" + to_string(target->Version()));
@@ -2214,7 +2364,7 @@ void oimport(path const &out, path const &in) {
     }
 
     vector<Elf32_Rel> elfRel;
-    unsigned int symbolIndex = 4 + symbols.size();
+    unsigned int symbolIndex = (options().conformant? 3 : 4) + symbols.size();
     for (auto const &[n, v] : relocations) {
         if (!n.empty()) {
             bufSymbols.Put(Elf32_Sym(bufSymbolNames.Position(), 0, 0, 0x10, 0, 0));
@@ -2239,7 +2389,7 @@ void oimport(path const &out, path const &in) {
     bufSymbolNames.Align(16);
     bufRelocations.Align(16);
 
-    if (!options().noMetadata) {
+    if (!noMetadata) {
         string metadata;
         auto t = std::time(nullptr);
         auto tm = *std::localtime(&t);
@@ -2257,8 +2407,12 @@ void oimport(path const &out, path const &in) {
         bufMetadata.Align(16);
     }
 
-    string versionMessage = "This file was generated with otools version ";
-    versionMessage += OTOOLS_VERSION;
+    string versionMessage;
+    
+    if (!options().conformant) {
+        versionMessage = "This file was generated with otools version ";
+        versionMessage += OTOOLS_VERSION;
+    }
 
     BinaryBuffer bufElf;
     Elf32_Ehdr header;
@@ -2271,20 +2425,23 @@ void oimport(path const &out, path const &in) {
     header.e_version = EV_CURRENT;
     header.e_entry = 0;
     header.e_phoff = 0;
-    header.e_shoff = headerBlockSize + GetAligned(versionMessage.size(), 16) + bufData.Size() + bufSectionNames.Size() + bufSymbolNames.Size() 
-        + bufSymbols.Size() + bufRelocations.Size() + (options().noMetadata ? 0 : bufMetadata.Size());
+    header.e_shoff = headerBlockSize + (options().conformant? 0 : GetAligned(versionMessage.size(), 16))
+        + bufData.Size() + bufSectionNames.Size() + bufSymbolNames.Size() 
+        + bufSymbols.Size() + bufRelocations.Size() + (noMetadata ? 0 : bufMetadata.Size());
     header.e_flags = 0x20924000;
     header.e_ehsize = sizeof(Elf32_Ehdr);
     header.e_phentsize = 0;
     header.e_phnum = 0;
     header.e_shentsize = sizeof(Elf32_Shdr);
-    header.e_shnum = options().noMetadata ? 6 : 7;
+    header.e_shnum = noMetadata ? 6 : 7;
     header.e_shstrndx = 2;
     sectionOffsets.push_back(0);
     bufElf.Put(header);
     bufElf.Align(16);
-    bufElf.Put(versionMessage);
-    bufElf.Align(16);
+    if (!options().conformant) {
+        bufElf.Put(versionMessage);
+        bufElf.Align(16);
+    }
     sectionOffsets.push_back(bufElf.Position());
     bufElf.Put(bufData);
     sectionOffsets.push_back(bufElf.Position());
@@ -2295,7 +2452,7 @@ void oimport(path const &out, path const &in) {
     bufElf.Put(bufSymbols);
     sectionOffsets.push_back(bufElf.Position());
     bufElf.Put(bufRelocations);
-    if (!options().noMetadata) {
+    if (!noMetadata) {
         sectionOffsets.push_back(bufElf.Position());
         bufElf.Put(bufMetadata);
     }
@@ -2305,20 +2462,21 @@ void oimport(path const &out, path const &in) {
     bufElf.Put(Elf32_Shdr(sectionNamesOffets[3], SHT_STRTAB, 0, 0, sectionOffsets[3], bufSymbolNames.Size(), 0, 0, 1, 0));
     bufElf.Put(Elf32_Shdr(sectionNamesOffets[4], SHT_SYMTAB, 0, 0, sectionOffsets[4], bufSymbols.Size(), 3, 2, 4, sizeof(Elf32_Sym)));
     bufElf.Put(Elf32_Shdr(sectionNamesOffets[5], SHT_REL, 0, 0, sectionOffsets[5], bufRelocations.Size(), 4, 1, 4, sizeof(Elf32_Rel)));
-    if (!options().noMetadata)
+    if (!noMetadata)
         bufElf.Put(Elf32_Shdr(sectionNamesOffets[6], SHT_PROGBITS, 0, 0, sectionOffsets[6], bufMetadata.Size(), 0, 0, 1, 0));
-    unsigned int pad = 0;
-    if (options().pad > 0)
-        pad = options().pad;
-    else if (options().hd)
-        pad = 1'048'576;
-    if (pad > 0 && bufElf.Size() < pad) {
-        unsigned int numPaddingBytes = pad - bufElf.Size();
-        for (unsigned int i = 0; i < numPaddingBytes; i++)
-            bufElf.Put<unsigned char>(0);
-    }
-    if (!isOrd)
+    if (!isOrd) {
+        unsigned int pad = 0;
+        if (options().pad > 0)
+            pad = options().pad;
+        else if (options().hd)
+            pad = 1'048'576;
+        if (pad > 0 && bufElf.Size() < pad) {
+            unsigned int numPaddingBytes = pad - bufElf.Size();
+            for (unsigned int i = 0; i < numPaddingBytes; i++)
+                bufElf.Put<unsigned char>(0);
+        }
         bufElf.WriteToFile(out);
+    }
     else {
         bufElf.WriteToFile(out, 0, sectionOffsets[2]);
         auto orlPath = out;
@@ -2327,82 +2485,100 @@ void oimport(path const &out, path const &in) {
     }
 
     if (options().writeFsh) {
-        if (options().head && modelName.starts_with("m228__")) {
+        auto modelNameLow = ToLower(modelName);
+        if (options().head &&
+            (
+                modelNameLow.starts_with("m228__") ||
+                modelNameLow.starts_with("player____model60__") ||
+                modelNameLow.starts_with("player____m228__")
+            )
+            &&
+            (
+                targetName == "FIFA03" ||
+                targetName == "FIFA04" ||
+                targetName == "FIFA05" ||
+                targetName == "FIFA06" ||
+                targetName == "FIFA07" ||
+                targetName == "FIFA08" ||
+                targetName == "FIFA09" ||
+                targetName == "FIFA10" ||
+                targetName == "EURO04" ||
+                targetName == "EURO08" ||
+                targetName == "WC06" ||
+                targetName == "CL0405" ||
+                targetName == "CL0607" ||
+                targetName == "FM13"
+            )
+            )
+        {
             unsigned int playerId = 0;
-            if (sscanf(modelName.substr(6).c_str(), "%d", &playerId) == 1) {
+            unsigned int numChars = 6;
+            if (modelNameLow.starts_with("player____model60__"))
+                numChars = 19;
+            else if (modelNameLow.starts_with("player____m228__"))
+                numChars = 16;
+            if (sscanf(modelName.substr(numChars).c_str(), "%d", &playerId) == 1) {
                 string playerIdStr = to_string(playerId);
-                auto storedLevels = options().fshLevels;
-                auto storedFormat = options().fshFormat;
-                auto storedPad = options().padFsh;
 
-                // writing t21__
-
-                options().fshLevels = 99;
-                options().fshFormat = D3DFMT_DXT1; // D3DFMT_DXT1
-                if (!options().hd) {
-                    if (targetName == "FIFA06" || targetName == "FIFA07" || targetName == "FIFA08" || targetName == "FIFA09")
-                        options().fshLevels = 1;
-                    if (targetName == "FIFA06" || targetName == "FIFA07")
-                        options().padFsh = 16'656;
-                    else if (targetName == "FIFA08" || targetName == "FIFA09")
-                        options().padFsh = 65'808;
-                    else if (targetName == "FIFA10")
-                        options().padFsh = 87'648;
-                }
-                else {
-                    options().fshLevels = 1;
-                    options().padFsh = 352'256;
-                }
-
-                string t21filesuffix = "_0_0_0_0";
-                if (targetName == "FIFA06" || targetName == "FIFA07" || targetName == "FIFA08")
-                    t21filesuffix = "_0_0";
+                // writing head texture
+                string headTexName;
                 map<string, TextureToAdd> fshTextures1;
-                fshTextures1["tp01"] = { "tp01", "tp01@" + playerIdStr };
-                for (auto const &a : options().fshAddTextures) {
-                    path ap = a;
-                    string afilename = ap.stem().string();
-                    if (!afilename.empty()) {
-                        if (afilename.length() > 4)
-                            afilename = afilename.substr(0, 4);
-                        string akey = ToLower(afilename);
-                        if (!fshTextures1.contains(akey))
-                            fshTextures1[akey] = { afilename, a };
+                
+                if (targetName == "FIFA03")
+                    headTexName = "PlayerTexObj.texobj11__texture12__" + playerIdStr + "_0_0.fsh";
+                else if (targetName == "FIFA04" || targetName == "FIFA05" || targetName == "EURO04" || targetName == "CL0405")
+                    headTexName = "playertexobj.texobj11__texture12__" + playerIdStr + "_0_0.fsh";
+                else if (targetName == "FIFA06" || targetName == "FIFA07" || targetName == "FIFA08" || targetName == "WC06" || targetName == "CL0607" || targetName == "EURO08")
+                    headTexName = "t21__" + playerIdStr + "_0_0.fsh";
+                else
+                    headTexName = "t21__" + playerIdStr + "_0_0_0_0.fsh";
+
+                if (targetName == "CL0405") {
+                    if (options().hd) {
+                        fshTextures1["glos"] = { "glos", "glos@" + playerIdStr, D3DFMT_DXT1, 99 };
+                        fshTextures1["face"] = { "face", "face@" + playerIdStr, D3DFMT_DXT1, 99 };
+                    }
+                    else {
+                        fshTextures1["glos"] = { "glos", "glos@" + playerIdStr, D3DFMT_R5G6B5, 1 };
+                        fshTextures1["face"] = { "face", "face@" + playerIdStr, D3DFMT_DXT1, 1 };
                     }
                 }
-                WriteFsh(out.parent_path() / ("t21__" + playerIdStr + t21filesuffix + ".fsh"), in.parent_path(), fshTextures1);
-
-                // writing t22__
-
-                options().fshLevels = 99;
-                options().fshFormat = D3DFMT_DXT5; // D3DFMT_DXT5
-                options().padFsh = storedPad;
-                if (!options().hd) {
-                    if (targetName == "FIFA06" || targetName == "FIFA07")
-                        options().fshFormat = D3DFMT_A4R4G4B4;
-                    else if (targetName == "FIFA08" || targetName == "FIFA09" || targetName == "FIFA10")
-                        options().fshFormat = D3DFMT_DXT1;
-                    if (targetName == "FIFA06" || targetName == "FIFA07")
-                        options().padFsh = 43'920;
-                    else if (targetName == "FIFA08")
-                        options().padFsh = 11'168;
-                    else if (targetName == "FIFA09" || targetName == "FIFA10")
-                        options().padFsh = 43'936;
-                }
                 else {
-                    //options().fshLevels = 1;
-                    options().padFsh = 700'416;
+                    if (options().hd)
+                        fshTextures1["tp01"] = { "tp01", "tp01@" + playerIdStr, D3DFMT_DXT1, 99 };
+                    else {
+                        if (targetName == "FIFA03")
+                            fshTextures1["tp01"] = { "tp01", "tp01@" + playerIdStr, D3DFMT_DXT1, 7 };
+                        else if (targetName == "FIFA10")
+                            fshTextures1["tp01"] = { "tp01", "tp01@" + playerIdStr, D3DFMT_DXT1, 8 };
+                        else
+                            fshTextures1["tp01"] = { "tp01", "tp01@" + playerIdStr, D3DFMT_DXT1, 1 };
+                    }
                 }
-                
-                if (options().fshFormat != D3DFMT_UNKNOWN) {
-                    map<string, TextureToAdd> fshTextures2;
-                    fshTextures2["tp02"] = { "tp02", "tp02@" + playerIdStr };
-                    WriteFsh(out.parent_path() / ("t22__" + playerIdStr + "_0.fsh"), in.parent_path(), fshTextures2);
-                }
+                WriteFsh(out.parent_path() / headTexName, in.parent_path(), fshTextures1);
 
-                options().fshLevels = storedLevels;
-                options().fshFormat = storedFormat;
-                options().padFsh = storedPad;
+                // writing hair texture
+                if (targetName != "FIFA09" && targetName != "FIFA10" && targetName != "FM13") {
+                    string hairTexName;
+                    if (targetName == "FIFA03")
+                        hairTexName = "PlayerTexObj.texobj11__texture14__" + playerIdStr + "_0_0.fsh";
+                    else if (targetName == "FIFA04" || targetName == "FIFA05" || targetName == "EURO04" || targetName == "CL0405")
+                        hairTexName = "playertexobj.texobj11__texture14__" + playerIdStr + "_0_0.fsh";
+                    else if (targetName == "FIFA06" || targetName == "FIFA07" || targetName == "FIFA08" || targetName == "WC06" || targetName == "CL0607" || targetName == "EURO08")
+                        hairTexName = "t22__" + playerIdStr + "_0.fsh";
+                    
+                    map<string, TextureToAdd> fshTextures2;
+                    if (options().hd)
+                        fshTextures2["tp02"] = { "tp02", "tp02@" + playerIdStr, D3DFMT_DXT5, 99 };
+                    else {
+                        int hairTexLevels = 99;
+                        unsigned int hairTexFormat = D3DFMT_A4R4G4B4;
+                        if (targetName == "FIFA08" || targetName == "EURO08")
+                            hairTexFormat = D3DFMT_DXT1;
+                        fshTextures2["tp02"] = { "tp02", "tp02@" + playerIdStr, hairTexFormat, 7 };
+                    }
+                    WriteFsh(out.parent_path() / hairTexName, in.parent_path(), fshTextures2);
+                }
             }
         }
         else {
@@ -2433,13 +2609,13 @@ void oimport(path const &out, path const &in) {
                                 auto imgLoweredName = ToLower(img.name);
                                 auto imgLoweredFilename = ToLower(path(img.filepath).stem().string());
                                 if (imgLoweredFilename == texFilenameLowered) {
-                                    fshTextures[imgLoweredName] = { img.name, img.filepath, img.embedded };
+                                    fshTextures[imgLoweredName] = { img.name, img.filepath, options().fshFormat, options().fshLevels, img.embedded };
                                     texFound = true;
                                     break;
                                 }
                             }
                             if (!texFound)
-                                fshTextures[akey] = { afilename, a };
+                                fshTextures[akey] = { afilename, a, options().fshFormat, options().fshLevels };
                         }
                     }
                 }
@@ -2458,7 +2634,7 @@ void oimport(path const &out, path const &in) {
                         }
                     }
                     if (!ignoreThisTexture) {
-                        fshTextures[imgLoweredName] = { img.name, img.filepath, img.embedded };
+                        fshTextures[imgLoweredName] = { img.name, img.filepath, options().fshFormat, options().fshLevels, img.embedded };
                     }
                 }
             }
@@ -2470,10 +2646,218 @@ void oimport(path const &out, path const &in) {
                         afilename = afilename.substr(0, 4);
                     string akey = ToLower(afilename);
                     if (!fshTextures.contains(akey))
-                        fshTextures[akey] = { afilename, a };
+                        fshTextures[akey] = { afilename, a, options().fshFormat, options().fshLevels };
                 }
             }
             WriteFsh(fshPath, in.parent_path(), fshTextures);
+        }
+    }
+
+    if (stadExtra.used) {
+        path targetFolder;
+        if (out.is_absolute())
+            targetFolder = out.parent_path();
+        else
+            targetFolder = absolute(out).parent_path();
+        if (stadExtra.flags) {
+            path stadFlagsPath = targetFolder / Format("sle-%d-%d.loc", stadExtra.stadiumId, stadExtra.lightingId);
+            FifamWriter writer(stadFlagsPath, 14, FifamVersion(), false);
+            if (writer.Available()) {
+                vector<aiNode *> flagNodes;
+                for (unsigned int c = 0; c < stadExtra.flags->mNumChildren; c++) {
+                    if (!ShouldIgnoreThisNode(stadExtra.flags->mChildren[c]))
+                        flagNodes.push_back(stadExtra.flags->mChildren[c]);
+                }
+                sort(flagNodes.begin(), flagNodes.end(), [](aiNode *a, aiNode *b) {
+                    string s1 = a->mName.C_Str();
+                    string s2 = b->mName.C_Str();
+                    return (s1.length() == s2.length()) ? (s1 < s2) : (s1.length() < s2.length());
+                });
+                for (auto const &flagNode : flagNodes) {
+                    auto flagOptions = GetNameOptions(flagNode->mName.C_Str());
+                    unsigned int flagType = 0;
+                    if (flagOptions.contains("type"))
+                        flagType = SafeConvertInt<unsigned int>(flagOptions["type"]);
+                    aiVector3D scaling, position;
+                    aiQuaternion rotation;
+                    flagNode->mTransformation.Decompose(scaling, rotation, position);
+                    writer.WriteLine(Format(L"%f %f %f %d %f %f %f", position.x / 100.0f, position.y / 100.0f, position.z / 100.0f, flagType, scaling.x, scaling.y, scaling.z));
+                }
+            }
+        }
+        if (stadExtra.effects) {
+            path stadEffectsPath = targetFolder / Format("tag-%d-%d.loc", stadExtra.stadiumId, stadExtra.lightingId);
+            FifamWriter writer(stadEffectsPath, 14, FifamVersion(), false);
+            if (writer.Available()) {
+                vector<aiNode *> effNodes;
+                for (unsigned int c = 0; c < stadExtra.effects->mNumChildren; c++) {
+                    if (!ShouldIgnoreThisNode(stadExtra.effects->mChildren[c]))
+                        effNodes.push_back(stadExtra.effects->mChildren[c]);
+                }
+                sort(effNodes.begin(), effNodes.end(), [](aiNode *a, aiNode *b) {
+                    string s1 = a->mName.C_Str();
+                    string s2 = b->mName.C_Str();
+                    return s1 < s2;
+                });
+                struct Prop {
+                    aiVector3D pos, dir;
+                    unsigned int type = 0;
+                };
+                vector<pair<string, vector<Prop>>> effects;
+                for (auto const &effNode : effNodes) {
+                    auto effOptions = GetNameOptions(effNode->mName.C_Str());
+                    string effType;
+                    if (effOptions.contains("type"))
+                        effType = effOptions["type"];
+                    else {
+                        string effNodeName = effNode->mName.C_Str();
+                        auto brp = effNodeName.find_first_of(" _.[");
+                        if (brp != string::npos)
+                            effType = effNodeName.substr(0, brp);
+                        else
+                            effType = effNodeName;
+                    }
+                    Prop p;
+                    auto const &m = effNode->mTransformation;
+                    aiVector3D scaling, position;
+                    aiQuaternion rotation;
+                    effNode->mTransformation.Decompose(scaling, rotation, position);
+                    p.pos = position;
+                    p.dir = aiVector3D(m.a2, m.b2, m.c2);
+                    p.type = effOptions.contains("dir") ? 2 : 1;
+                    if (effects.empty() || effects.back().first != effType)
+                        effects.emplace_back();
+                    effects.back().first = effType;
+                    effects.back().second.push_back(p);
+                }
+                writer.WriteLine(effects.size());
+                for (auto const &[name, ev] : effects) {
+                    bool hasDir = false;
+                    for (auto const &e : ev) {
+                        if (e.type == 2) {
+                            hasDir = true;
+                            break;
+                        }
+                    }
+                    string effHeader = name + " " + to_string(ev.size()) + " Position";
+                    if (hasDir)
+                        effHeader += " Direction";
+                    writer.WriteLine(effHeader);
+                    for (auto const &e : ev) {
+                        if (hasDir)
+                            writer.WriteLine(Format(L"%f %f %f %f %f %f", e.pos.x / 1.12f, e.pos.y / 1.12f, e.pos.z / 1.12f, e.dir.x, e.dir.y, e.dir.z));
+                        else
+                            writer.WriteLine(Format(L"%f %f %f", e.pos.x / 1.12f, e.pos.y / 1.12f, e.pos.z / 1.12f));
+                    }
+                }
+            }
+        }
+        if (stadExtra.collision) {
+            path stadCollPath = targetFolder / Format("coll-%d-%d.bin", stadExtra.stadiumId, stadExtra.lightingId);
+            vector<aiNode *> colNodes;
+            if (stadExtra.collision->mNumMeshes > 0)
+                colNodes.push_back(stadExtra.collision);
+            for (unsigned int c = 0; c < stadExtra.collision->mNumChildren; c++) {
+                if (stadExtra.collision->mChildren[c]->mNumMeshes > 0) {
+                    if (!ShouldIgnoreThisNode(stadExtra.collision->mChildren[c]))
+                        colNodes.push_back(stadExtra.collision->mChildren[c]);
+                }
+            }
+            BinaryBuffer colFile;
+            colFile.Put<unsigned int>(2);
+            colFile.Put<unsigned int>(0);
+            colFile.Put<unsigned int>(colNodes.size());
+            for (unsigned int n = 0; n < colNodes.size(); n++) {
+                auto const &node = colNodes[n];
+                map<aiVector3D, unsigned int> uniquePos;
+                map<aiVector3D, unsigned int> uniqueNormal;
+                vector<CollTriangle> triangles;
+                vector<CollLine> lines;
+                auto AddCollVert = [](map<aiVector3D, unsigned int> &uniqueMap, aiVector3D const &collVec) {
+                    auto it = uniqueMap.find(collVec);
+                    if (it == uniqueMap.end()) {
+                        unsigned int newId = uniqueMap.size();
+                        uniqueMap[collVec] = newId;
+                        return newId;
+                    }
+                    return (*it).second;
+                };
+                for (unsigned int m = 0; m < node->mNumMeshes; m++) {
+                    auto const &mesh = scene->mMeshes[node->mMeshes[m]];
+                    for (unsigned int f = 0; f < mesh->mNumFaces; f++) {
+                        auto const &face = mesh->mFaces[f];
+                        aiVector3D triPos[3];
+                        for (unsigned int v = 0; v < 3; v++)
+                            triPos[v] = mesh->mVertices[face.mIndices[v]];
+                        if (triPos[0] == triPos[1] || triPos[1] == triPos[2]) {
+                            if (triPos[0] != triPos[2]) {
+                                CollLine line;
+                                line.vertPos[0] = AddCollVert(uniquePos, triPos[0]);
+                                line.vertPos[1] = AddCollVert(uniquePos, triPos[0] == triPos[1] ? triPos[2] : triPos[1]);
+                                lines.push_back(line);
+                            }
+                        }
+                        else {
+                            CollTriangle triangle;
+                            for (unsigned int v = 0; v < 3; v++)
+                                triangle.vertPos[v] = AddCollVert(uniquePos, triPos[v]);
+                            aiVector3D normal;
+                            aiVector3D a = triPos[1] - triPos[0];
+                            aiVector3D b = triPos[2] - triPos[0];
+                            normal.x = a.y * b.z - a.z * b.y;
+                            normal.y = a.z * b.x - a.x * b.z;
+                            normal.z = a.x * b.y - a.y * b.x;
+                            normal = normal.NormalizeSafe();
+                            triangle.normal = AddCollVert(uniqueNormal, normal);
+                            triangles.push_back(triangle);
+                        }
+                    }
+                }
+                vector<aiVector3D> positions(uniquePos.size());
+                vector<aiVector3D> normals(uniqueNormal.size());
+                aiVector3D min, max;
+                bool isFirstVec = true;
+                for (auto const &i : uniquePos) {
+                    positions[i.second] = i.first;
+                    if (isFirstVec) {
+                        min = i.first;
+                        max = i.first;
+                        isFirstVec = false;
+                    }
+                    else {
+                        if (i.first.x < min.x)
+                            min.x = i.first.x;
+                        if (i.first.y < min.y)
+                            min.y = i.first.y;
+                        if (i.first.z < min.z)
+                            min.z = i.first.z;
+                        if (i.first.x > max.x)
+                            max.x = i.first.x;
+                        if (i.first.y > max.y)
+                            max.y = i.first.y;
+                        if (i.first.z > max.z)
+                            max.z = i.first.z;
+                    }
+                }
+                for (auto const &i : uniqueNormal)
+                    normals[i.second] = i.first;
+
+                colFile.Put(min);
+                colFile.Put(max);
+                colFile.Put(unsigned short(positions.size()));
+                colFile.Put(unsigned short(normals.size()));
+                colFile.Put(unsigned short(triangles.size()));
+                colFile.Put(unsigned short(lines.size()));
+                for (auto const &i : positions)
+                    colFile.Put(i);
+                for (auto const &i : normals)
+                    colFile.Put(i);
+                for (auto const &i : triangles)
+                    colFile.Put(i);
+                for (auto const &i : lines)
+                    colFile.Put(i);
+            }
+            colFile.WriteToFile(stadCollPath);
         }
     }
 }

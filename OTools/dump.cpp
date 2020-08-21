@@ -349,14 +349,6 @@ unsigned int WriteBBOX(void *baseObj, string const &name, unsigned char *data, u
         });
 }
 
-unsigned int WriteMorphVerticesInfo(void *baseObj, string const &name, unsigned char *data, unsigned int offset) {
-    return WriteObjectWithFields(baseObj, "MorphVerticesInfo", name, data, offset,
-        {
-            { "UINT32", "unknown1" },
-            { "NAMEOFFSET", "Name" }
-        });
-}
-
 unsigned int WriteModel(void *baseObj, string const &name, unsigned char *data, unsigned int offset) {
     return WriteObjectWithFields(baseObj, "Model", name, data, offset,
         {
@@ -376,7 +368,7 @@ unsigned int WriteModel(void *baseObj, string const &name, unsigned char *data, 
         { "OFFSET", "unknown5" },
         { "OFFSET", "NextModel" },
         { "NAMEOFFSET", "ModelName" },
-        { "OFFSET", "MorphVerticesInfo" },
+        { "OFFSET", "InterleavedVertices" },
         { "OFFSET", "Textures" },
         { "UINT32", "VariationID" },
         { "OFFSET", "ModelLayersStates" },
@@ -733,6 +725,57 @@ unsigned int WriteRenderDescriptor(void *baseObj, string const &name, unsigned c
     return bytesWritten;
 }
 
+unsigned int WriteInterleavedVertices(void *baseObj, string const &name, unsigned char *data, unsigned int offset) {
+    Writer::openScope("InterleavedVertices " + name, offset);
+    unsigned int bytesWritten = 0;
+    bytesWritten += WriteObject(baseObj, "UINT32", "unknown1", data, offset + bytesWritten, 0);
+    unsigned int numInterleavedVerticesDatas = 0;
+    unsigned int nameOffset = 0;
+    unsigned int curr = 4;
+    while (true) {
+        nameOffset = GetAt<unsigned int>(data, offset + curr);
+        if (!nameOffset)
+            break;
+        unsigned int numVertexDatas = GetAt<unsigned int>(data, offset + curr + 4);
+        curr += 8 + numVertexDatas * 16;
+        numInterleavedVerticesDatas++;
+    }
+    //if (numInterleavedVerticesDatas > 1) {
+    //    printf("MORE THAN ONE (%d) InterleavedVertices in %s\n", numInterleavedVerticesDatas, globalVars().currentFilePath.filename().string().c_str());
+    //}
+    //else if (numInterleavedVerticesDatas > 0) {
+    //    printf("InterleavedVertices in %s\n", globalVars().currentFilePath.filename().string().c_str());
+    //}
+    if (numInterleavedVerticesDatas > 0)
+        bytesWritten += WriteObject(baseObj, "InterleavedVerticesData", "InterleavedVerticesDatas", data, offset + bytesWritten, numInterleavedVerticesDatas);
+    bytesWritten += WriteObject(baseObj, "UINT32", "Terminator", data, offset + bytesWritten, 0);
+    Writer::closeScope();
+    return bytesWritten;
+}
+
+unsigned int WriteInterleavedVerticesData(void *baseObj, string const &name, unsigned char *data, unsigned int offset) {
+    Writer::openScope("InterleavedVerticesData " + name, offset);
+    unsigned int bytesWritten = 0;
+    bytesWritten += WriteObject(baseObj, "NAMEOFFSET", "Name", data, offset + bytesWritten, 0);
+    unsigned int numVertexDatas = GetAt<unsigned int>(data, offset + bytesWritten);
+    bytesWritten += WriteObject(baseObj, "UINT32", "NumVertexDatas", data, offset + bytesWritten, 0);
+    bytesWritten += WriteObject(baseObj, "InterleavedVerticesVertexData", "VertexDatas", data, offset + bytesWritten, numVertexDatas);
+    Writer::closeScope();
+    return bytesWritten;
+}
+
+unsigned int WriteInterleavedVerticesVertexData(void *baseObj, string const &name, unsigned char *data, unsigned int offset) {
+    return WriteObjectWithFields(baseObj, "InterleavedVerticesVertexData", name, data, offset,
+    {
+         { "UINT32", "Index" },
+         { "UINT16", "VertexCount" },
+         { "UINT16", "MorphVertexDataSize_MultipleVertexBuffers" },
+         { "UINT32",  "VertexBufferSize" },
+         { "OFFSET", "VertexBuffer" }
+    });
+    return 16;
+}
+
 unsigned int WriteVertexBuffer(void *baseObj, string const &name, unsigned char *data, unsigned int offset) {
     Writer::openScope("VertexBuffer " + name, offset); // TODO: write references
     unsigned int numVertices = GetAt<unsigned int>(baseObj, 28);
@@ -803,7 +846,6 @@ void InitAnalyzer() {
     GetStructs()["modellayers"] = WriteModelLayers;
     GetStructs()["modellayerstates"] = WriteModelLayerStates;
     GetStructs()["modellayersstates"] = WriteModelLayersStates;
-    GetStructs()["morphverticesinfo"] = WriteMorphVerticesInfo;
     GetStructs()["modellayerbounding"] = WriteModelLayerBounding;
     GetStructs()["animationbank"] = WriteAnimationBank;
     GetStructs()["skeleton"] = WriteSkeleton;
@@ -820,6 +862,9 @@ void InitAnalyzer() {
     GetStructs()["indexbuffer"] = WriteIndexBuffer;
     GetStructs()["texture"] = WriteTexture;
     GetStructs()["boneweightsbuffer"] = WriteBoneWeightsBuffer;
+    GetStructs()["interleavedvertices"] = WriteInterleavedVertices;
+    GetStructs()["interleavedverticesdata"] = WriteInterleavedVerticesData;
+    GetStructs()["interleavedverticesvertexdata"] = WriteInterleavedVerticesVertexData;
 }
 
 void AnalyzeFile(string const &filename, unsigned char *fileData, unsigned int fileDataSize, vector<Symbol> const &symbols, vector<Relocation> const &references) {
@@ -971,7 +1016,7 @@ void AnalyzeFile(string const &filename, unsigned char *fileData, unsigned int f
                 AddObjectInfo("ModelLayerBounding", Format("ModelLayerBounding.%X", s.st_value - numLayers * 48), s.st_value - numLayers * 48, numLayers, model);
             }
             AddObjectInfo("ModelLayersStates", Format("ModelLayersStates.%X", GetAt<unsigned int>(model, 0xC4)), GetAt<unsigned int>(model, 0xC4), 0, model);
-            AddObjectInfo("MorphVerticesInfo", Format("MorphVerticesInfo.%X", GetAt<unsigned int>(model, 0xB8)), GetAt<unsigned int>(model, 0xB8), 0, model);
+            AddObjectInfo("InterleavedVertices", Format("InterleavedVertices.%X", GetAt<unsigned int>(model, 0xB8)), GetAt<unsigned int>(model, 0xB8), 0, model);
             unsigned int nameOffset = GetAt<unsigned int>(model, 0xB4);
             if (nameOffset) // TODO: replace with IsValidOffset()
                 AddObjectInfo("NAME", Format("Name.%X", nameOffset), nameOffset, 0, model);
@@ -997,6 +1042,8 @@ void AnalyzeFile(string const &filename, unsigned char *fileData, unsigned int f
                                 AddObjectInfo("Light", name + Format(".%X", GetAt<unsigned int>(modData, 0xC)), GetAt<unsigned int>(modData, 0xC), numEntries, model);
                             else if (entrySize == 16)
                                 AddObjectInfo("Coordinate4", name + Format(".%X", GetAt<unsigned int>(modData, 0xC)), GetAt<unsigned int>(modData, 0xC), numEntries, model);
+                            else if (entrySize == 64)
+                                AddObjectInfo("Matrix4x4", name + Format(".%X", GetAt<unsigned int>(modData, 0xC)), GetAt<unsigned int>(modData, 0xC), numEntries, model);
                         }
                     }
                 }

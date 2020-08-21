@@ -248,8 +248,10 @@ public:
         char *symbolNames = nullptr;
         unsigned int symbolNamesSize = 0;
         unsigned int dataIndex = 0;
-
+        
         Elf32_Ehdr *h = (Elf32_Ehdr *)fileData;
+        if (h->e_ident[0] != 0x7F || h->e_ident[1] != 'E' || h->e_ident[2] != 'L' || h->e_ident[3] != 'F')
+            throw runtime_error("Not an ELF file");
         Elf32_Shdr *s = At<Elf32_Shdr>(h, h->e_shoff);
         for (unsigned int i = 0; i < h->e_shnum; i++) {
             if (s[i].sh_size > 0) {
@@ -272,13 +274,13 @@ public:
                 }
             }
         }
-
+        
         // get symbols
-
+        
         vector<FileSymbol> symbols;
-
+        
         symbols.resize(numSymbols);
-
+        
         for (unsigned int i = 0; i < numSymbols; i++) {
             symbols[i].st_info = symbolsData[i].st_info;
             symbols[i].st_name = symbolsData[i].st_name;
@@ -289,26 +291,106 @@ public:
             symbols[i].name = &symbolNames[symbolsData[i].st_name];
             symbols[i].id = i;
         }
-
+        
         auto isSymbolDataPresent = [&](FileSymbol const &s) {
             return (s.st_info & 0xF) != 0 && s.st_shndx == dataIndex;
         };
-
+        
         // get relocation symbols
-
+        
         map<unsigned int, FileSymbol> symbolRelocations;
-
+        
         for (unsigned int i = 0; i < numRelocations; i++) {
             if (rel[i].r_info_sym < symbols.size())
                 symbolRelocations[rel[i].r_offset] = symbols[rel[i].r_info_sym];
         }
-
+        
         // do relocations
-
+        
         for (unsigned int i = 0; i < numRelocations; i++) {
             auto symbolId = rel[i].r_info_sym;
             if (symbolId < numSymbols && isSymbolDataPresent(symbols[symbolId]))
                 SetAt(data, rel[i].r_offset, &data[GetAt<unsigned int>(data, rel[i].r_offset)]);
+        }
+
+        unsigned char *skeletonFileData = nullptr;
+        vector<FileSymbol> skelSymbols;
+        unsigned char *skel_data = nullptr;
+
+        if (!options().skeleton.empty() && exists(options().skeleton)) {
+            auto skelFile = readofile(options().skeleton);
+            if (skelFile.first) {
+
+                skeletonFileData = skelFile.first;
+                unsigned int skel_dataSize = 0;
+                Elf32_Sym *skel_symbolsData = nullptr;
+                unsigned int skel_numSymbols = 0;
+                Elf32_Rel *skel_rel = nullptr;
+                unsigned int skel_numRelocations = 0;
+                char *skel_symbolNames = nullptr;
+                unsigned int skel_symbolNamesSize = 0;
+                unsigned int skel_dataIndex = 0;
+
+                Elf32_Ehdr *skel_h = (Elf32_Ehdr *)skeletonFileData;
+                Elf32_Shdr *skel_s = At<Elf32_Shdr>(skel_h, skel_h->e_shoff);
+                for (unsigned int i = 0; i < skel_h->e_shnum; i++) {
+                    if (skel_s[i].sh_size > 0) {
+                        if (skel_s[i].sh_type == 1 && !skel_data) {
+                            skel_data = At<unsigned char>(skel_h, skel_s[i].sh_offset);
+                            skel_dataSize = skel_s[i].sh_size;
+                            skel_dataIndex = i;
+                        }
+                        else if (skel_s[i].sh_type == 2) {
+                            skel_symbolsData = At<Elf32_Sym>(skel_h, skel_s[i].sh_offset);
+                            skel_numSymbols = skel_s[i].sh_size / 16;
+                        }
+                        else if (skel_s[i].sh_type == 3) {
+                            skel_symbolNames = At<char>(skel_h, skel_s[i].sh_offset);
+                            skel_symbolNamesSize = skel_s[i].sh_size;
+                        }
+                        else if (skel_s[i].sh_type == 9) {
+                            skel_rel = At<Elf32_Rel>(skel_h, skel_s[i].sh_offset);
+                            skel_numRelocations = skel_s[i].sh_size / 8;
+                        }
+                    }
+                }
+
+                // get symbols
+
+                skelSymbols.resize(skel_numSymbols);
+
+                for (unsigned int i = 0; i < skel_numSymbols; i++) {
+                    skelSymbols[i].st_info = skel_symbolsData[i].st_info;
+                    skelSymbols[i].st_name = skel_symbolsData[i].st_name;
+                    skelSymbols[i].st_other = skel_symbolsData[i].st_other;
+                    skelSymbols[i].st_shndx = skel_symbolsData[i].st_shndx;
+                    skelSymbols[i].st_size = skel_symbolsData[i].st_size;
+                    skelSymbols[i].st_value = skel_symbolsData[i].st_value;
+                    skelSymbols[i].name = &skel_symbolNames[skel_symbolsData[i].st_name];
+                    skelSymbols[i].id = i;
+                }
+
+                auto skel_isSymbolDataPresent = [&](FileSymbol const &s) {
+                    return (s.st_info & 0xF) != 0 && s.st_shndx == skel_dataIndex;
+                };
+
+                // get relocation symbols
+
+                map<unsigned int, FileSymbol> skel_symbolRelocations;
+
+                for (unsigned int i = 0; i < skel_numRelocations; i++) {
+                    if (skel_rel[i].r_info_sym < skelSymbols.size())
+                        skel_symbolRelocations[skel_rel[i].r_offset] = skelSymbols[skel_rel[i].r_info_sym];
+                }
+
+                // do relocations
+
+                for (unsigned int i = 0; i < skel_numRelocations; i++) {
+                    auto skel_symbolId = skel_rel[i].r_info_sym;
+                    if (skel_symbolId < skel_numSymbols && skel_isSymbolDataPresent(skelSymbols[skel_symbolId]))
+                        SetAt(skel_data, skel_rel[i].r_offset, &skel_data[GetAt<unsigned int>(skel_data, skel_rel[i].r_offset)]);
+                }               
+            }
         }
 
         // find model
@@ -338,16 +420,39 @@ public:
                 else if (s.name.starts_with("__geoprimdatabuffer"))
                     geoPrimDataBuffers.push_back(At<void>(data, s.st_value));
                 else if (s.name.starts_with("__Bone:::")) {
-                    bones.push_back(At<Bone>(data, s.st_value));
-                    string boneName = s.name.substr(9);
-                    auto dotPos = boneName.find_last_of('.');
-                    if (dotPos != string::npos)
-                        boneName = boneName.substr(dotPos + 1);
-                    boneNames.push_back(boneName);
+                    if (!skeletonFileData) {
+                        bones.push_back(At<Bone>(data, s.st_value));
+                        string boneName = s.name.substr(9);
+                        auto dotPos = boneName.find_last_of('.');
+                        if (dotPos != string::npos)
+                            boneName = boneName.substr(dotPos + 1);
+                        boneNames.push_back(boneName);
+                    }
                 }
                 else if (s.name.starts_with("__Skeleton:::")) {
-                    if (!skeleton)
-                        skeleton = At<Skeleton>(data, s.st_value);
+                    if (!skeletonFileData) {
+                        if (!skeleton)
+                            skeleton = At<Skeleton>(data, s.st_value);
+                    }
+                }
+            }
+        }
+
+        if (skeletonFileData) {
+            for (auto const &s : skelSymbols) {
+                if (isSymbolDataPresent(s)) {
+                    if (s.name.starts_with("__Bone:::")) {
+                        bones.push_back(At<Bone>(skel_data, s.st_value));
+                        string boneName = s.name.substr(9);
+                        auto dotPos = boneName.find_last_of('.');
+                        if (dotPos != string::npos)
+                            boneName = boneName.substr(dotPos + 1);
+                        boneNames.push_back(boneName);
+                    }
+                    else if (s.name.starts_with("__Skeleton:::")) {
+                        if (!skeleton)
+                            skeleton = At<Skeleton>(skel_data, s.st_value);
+                    }
                 }
             }
         }
@@ -407,6 +512,8 @@ public:
                                     Prop p;
                                     p.pos.x = a * 100.0f; p.pos.y = b * 100.0f; p.pos.z = c * 100.0f; p.type = d; p.dir.x = e; p.dir.y = f; p.dir.z = g;
                                     p.name = "Flag_" + to_string(flags.size() + 1);
+                                    if (d != 0)
+                                        p.name += " [type:" + to_string(d) + "]";
                                     flags.push_back(p);
                                 }
                             }
@@ -452,9 +559,9 @@ public:
                                                     p.pos.x *= 1.12f;
                                                     p.pos.y *= 1.12f;
                                                     p.pos.z *= 1.12f;
-                                                    p.dir.x *= 1.12f;
-                                                    p.dir.y *= 1.12f;
-                                                    p.dir.z *= 1.12f;
+                                                    //p.dir.x *= 1.12f;
+                                                    //p.dir.y *= 1.12f;
+                                                    //p.dir.z *= 1.12f;
                                                     effects.push_back(p);
                                                 }
                                                 else {
@@ -548,6 +655,7 @@ public:
         j.closeScope();
         j.writeFieldInt("scene", 0);
         if ((model && model->mNumLayers && model->mLayers) || skeleton) {
+
             // scenes
             j.openArray("scenes");
             j.openScope();
@@ -727,26 +835,31 @@ public:
                             float nk = a.x * b.y - a.y * b.x;
                             return aiVector3D(ni, nj, nk);
                         };
-                        aiVector3D up(0, 0, 1);
+                        aiVector3D up(0, 1, 0);
                         aiVector3D direction(effects[i].dir.x, effects[i].dir.y, effects[i].dir.z);
                         aiVector3D xaxis = Cross(up, direction);
                         xaxis.Normalize();
                         aiVector3D yaxis = Cross(direction, xaxis);
                         yaxis.Normalize();
                         m.a1 = xaxis.x;
-                        m.a2 = yaxis.x;
-                        m.a3 = direction.x;
-                        m.b1 = xaxis.y;
-                        m.b2 = yaxis.y;
-                        m.b3 = direction.y;
-                        m.c1 = xaxis.z;
-                        m.c2 = yaxis.z;
-                        m.c3 = direction.z;
+                        m.a2 = xaxis.y;
+                        m.a3 = xaxis.z;
+                        m.b1 = direction.x;
+                        m.b2 = direction.y;
+                        m.b3 = direction.z;
+                        m.c1 = yaxis.x;
+                        m.c2 = yaxis.y;
+                        m.c3 = yaxis.z;
                         //aiMatrix4x4::FromToMatrix(aiVector3D(0, 1, 0), aiVector3D(effects[i].dir.x, effects[i].dir.y, effects[i].dir.z), m);
                         m.d1 = effects[i].pos.x;
                         m.d2 = effects[i].pos.y;
                         m.d3 = effects[i].pos.z;
                         m.d4 = 1;
+
+                        //m.c1 = effects[i].dir.x;
+                        //m.c2 = effects[i].dir.y;
+                        //m.c3 = effects[i].dir.z;
+
                         for (unsigned int i = 0; i < 4; i++) {
                             for (unsigned int k = 0; k < 4; k++)
                                 j.writeValueFloat(m[i][k]);
@@ -1308,6 +1421,9 @@ public:
                             }
                             j.writeFieldInt("material", materialId);
                             j.closeScope();
+
+                            // shapekeys
+
                         }
                         modelLayers += numPrimitives * (isOldFormat ? 2 : 1);
                         j.closeArray();
@@ -1749,6 +1865,7 @@ public:
         delete[] skinMatrices;
         for (auto const &e : textures)
             delete e.second;
+        delete skeletonFileData;
     }
 
     void convert_o_to_gltf(path const &inPath, path const &outPath) {
