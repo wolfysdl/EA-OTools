@@ -209,9 +209,9 @@ FSH unpacking options:
 
 ## Requirements
 
-* command-line tool: Windows XP SP3 or higher, 32-bit/64-bit
+* command-line tool: Windows XP SP3 or higher, 32-bit/64-bit; DirectX 9.0c
 
-* GUI tool: Windows 7 or higher, 32-bit/64-bit
+* GUI tool: Windows 7 or higher, 32-bit/64-bit; DirectX 9.0c
 
 ## Source code dependencies
 
