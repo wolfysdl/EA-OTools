@@ -4,8 +4,8 @@
 #include "message.h"
 #include "Fsh/Fsh.h"
 
-const char *OTOOLS_VERSION = "0.160";
-const unsigned int OTOOLS_VERSION_INT = 160;
+const char *OTOOLS_VERSION = "0.163";
+const unsigned int OTOOLS_VERSION_INT = 163;
 
 GlobalOptions &options() {
     static GlobalOptions go;
@@ -25,11 +25,11 @@ int main(int argc, char *argv[]) {
     CommandLine cmd(argc, argv, { "i", "o", "game", "scale", "defaultVCol", "setVCol", "vColScale", "fshOutput", "fshLevels", "fshFormat", "fshTextures",
         "fshAddTextures", "fshIgnoreTextures", "startsWith", "pad", "padFsh", "instances", "computationIndex", "hwnd", "fshUnpackImageFormat",
         "forceShader", "fshHash", "fshId", "boneRemap", "skeletonData", "skeleton", "bonesFile", "maxBonesPerVertex", "vertexWeightPaletteSize",
-        "translate" },
+        "translate", "minVCol", "maxVCol" },
         { "tristrip", "noTextures", "recursive", "createSubDir", "silent", "console", "onlyFirstTechnique", "dummyTextures", "jpegTextures", "embeddedTextures", 
         "swapYZ", "forceLighting", "noMetadata", "genTexNames", "writeFsh", "fshRescale", "fshDisableTextureIgnore", "preTransformVertices", "sortByName", 
-        "sortByAlpha", "ignoreMatColor", "noMeshJoin", "head", "hd", "ignoreEmbeddedTextures", "ord", "keepTex0InMatOptions", "fshWriteToParentDir",
-        "conformant" });
+        "sortByAlpha", "useMatColor", "noMeshJoin", "head", "hd", "ignoreEmbeddedTextures", "ord", "keepTex0InMatOptions", "fshWriteToParentDir",
+        "conformant", "fshUniqueHashForEachTexture", "updateOldStadium", "stadium", "srgb", "fshForceAlphaCheck" });
     if (cmd.HasOption("silent"))
         SetMessageDisplayType(MessageDisplayType::MSG_NONE);
     else {
@@ -212,6 +212,8 @@ int main(int argc, char *argv[]) {
             options().keepTex0InMatOptions = true;
         if (cmd.HasArgument("skeleton"))
             options().skeleton = cmd.GetArgumentString("skeleton");
+        if (cmd.HasOption("updateOldStadium"))
+            options().updateOldStadium = true;
     }
     else if (opType == OperationType::IMPORT) {
         if (cmd.HasOption("conformant"))
@@ -237,35 +239,27 @@ int main(int argc, char *argv[]) {
             options().swapYZ = true;
         if (cmd.HasOption("forceLighting"))
             options().forceLighting = true;
-        if (cmd.HasArgument("setVCol")) {
-            string setVCol = cmd.GetArgumentString("setVCol");
-            unsigned int r = 255, g = 255, b = 255, a = 255;
-            if (setVCol.length() == 6)
-                options().hasSetVCol = (sscanf(setVCol.c_str(), "%2X%2X%2X", &r, &g, &b) == 3);
-            else if (setVCol.length() == 8)
-                options().hasSetVCol = (sscanf(setVCol.c_str(), "%2X%2X%2X%2X", &r, &g, &b, &a) == 4);
-            if (options().hasSetVCol) {
-                options().setVCol.r = float(r) / 255.0f;
-                options().setVCol.g = float(g) / 255.0f;
-                options().setVCol.b = float(b) / 255.0f;
-                options().setVCol.a = float(a) / 255.0f;
-            }
-        }
-        else {
-            if (cmd.HasArgument("defaultVCol")) {
-                string defaultVCol = cmd.GetArgumentString("defaultVCol");
+        auto readVCol = [&](string const &argName, aiColor4D &outCol, bool &outHas) {
+            if (cmd.HasArgument(argName)) {
+                string vcol = cmd.GetArgumentString(argName);
                 unsigned int r = 255, g = 255, b = 255, a = 255;
-                if (defaultVCol.length() == 6)
-                    options().hasDefaultVCol = (sscanf(defaultVCol.c_str(), "%2X%2X%2X", &r, &g, &b) == 3);
-                else if (defaultVCol.length() == 8)
-                    options().hasDefaultVCol = (sscanf(defaultVCol.c_str(), "%2X%2X%2X%2X", &r, &g, &b, &a) == 4);
-                if (options().hasDefaultVCol) {
-                    options().defaultVCol.r = float(r) / 255.0f;
-                    options().defaultVCol.g = float(g) / 255.0f;
-                    options().defaultVCol.b = float(b) / 255.0f;
-                    options().defaultVCol.a = float(a) / 255.0f;
+                if (vcol.length() == 6)
+                    outHas = (sscanf(vcol.c_str(), "%2X%2X%2X", &r, &g, &b) == 3);
+                else if (vcol.length() == 8)
+                    outHas = (sscanf(vcol.c_str(), "%2X%2X%2X%2X", &r, &g, &b, &a) == 4);
+                if (outHas) {
+                    outCol.r = float(r) / 255.0f;
+                    outCol.g = float(g) / 255.0f;
+                    outCol.b = float(b) / 255.0f;
+                    outCol.a = float(a) / 255.0f;
                 }
             }
+        };
+        readVCol("setVCol", options().setVCol, options().hasSetVCol);
+        if (!options().hasSetVCol) {
+            readVCol("defaultVCol", options().defaultVCol, options().hasDefaultVCol);
+            readVCol("minVCol", options().minVCol, options().hasMinVCol);
+            readVCol("maxVCol", options().maxVCol, options().hasMaxVCol);
             if (cmd.HasArgument("vColScale"))
                 options().vColScale = cmd.GetArgumentFloat("vColScale");
         }
@@ -277,8 +271,8 @@ int main(int argc, char *argv[]) {
             options().sortByName = true;
         if (cmd.HasOption("sortByAlpha"))
             options().sortByAlpha = true;
-        if (cmd.HasOption("ignoreMatColor"))
-            options().ignoreMatColor = true;
+        if (cmd.HasOption("useMatColor"))
+            options().useMatColor = true;
         if (cmd.HasOption("head"))
             options().head = true;
         if (cmd.HasOption("hd"))
@@ -418,6 +412,16 @@ int main(int argc, char *argv[]) {
         }
         if (cmd.HasArgument("fshId"))
             options().fshId = cmd.GetArgumentInt("fshId");
+        if (cmd.HasOption("fshUniqueHashForEachTexture"))
+            options().fshUniqueHashForEachTexture = true;
+        if (cmd.HasOption("fshForceAlphaCheck"))
+            options().fshForceAlphaCheck = true;
+    }
+    if (opType == EXPORT || opType == IMPORT) {
+        if (cmd.HasOption("stadium"))
+            options().stadium = true;
+        if (cmd.HasOption("srgb"))
+            options().srgb = true;
     }
 
     path o;

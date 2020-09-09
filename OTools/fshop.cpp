@@ -16,6 +16,8 @@ void packfsh_collect(path const &out, path const &in) {
         auto &tex = fsh[texkey];
         tex.name = filename;
         tex.filepath = filename;
+        tex.format = options().fshFormat;
+        tex.levels = options().fshLevels;
     }
 }
 
@@ -139,19 +141,27 @@ void WriteFsh(path const &fshFilePath, path const &searchDir, map<string, Textur
             }
             if (loadingInfo.fileData || loadingInfo.data || loadingInfo.fileExists) {
                 auto &image = fsh.AddImage();
-                image.Load(loadingInfo, img.format, img.levels, options().fshRescale);
+                image.Load(loadingInfo, img.format, img.levels, options().fshRescale, options().fshForceAlphaCheck);
                 ea::FshPixelData *pixelsData = image.FindFirstData(ea::FshData::PIXELDATA)->As<ea::FshPixelData>();
                 image.AddData(new ea::FshMetalBin(metalBinData, 0x10));
                 image.SetTag(img.name);
                 image.AddData(new ea::FshName(img.name));
                 char comment[256];
                 static char idStr[260];
-                unsigned int texNameHash = 0;
-                if (options().useFshHash)
-                    texNameHash = options().fshHash;
-                else
-                    texNameHash = Hash(fshFilePath.stem().string() + "_" + img.name);
-                sprintf_s(idStr, "0x%.8x", texNameHash);
+                if (options().fshId == 2)
+                    strcpy(idStr, "0x0");
+                else {
+                    unsigned int texNameHash = 0;
+                    if (options().useFshHash)
+                        texNameHash = options().fshHash;
+                    else {
+                        if (options().fshUniqueHashForEachTexture)
+                            texNameHash = Hash(fshFilePath.stem().string() + "_" + img.name);
+                        else
+                            texNameHash = Hash(fshFilePath.stem().string());
+                    }
+                    sprintf_s(idStr, "0x%.8x", texNameHash);
+                }
                 sprintf_s(comment, "TXLY,%s,%d,%d,%d,%d,%s", image.GetTag().c_str(), options().fshId, pixelsData->GetNumMipLevels() > 0 ? 1 : 0,
                     pixelsData->GetWidth(), pixelsData->GetHeight(), idStr);
                 image.AddData(new ea::FshComment(comment));
@@ -196,19 +206,26 @@ void WriteFsh(path const &fshFilePath, path const &searchDir, map<string, Textur
                     }
                 }
                 if (hotSpot->Regions().empty()) {
-                    fsh.ForAllImages([&](ea::FshImage &image2) {
-                        char fourcc[4] = { 0, 0, 0, 0 };
-                        auto tag = image2.GetTag();
+                    char fourcc[4] = { 0, 0, 0, 0 };
+                        auto tag = image.GetTag();
                         for (unsigned int i = 0; i < 4; i++) {
                             if (tag.size() > i)
                                 fourcc[i] = tag[i];
-                        }
-                        std::swap(fourcc[0], fourcc[3]);
-                        std::swap(fourcc[1], fourcc[2]);
-                        hotSpot->Regions().push_back(ea::FshHotSpot::Region(*((unsigned int *)fourcc), 0, 0,
-                            image2.FindFirstData(ea::FshData::PIXELDATA)->As<ea::FshPixelData>()->GetWidth(),
-                            image2.FindFirstData(ea::FshData::PIXELDATA)->As<ea::FshPixelData>()->GetHeight()));
-                    });
+                    }
+                    hotSpot->Regions().push_back(ea::FshHotSpot::Region(*((unsigned int *)fourcc), 0, 0, pixelsData->GetWidth(), pixelsData->GetHeight()));
+                    //fsh.ForAllImages([&](ea::FshImage &image2) {
+                    //    char fourcc[4] = { 0, 0, 0, 0 };
+                    //    auto tag = image2.GetTag();
+                    //    for (unsigned int i = 0; i < 4; i++) {
+                    //        if (tag.size() > i)
+                    //            fourcc[i] = tag[i];
+                    //    }
+                    //    std::swap(fourcc[0], fourcc[3]);
+                    //    std::swap(fourcc[1], fourcc[2]);
+                    //    hotSpot->Regions().push_back(ea::FshHotSpot::Region(*((unsigned int *)fourcc), 0, 0,
+                    //        image2.FindFirstData(ea::FshData::PIXELDATA)->As<ea::FshPixelData>()->GetWidth(),
+                    //        image2.FindFirstData(ea::FshData::PIXELDATA)->As<ea::FshPixelData>()->GetHeight()));
+                    //});
                 }
             });
             if (!fshDir.empty())

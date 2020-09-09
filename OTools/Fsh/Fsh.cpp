@@ -180,7 +180,7 @@ unsigned char ea::FshImage::GetPixelFormat(unsigned int format) {
 	case D3DFMT_A8R8G8B8:
 		return FshPixelData::PIXEL_8888;
 	case D3DFMT_X8R8G8B8:
-		return FshPixelData::PIXEL_888;
+		return FshPixelData::PIXEL_8888;
 	case D3DFMT_A4R4G4B4:
 		return FshPixelData::PIXEL_4444;
 	case D3DFMT_A1R5G5B5:
@@ -397,7 +397,118 @@ void ea::FshImage::ReadFromFile(std::filesystem::path const &filepath, unsigned 
     texture->Release();
 }
 
-void ea::FshImage::Load(LoadingInfo const &loadingInfo, unsigned int d3dformat, unsigned int levels, bool rescale) {
+enum AlphaCheckState {
+	NoAlpha,
+	HasAlpha1Bit,
+	HasAlpha
+};
+
+AlphaCheckState GetTextureAlpha(IDirect3DTexture9 *tex) {
+	IDirect3DSurface9 *surface = nullptr;
+	D3DLOCKED_RECT rect;
+	D3DSURFACE_DESC desc;
+	AlphaCheckState alphaCheckState = NoAlpha;
+	if (SUCCEEDED(tex->GetSurfaceLevel(0, &surface))
+		&& SUCCEEDED(surface->GetDesc(&desc))
+		&& desc.Format == D3DFMT_A8R8G8B8
+		&& SUCCEEDED(surface->LockRect(&rect, 0, D3DLOCK_READONLY)))
+	{
+		for (unsigned int i = 0; i < desc.Height; i++) {
+			unsigned char *pSrcData = (unsigned char *)rect.pBits + i * rect.Pitch;
+			for (unsigned int j = 0; j < desc.Width; j++) {
+				if (pSrcData[3] == 0)
+					alphaCheckState = HasAlpha1Bit;
+				else if (pSrcData[3] != 255) {
+					alphaCheckState = HasAlpha;
+					break;
+				}
+				pSrcData += 4;
+			}
+			if (alphaCheckState == HasAlpha)
+				break;
+		}
+		surface->UnlockRect();
+	}
+	if (surface)
+		surface->Release();
+	return alphaCheckState;
+}
+
+AlphaCheckState GetTextureAlpha(IDirect3DDevice9 *device, void *data, unsigned int dataSize) {
+	IDirect3DTexture9 *texture = nullptr;
+	if (FAILED(D3DXCreateTextureFromFileInMemoryEx(device, data, dataSize, D3DX_DEFAULT, D3DX_DEFAULT, 0, D3DUSAGE_DYNAMIC,
+		D3DFMT_A8R8G8B8, D3DPOOL_SYSTEMMEM, D3DX_FILTER_TRIANGLE | D3DX_FILTER_DITHER, D3DX_FILTER_BOX, 0, NULL, NULL, &texture)))
+	{
+		return AlphaCheckState::NoAlpha;
+	}
+	AlphaCheckState alphaCheckState = GetTextureAlpha(texture);
+	texture->Release();
+	return alphaCheckState;
+}
+
+AlphaCheckState GetTextureAlpha(IDirect3DDevice9 *device, wchar_t const *filename) {
+	IDirect3DTexture9 *texture = nullptr;
+	if (FAILED(D3DXCreateTextureFromFileExW(device, filename, D3DX_DEFAULT, D3DX_DEFAULT, 0, D3DUSAGE_DYNAMIC,
+		D3DFMT_A8R8G8B8, D3DPOOL_SYSTEMMEM, D3DX_FILTER_TRIANGLE | D3DX_FILTER_DITHER, D3DX_FILTER_BOX, 0, NULL, NULL, &texture)))
+	{
+		return AlphaCheckState::NoAlpha;
+	}
+	AlphaCheckState alphaCheckState = GetTextureAlpha(texture);
+	texture->Release();
+	return alphaCheckState;
+}
+
+bool FormatHasAlpha(D3DFORMAT format) {
+	switch (format) {
+	case D3DFMT_A1:
+	case D3DFMT_A4L4:
+	case D3DFMT_A8:
+	case D3DFMT_A8L8:
+	case D3DFMT_A8P8:
+	case D3DFMT_A4R4G4B4:
+	case D3DFMT_A1R5G5B5:
+	case D3DFMT_A8R3G3B2:
+	case D3DFMT_DXT1:
+	case D3DFMT_DXT2:
+	case D3DFMT_DXT3:
+	case D3DFMT_DXT4:
+	case D3DFMT_DXT5:
+	case D3DFMT_A8B8G8R8:
+	case D3DFMT_A8R8G8B8:
+	case D3DFMT_A2B10G10R10:
+	case D3DFMT_A2R10G10B10:
+	case D3DFMT_A16B16G16R16:
+	case D3DFMT_A16B16G16R16F:
+	case D3DFMT_A32B32G32R32F:
+	case D3DFMT_P8:
+		return true;
+	}
+	return false;
+}
+
+unsigned int FormatFromAlphaState(AlphaCheckState alphaCheckState, unsigned int autoFormat) {
+	if (alphaCheckState == HasAlpha) {
+		if (autoFormat == unsigned int(-4))
+			return D3DFMT_DXT5;
+		else if (autoFormat == unsigned int(-6))
+			return D3DFMT_A4R4G4B4;
+	}
+	else if (alphaCheckState == HasAlpha1Bit) {
+		if (autoFormat == unsigned int(-4))
+			return D3DFMT_DXT1;
+		else if (autoFormat == unsigned int(-6))
+			return D3DFMT_A1R5G5B5;
+	}
+	else {
+		if (autoFormat == unsigned int(-4))
+			return D3DFMT_DXT1;
+		else if (autoFormat == unsigned int(-6))
+			return D3DFMT_R5G6B5;
+	}
+	return D3DFMT_A8R8G8B8;
+}
+
+void ea::FshImage::Load(LoadingInfo const &loadingInfo, unsigned int d3dformat, unsigned int levels, bool rescale, bool forceAlphaCheck) {
 	RemoveAllDatas(FshData::PIXELDATA);
 	IDirect3DTexture9 *texture = nullptr;
 	D3DSURFACE_DESC desc;
@@ -482,46 +593,10 @@ void ea::FshImage::Load(LoadingInfo const &loadingInfo, unsigned int d3dformat, 
 			throw Exception("FshImage::Load: unable to get image info from memory");
 		}
 		if (d3dformat == unsigned int(-4) || d3dformat == unsigned int(-5) || d3dformat == unsigned int(-6)) {
-			switch (imageInfo.Format) {
-			case D3DFMT_A1:
-			case D3DFMT_A4L4:
-			case D3DFMT_A8:
-			case D3DFMT_A8L8:
-			case D3DFMT_A8P8:
-			case D3DFMT_A4R4G4B4:
-			case D3DFMT_A1R5G5B5:
-			case D3DFMT_A8R3G3B2:
-			case D3DFMT_DXT2:
-			case D3DFMT_DXT3:
-			case D3DFMT_DXT4:
-			case D3DFMT_DXT5:
-			case D3DFMT_A8B8G8R8:
-			case D3DFMT_A8R8G8B8:
-			case D3DFMT_A2B10G10R10:
-			case D3DFMT_A2R10G10B10:
-			case D3DFMT_A16B16G16R16:
-			case D3DFMT_A16B16G16R16F:
-			case D3DFMT_A32B32G32R32F:
-			{
-				if (d3dformat == unsigned int(-4))
-					d3dformat = D3DFMT_DXT5;
-				else if (d3dformat == unsigned int(-6))
-					d3dformat = D3DFMT_A4R4G4B4;
-				else
-					d3dformat = D3DFMT_A8R8G8B8;
-			}
-			break;
-			default:
-			{
-				if (d3dformat == unsigned int(-4))
-					d3dformat = D3DFMT_DXT1;
-				else if (d3dformat == unsigned int(-6))
-					d3dformat = D3DFMT_R5G6B5;
-				else
-					d3dformat = D3DFMT_A8R8G8B8;
-			}
-			break;
-			}
+			AlphaCheckState alphaCheckState = FormatHasAlpha(imageInfo.Format) ? HasAlpha : NoAlpha;
+			if (forceAlphaCheck && alphaCheckState == HasAlpha)
+				alphaCheckState = GetTextureAlpha(Fsh::GlobalDevice->Interface(), ddsData, ddsDataSize);
+			d3dformat = FormatFromAlphaState(alphaCheckState, d3dformat);
 		}
 		else if (d3dformat == D3DFMT_FROM_FILE) {
 			unsigned char testFormat = GetPixelFormat(imageInfo.Format);
@@ -547,46 +622,10 @@ void ea::FshImage::Load(LoadingInfo const &loadingInfo, unsigned int d3dformat, 
 		if (FAILED(D3DXGetImageInfoFromFileInMemory(loadingInfo.fileData, loadingInfo.fileDataSize, &imageInfo)))
 			throw Exception("FshImage::Load: unable to get image info from file in memory");
 		if (d3dformat == unsigned int(-4) || d3dformat == unsigned int(-5) || d3dformat == unsigned int(-6)) {
-			switch (imageInfo.Format) {
-			case D3DFMT_A1:
-			case D3DFMT_A4L4:
-			case D3DFMT_A8:
-			case D3DFMT_A8L8:
-			case D3DFMT_A8P8:
-			case D3DFMT_A4R4G4B4:
-			case D3DFMT_A1R5G5B5:
-			case D3DFMT_A8R3G3B2:
-			case D3DFMT_DXT2:
-			case D3DFMT_DXT3:
-			case D3DFMT_DXT4:
-			case D3DFMT_DXT5:
-			case D3DFMT_A8B8G8R8:
-			case D3DFMT_A8R8G8B8:
-			case D3DFMT_A2B10G10R10:
-			case D3DFMT_A2R10G10B10:
-			case D3DFMT_A16B16G16R16:
-			case D3DFMT_A16B16G16R16F:
-			case D3DFMT_A32B32G32R32F:
-			{
-				if (d3dformat == unsigned int(-4))
-					d3dformat = D3DFMT_DXT5;
-				else if (d3dformat == unsigned int(-6))
-					d3dformat = D3DFMT_A4R4G4B4;
-				else
-					d3dformat = D3DFMT_A8R8G8B8;
-			}
-			break;
-			default:
-			{
-				if (d3dformat == unsigned int(-4))
-					d3dformat = D3DFMT_DXT1;
-				else if (d3dformat == unsigned int(-6))
-					d3dformat = D3DFMT_R5G6B5;
-				else
-					d3dformat = D3DFMT_A8R8G8B8;
-			}
-			break;
-			}
+			AlphaCheckState alphaCheckState = FormatHasAlpha(imageInfo.Format) ? HasAlpha : NoAlpha;
+			if (forceAlphaCheck && alphaCheckState == HasAlpha)
+				alphaCheckState = GetTextureAlpha(Fsh::GlobalDevice->Interface(), loadingInfo.fileData, loadingInfo.fileDataSize);
+			d3dformat = FormatFromAlphaState(alphaCheckState, d3dformat);
 		}
 		else if (d3dformat == D3DFMT_FROM_FILE) {
 			unsigned char testFormat = GetPixelFormat(imageInfo.Format);
@@ -610,46 +649,10 @@ void ea::FshImage::Load(LoadingInfo const &loadingInfo, unsigned int d3dformat, 
 		if (FAILED(D3DXGetImageInfoFromFileW(loadingInfo.filepath.c_str(), &imageInfo)))
 			throw Exception("FshImage::Load: unable to get image info from file");
 		if (d3dformat == unsigned int(-4) || d3dformat == unsigned int(-5) || d3dformat == unsigned int(-6)) {
-			switch (imageInfo.Format) {
-			case D3DFMT_A1:
-			case D3DFMT_A4L4:
-			case D3DFMT_A8:
-			case D3DFMT_A8L8:
-			case D3DFMT_A8P8:
-			case D3DFMT_A4R4G4B4:
-			case D3DFMT_A1R5G5B5:
-			case D3DFMT_A8R3G3B2:
-			case D3DFMT_DXT2:
-			case D3DFMT_DXT3:
-			case D3DFMT_DXT4:
-			case D3DFMT_DXT5:
-			case D3DFMT_A8B8G8R8:
-			case D3DFMT_A8R8G8B8:
-			case D3DFMT_A2B10G10R10:
-			case D3DFMT_A2R10G10B10:
-			case D3DFMT_A16B16G16R16:
-			case D3DFMT_A16B16G16R16F:
-			case D3DFMT_A32B32G32R32F:
-			{
-				if (d3dformat == unsigned int(-4))
-					d3dformat = D3DFMT_DXT5;
-				else if (d3dformat == unsigned int(-6))
-					d3dformat = D3DFMT_A4R4G4B4;
-				else
-					d3dformat = D3DFMT_A8R8G8B8;
-			}
-			break;
-			default:
-			{
-				if (d3dformat == unsigned int(-4))
-					d3dformat = D3DFMT_DXT1;
-				else if (d3dformat == unsigned int(-6))
-					d3dformat = D3DFMT_R5G6B5;
-				else
-					d3dformat = D3DFMT_A8R8G8B8;
-			}
-			break;
-			}
+			AlphaCheckState alphaCheckState = FormatHasAlpha(imageInfo.Format) ? HasAlpha : NoAlpha;
+			if (forceAlphaCheck && alphaCheckState == HasAlpha)
+				alphaCheckState = GetTextureAlpha(Fsh::GlobalDevice->Interface(), loadingInfo.filepath.c_str());
+			d3dformat = FormatFromAlphaState(alphaCheckState, d3dformat);
 		}
 		else if (d3dformat == D3DFMT_FROM_FILE) {
 			unsigned char testFormat = GetPixelFormat(imageInfo.Format);
@@ -864,8 +867,10 @@ void ea::Fsh::Read(std::filesystem::path const & filepath) {
 			case 0x6F: {
 				auto commentSize = f.Read<size_t>();
 				std::string commentStr;
-				commentStr.resize(commentSize);
-				f.Read(&commentStr[0], commentSize);
+				if (commentSize > 0) {
+					commentStr.resize(commentSize - 1);
+					f.Read(&commentStr[0], commentSize - 1);
+				}
 				image.AddData(new FshComment(commentStr));
 			} break;
 			case 0x70: {
@@ -1006,11 +1011,9 @@ void ea::Fsh::Write(std::filesystem::path const & filepath) {
 			f.Write(sectionId | (nextSectionOffset << 8));
 			switch (data->GetDataType()) {
 			case FshData::COMMENT: {
-				size_t commentSize = data->As<FshComment>()->GetComment().size();
+				size_t commentSize = data->As<FshComment>()->GetComment().size() + 1;
 				f.Write(commentSize);
-				if (commentSize > 0)
-					f.Write(data->As<FshComment>()->GetComment().c_str(), commentSize);
-				f.WriteNull(1);
+				f.Write(data->As<FshComment>()->GetComment().c_str(), commentSize);
 			} break;
 			case FshData::NAME: {
 				f.Write(data->As<FshName>()->GetName().c_str(), data->As<FshName>()->GetName().length() + 1);

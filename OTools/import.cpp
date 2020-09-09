@@ -15,6 +15,7 @@
 #include "Fsh\Fsh.h"
 #include "FifamReadWrite.h"
 #include "igl/ambient_occlusion.h"
+#include "srgb/SrgbTransform.hpp"
 
 struct Vector4D {
     float x = 0.0f;
@@ -650,6 +651,7 @@ struct StadiumExtra {
     aiNode *flags = nullptr;
     aiNode *effects = nullptr;
     aiNode *collision = nullptr;
+    enum FIFA_STAD_TYPE { STAD_DEFAULT, STAD_CUSTOM } stadType = STAD_DEFAULT;
 };
 
 void NodeAddCallback(aiNode *node, vector<Node> &nodes, StadiumExtra &stadExtra) {
@@ -733,14 +735,16 @@ bool GetTexInfo(aiScene const *scene, aiMaterial const *mat, aiTextureType texTy
         else
             texFilePath = texPath.C_Str();
         texFileName = texFilePath.stem().string();
+        texFileNameLowered.clear();
         if (!texFileName.empty()) {
             texFileNameLowered = ToLower(texFileName);
-            if (texFileNameLowered.starts_with("global_")) {
-                string globalTexName = texFileName.substr(7);
+            if (texFileNameLowered.starts_with("g_")) {
+                string globalTexName = texFileName.substr(2);
                 if (globalTexName.empty())
                     return false;
                 isGlobal = true;
                 texFileName = globalTexName;
+                texFileNameLowered = ToLower(texFileName);
             }
             return true;
         }
@@ -764,7 +768,14 @@ bool LoadTextureIntoTexSlot(aiScene const *scene, aiMaterial const *mat, aiTextu
             texFilePath = customName;
             texFileName = customName;
             texFileNameLowered = ToLower(customName);
-            isGlobal = texFileNameLowered.starts_with("global_");
+            isGlobal = texFileNameLowered.starts_with("g_");
+            if (isGlobal) {
+                string globalTexName = texFileName.substr(2);
+                if (globalTexName.empty())
+                    return false;
+                texFileName = globalTexName;
+                texFileNameLowered = ToLower(texFileName);
+            }
             embedded.data = nullptr;
         }
         if (isGlobal) {
@@ -919,9 +930,17 @@ void oimport(path const &out, path const &in) {
 
     StadiumExtra stadExtra;
 
-    if (true && modelName.starts_with("m716__")) {
-        if (sscanf(modelName.c_str(), "m716__%d_%d", &stadExtra.stadiumId, &stadExtra.lightingId) == 2)
+    if (modelName.starts_with("m716__")) {
+        if (sscanf(modelName.c_str(), "m716__%d_%d", &stadExtra.stadiumId, &stadExtra.lightingId) == 2) {
             stadExtra.used = true;
+            stadExtra.stadType = StadiumExtra::STAD_DEFAULT;
+        }
+    }
+    else if (modelName.starts_with("stadium_")) {
+        if (sscanf(modelName.c_str(), "stadium_%d", &stadExtra.lightingId) == 1) {
+            stadExtra.used = true;
+            stadExtra.stadType = StadiumExtra::STAD_CUSTOM;
+        }
     }
 
     NodeAddCallback(scene->mRootNode, nodes, stadExtra);
@@ -1521,10 +1540,30 @@ void oimport(path const &out, path const &in) {
                                     if (numColors > 0 && mesh->HasVertexColors(0) && mesh->mColors[0]) {
                                         vertexColor = mesh->mColors[0][v];
                                         swap(vertexColor.r, vertexColor.b);
+                                        if (options().srgb) {
+                                            for (unsigned int ci = 0; ci < 3; ci++)
+                                                vertexColor[ci] = SrgbTransform::linearToSrgb(vertexColor[ci]);
+                                        }
                                         if (options().vColScale != 0.0f) {
                                             vertexColor.r *= options().vColScale;
                                             vertexColor.g *= options().vColScale;
                                             vertexColor.b *= options().vColScale;
+                                        }
+                                        if (options().hasMinVCol) {
+                                            if (vertexColor.r < options().minVCol.r)
+                                                vertexColor.r = options().minVCol.r;
+                                            if (vertexColor.g < options().minVCol.g)
+                                                vertexColor.g = options().minVCol.g;
+                                            if (vertexColor.b < options().minVCol.b)
+                                                vertexColor.b = options().minVCol.b;
+                                        }
+                                        if (options().hasMaxVCol) {
+                                            if (vertexColor.r > options().maxVCol.r)
+                                                vertexColor.r = options().maxVCol.r;
+                                            if (vertexColor.g > options().maxVCol.g)
+                                                vertexColor.g = options().maxVCol.g;
+                                            if (vertexColor.b > options().maxVCol.b)
+                                                vertexColor.b = options().maxVCol.b;
                                         }
                                     }
                                     else {
@@ -1534,7 +1573,7 @@ void oimport(path const &out, path const &in) {
                                             vertexColor = DEFAULT_COLOR;
                                     }
                                 }
-                                if (!options().ignoreMatColor) {
+                                if (options().useMatColor) {
                                     if (hasMatColor) {
                                         vertexColor.r *= matColor.r;
                                         vertexColor.g *= matColor.g;
@@ -2561,9 +2600,9 @@ void oimport(path const &out, path const &in) {
                 if (targetName != "FIFA09" && targetName != "FIFA10" && targetName != "FM13") {
                     string hairTexName;
                     if (targetName == "FIFA03")
-                        hairTexName = "PlayerTexObj.texobj11__texture14__" + playerIdStr + "_0_0.fsh";
+                        hairTexName = "PlayerTexObj.texobj11__texture14__0_" + playerIdStr + "_0.fsh";
                     else if (targetName == "FIFA04" || targetName == "FIFA05" || targetName == "EURO04" || targetName == "CL0405")
-                        hairTexName = "playertexobj.texobj11__texture14__" + playerIdStr + "_0_0.fsh";
+                        hairTexName = "playertexobj.texobj11__texture14__0_" + playerIdStr + "_0.fsh";
                     else if (targetName == "FIFA06" || targetName == "FIFA07" || targetName == "FIFA08" || targetName == "WC06" || targetName == "CL0607" || targetName == "EURO08")
                         hairTexName = "t22__" + playerIdStr + "_0.fsh";
                     
@@ -2660,7 +2699,10 @@ void oimport(path const &out, path const &in) {
         else
             targetFolder = absolute(out).parent_path();
         if (stadExtra.flags) {
-            path stadFlagsPath = targetFolder / Format("sle-%d-%d.loc", stadExtra.stadiumId, stadExtra.lightingId);
+            path stadFlagsPath = targetFolder /
+                (stadExtra.stadType == StadiumExtra::STAD_DEFAULT ?
+                    Format("sle-%d-%d.loc", stadExtra.stadiumId, stadExtra.lightingId) :
+                    Format("flags_%d.loc", stadExtra.lightingId));
             FifamWriter writer(stadFlagsPath, 14, FifamVersion(), false);
             if (writer.Available()) {
                 vector<aiNode *> flagNodes;
@@ -2686,7 +2728,9 @@ void oimport(path const &out, path const &in) {
             }
         }
         if (stadExtra.effects) {
-            path stadEffectsPath = targetFolder / Format("tag-%d-%d.loc", stadExtra.stadiumId, stadExtra.lightingId);
+            path stadEffectsPath = targetFolder / (stadExtra.stadType == StadiumExtra::STAD_DEFAULT ? 
+                Format("tag-%d-%d.loc", stadExtra.stadiumId, stadExtra.lightingId) :
+                Format("lights_%d.loc", stadExtra.lightingId));
             FifamWriter writer(stadEffectsPath, 14, FifamVersion(), false);
             if (writer.Available()) {
                 vector<aiNode *> effNodes;
@@ -2753,7 +2797,9 @@ void oimport(path const &out, path const &in) {
             }
         }
         if (stadExtra.collision) {
-            path stadCollPath = targetFolder / Format("coll-%d-%d.bin", stadExtra.stadiumId, stadExtra.lightingId);
+            path stadCollPath = targetFolder / (stadExtra.stadType == StadiumExtra::STAD_DEFAULT ? 
+                Format("coll-%d-%d.bin", stadExtra.stadiumId, stadExtra.lightingId) :
+                Format("collision_%d.bin", stadExtra.lightingId));
             vector<aiNode *> colNodes;
             if (stadExtra.collision->mNumMeshes > 0)
                 colNodes.push_back(stadExtra.collision);

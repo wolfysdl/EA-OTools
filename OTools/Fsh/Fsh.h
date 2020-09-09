@@ -182,7 +182,7 @@ namespace ea {
     public:
         void WriteToFile(std::filesystem::path const &filepath, FileFormat fileFormat);
         void ReadFromFile(std::filesystem::path const &filepath, unsigned int d3dformat = ((unsigned int)-3), unsigned int levels = ((unsigned int)-3), bool rescale = false);
-		void Load(LoadingInfo const &loadingInfo, unsigned int d3dformat = ((unsigned int)-3), unsigned int levels = ((unsigned int)-3), bool rescale = false);
+		void Load(LoadingInfo const &loadingInfo, unsigned int d3dformat = ((unsigned int)-3), unsigned int levels = ((unsigned int)-3), bool rescale = false, bool forceAlphaCheck = false);
 	};
 
 	class Fsh {

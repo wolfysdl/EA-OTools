@@ -421,41 +421,41 @@ public:
                                         //        }
                                         //    }
                                         //    break;
-                                        //case 9:
-                                        //case 32:
-                                        //    //if (false && !GetAt<GeoPrimState *>(globalParameters, 4)) {
-                                        //    //    //it = symbolRelocations.find(unsigned int(At<GeoPrimState *>(globalParameters, 4)) - unsigned int(data));
-                                        //    //    //if (it != symbolRelocations.end() && (*it).second.st_info == 0x10) {
-                                        //    //    //    string format = (*it).second.name;
-                                        //    //    //    string newFormat = format;
-                                        //    //    //    auto idPos = newFormat.find("UID=");
-                                        //    //    //    if (idPos != string::npos) {
-                                        //    //    //        auto semiColonPos = newFormat.find(';', idPos + 4);
-                                        //    //    //        if (semiColonPos != string::npos)
-                                        //    //    //            newFormat.erase(idPos, semiColonPos - idPos + 1);
-                                        //    //    //    }
-                                        //    //    //    string shapename;
-                                        //    //    //    auto shapenamePos = newFormat.find("SHAPENAME=");
-                                        //    //    //    if (shapenamePos != string::npos) {
-                                        //    //    //        auto semiColonPos = newFormat.find(';', shapenamePos + 10);
-                                        //    //    //        if (semiColonPos != string::npos) {
-                                        //    //    //            shapename = newFormat.substr(shapenamePos, semiColonPos - shapenamePos);
-                                        //    //    //            newFormat.erase(shapenamePos, semiColonPos - shapenamePos + 1);
-                                        //    //    //        }
-                                        //    //    //    }
-                                        //    //    //    if (!m[shaderName].contains(newFormat)) {
-                                        //    //    //        cout << shaderName << ": " << newFormat << " in " << outPath.filename().string() << " (" << shapename << ")" << endl;
-                                        //    //    //        m[shaderName].insert(newFormat);
-                                        //    //    //    }
-                                        //    //    //}
-                                        //    //}
-                                        //    //else {
-                                        //    //    if (!ss.contains(shaderName)) {
-                                        //    //        cout << shaderName << endl;
-                                        //    //        ss.insert(shaderName);
-                                        //    //    }
-                                        //    //}
-                                        //    break;
+                                        case 9:
+                                        case 32:
+                                            if (!GetAt<GeoPrimState *>(globalParameters, 4)) {
+                                                //it = symbolRelocations.find(unsigned int(At<GeoPrimState *>(globalParameters, 4)) - unsigned int(data));
+                                                //if (it != symbolRelocations.end() && (*it).second.st_info == 0x10) {
+                                                //    string format = (*it).second.name;
+                                                //    string newFormat = format;
+                                                //    auto idPos = newFormat.find("UID=");
+                                                //    if (idPos != string::npos) {
+                                                //        auto semiColonPos = newFormat.find(';', idPos + 4);
+                                                //        if (semiColonPos != string::npos)
+                                                //            newFormat.erase(idPos, semiColonPos - idPos + 1);
+                                                //    }
+                                                //    string shapename;
+                                                //    auto shapenamePos = newFormat.find("SHAPENAME=");
+                                                //    if (shapenamePos != string::npos) {
+                                                //        auto semiColonPos = newFormat.find(';', shapenamePos + 10);
+                                                //        if (semiColonPos != string::npos) {
+                                                //            shapename = newFormat.substr(shapenamePos, semiColonPos - shapenamePos);
+                                                //            newFormat.erase(shapenamePos, semiColonPos - shapenamePos + 1);
+                                                //        }
+                                                //    }
+                                                //    if (!m[shaderName].contains(newFormat)) {
+                                                //        cout << shaderName << ": " << newFormat << " in " << outPath.filename().string() << " (" << shapename << ")" << endl;
+                                                //        m[shaderName].insert(newFormat);
+                                                //    }
+                                                //}
+                                            }
+                                            else {
+                                                if (!ss.contains(shaderName)) {
+                                                    cout << shaderName << endl;
+                                                    ss.insert(shaderName);
+                                                }
+                                            }
+                                            break;
                                         }
                                         if (numCommands != 0)
                                             globalParameters = At<void *>(globalParameters, 8);

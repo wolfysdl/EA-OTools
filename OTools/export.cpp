@@ -4,6 +4,7 @@
 #include "jsonwriter.h"
 #include "FifamReadWrite.h"
 #include <assimp\scene.h>
+#include "srgb/SrgbTransform.hpp"
 
 class exporter {
     struct FileSymbol : public Elf32_Sym {
@@ -482,13 +483,23 @@ public:
         bool hasEffects = false;
         bool hasCollision = false;
 
-        if (true && originalFileName.starts_with("m716__")) {
+        enum FIFA_STAD_TYPE { STAD_NONE, STAD_DEFAULT, STAD_CUSTOM } stadType = STAD_NONE;
+        if (originalFileName.starts_with("stadium_"))
+            stadType = STAD_CUSTOM;
+        else if (originalFileName.starts_with("m716__"))
+            stadType = STAD_DEFAULT;
+        if (stadType != STAD_NONE) {
             unsigned int stadiumId = 0;
             unsigned int lightingId = 0;
-            if (sscanf(originalFileName.c_str(), "m716__%d_%d", &stadiumId, &lightingId) == 2) {
+            bool gotIds = false;
+            if (stadType == STAD_DEFAULT)
+                gotIds = sscanf(originalFileName.c_str(), "m716__%d_%d", &stadiumId, &lightingId) == 2;
+            else
+                gotIds = sscanf(originalFileName.c_str(), "stadium_%d", &lightingId) == 1;
+            if (gotIds) {
                 auto originalFolder = originalFilePath.parent_path();
                 // flags
-                path stadFlagsPath = originalFolder / Format("sle-%d-%d.loc", stadiumId, lightingId);
+                path stadFlagsPath = originalFolder / (stadType == STAD_DEFAULT ? Format("sle-%d-%d.loc", stadiumId, lightingId) : Format("flags_%d.loc", lightingId));
                 if (exists(stadFlagsPath)) {
                     FifamReader reader(stadFlagsPath, 14, false, false);
                     if (reader.Available()) {
@@ -524,7 +535,7 @@ public:
                 }
 
                 // effects
-                path stadLightsPath = originalFolder / Format("tag-%d-%d.loc", stadiumId, lightingId);
+                path stadLightsPath = originalFolder / (stadType == STAD_DEFAULT ? Format("tag-%d-%d.loc", stadiumId, lightingId) : Format("lights_%d.loc", lightingId));
                 if (exists(stadLightsPath)) {
                     FifamReader reader(stadLightsPath, 14, false, false);
                     if (reader.Available()) {
@@ -586,7 +597,7 @@ public:
                 }
 
                 // collision
-                path stadCollPath = originalFolder / Format("coll-%d-%d.bin", stadiumId, lightingId);
+                path stadCollPath = originalFolder / (stadType == STAD_DEFAULT ? Format("coll-%d-%d.bin", stadiumId, lightingId) : Format("collision_%d.bin", lightingId));
                 if (exists(stadCollPath)) {
                     FILE *collFile = nullptr;
                     _wfopen_s(&collFile, stadCollPath.c_str(), L"rb");
@@ -953,6 +964,7 @@ public:
                             GeometryInfo *geometryInfo = GetAt<GeometryInfo *>(globalParameters, 4);
                             unsigned int rmCodeOffset = At<unsigned char>(renderMethod, 8) - data;
                             void *vertexBuffer = nullptr;
+                            string texNameOriginal;
                             unsigned int vertexSize = 0;
                             unsigned int numVertices = 0;
                             void *indexBuffer = nullptr;
@@ -1078,7 +1090,7 @@ public:
                                                         if (s.name.length() > 14 && s.name.starts_with("__EAGL::TAR:::")) {
                                                             tarAttributes = s.name.substr(14);
                                                             if (!tarAttributes.starts_with("RUNTIME_ALLOC")) {
-                                                                tex.name = "global_" + tarAttributes;
+                                                                tex.name = "g_" + tarAttributes;
                                                                 isGlobal = true;
                                                             }
                                                             else {
@@ -1096,6 +1108,13 @@ public:
                                                 }
                                                 Texture *pTex = nullptr;
                                                 if (!tex.name.empty()) {
+                                                    if (options().updateOldStadium) {
+                                                        texNameOriginal = tex.name;
+                                                        if (tex.name == "adbb" || tex.name == "adbc")
+                                                            tex.name = "adba";
+                                                        else if (tex.name == "_bna" || tex.name == "_bnb" || tex.name == "_bnc")
+                                                            tex.name = "hbna";
+                                                    }
                                                     auto texKey = ToLower(tex.name);
                                                     if (samplerIndex == 1 && (texKey == "spec")) {
                                                         mat.roughnessFactor = 0.3f;
@@ -1342,8 +1361,92 @@ public:
                                         unsigned char *clr = (unsigned char *)(unsigned int(vertexBuffer) + a.offset);
                                         for (unsigned int vert = 0; vert < numVertices; vert++) {
                                             swap(clr[0], clr[2]);
+                                            if (options().srgb) {
+                                                for (unsigned int ci = 0; ci < 3; ci++)
+                                                    clr[ci] = UChar(SrgbTransform::srgbToLinear(Double(clr[ci]) / 255.0) * 255.0);
+                                            }
                                             clr = (unsigned char *)(unsigned int(clr) + a.stride);
                                         }
+                                    }
+                                    else if (options().updateOldStadium && d.usage == Shader::Texcoord0) {
+                                        if (texNameOriginal == "_bna" || texNameOriginal == "_bnb" || texNameOriginal == "_bnc") {
+                                            float *uv = (float *)(unsigned int(vertexBuffer) + a.offset);
+                                            for (unsigned int vert = 0; vert < numVertices; vert++) {
+                                                uv[0] *= 0.25f;
+                                                uv[1] *= 0.25f;
+                                                if (texNameOriginal == "_bnb")
+                                                    uv[0] += 0.25f;
+                                                else if (texNameOriginal == "_bnc")
+                                                    uv[0] += 0.5f;
+                                                uv = (float *)(unsigned int(uv) + a.stride);
+                                            }
+                                        }
+                                        else if (texNameOriginal == "adba" || texNameOriginal == "adbb" || texNameOriginal == "adbc") {
+                                            Vector<Pair<Float, Bool>> uvVertMap(numVertices);
+                                            if (geoPrimMode == 4 || geoPrimMode == 5) {
+                                                if (numIndices > 2) {
+                                                    unsigned short *ib = (unsigned short *)indexBuffer;
+                                                    unsigned short vertId[3] = {};
+                                                    unsigned int uvi = 0;
+                                                    if (geoPrimMode == 5) {
+                                                        uvi = 2;
+                                                        vertId[0] = ib[0];
+                                                        vertId[1] = ib[1];
+                                                    }
+                                                    while (uvi < numIndices) {
+                                                        if (geoPrimMode == 4) {
+                                                            vertId[0] = ib[uvi++];
+                                                            vertId[1] = ib[uvi++];
+                                                            vertId[2] = ib[uvi++];
+                                                        }
+                                                        else
+                                                            vertId[2] = ib[uvi++];
+                                                        if (vertId[0] != vertId[1] && vertId[0] != vertId[2] && vertId[1] != vertId[2]) {
+                                                            float *uvData[3] = {};
+                                                            float maxV = -99999.0f;
+                                                            for (unsigned int uvx = 0; uvx < 3; uvx++) {
+                                                                uvData[uvx] = (float *)(unsigned int(vertexBuffer) + a.offset + a.stride * vertId[uvx]);
+                                                                if (uvData[uvx][1] > maxV)
+                                                                    maxV = uvData[uvx][1];
+                                                            }
+                                                            float offset = 0.0f;
+                                                            if (maxV < -1.0f || maxV > 1.0f) {
+                                                                maxV = modf(maxV, &offset);
+                                                                if (offset != 0.0f)
+                                                                    offset *= -1.0f;
+                                                            }
+                                                            if (maxV < 0.0f)
+                                                                maxV += 1.0f;
+                                                            float modV = 0.0f;
+                                                            if (maxV < 0.4f)
+                                                                modV = 0.0f;
+                                                            else if (maxV < 0.7f)
+                                                                modV = -0.3333333333333333f;
+                                                            else
+                                                                modV = -0.6666666666666667f;
+                                                            for (unsigned int uvx = 0; uvx < 3; uvx++) {
+                                                                if (!uvVertMap[vertId[uvx]].second) {
+                                                                    uvVertMap[vertId[uvx]].first = modV + offset;
+                                                                    uvVertMap[vertId[uvx]].second = true;
+                                                                }
+                                                            }
+                                                        }
+                                                        if (geoPrimMode == 5) {
+                                                            vertId[0] = vertId[1];
+                                                            vertId[1] = vertId[2];
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            float *uv = (float *)(unsigned int(vertexBuffer) + a.offset);
+                                            for (unsigned int vert = 0; vert < numVertices; vert++) {
+                                                if (uvVertMap[vert].second && uvVertMap[vert].first != 0.0f)
+                                                    uv[1] += uvVertMap[vert].first;
+                                                uv[1] *= 0.1875f;
+                                                uv = (float *)(unsigned int(uv) + a.stride);
+                                            }
+                                        }
+
                                     }
                                     accessors.push_back(a);
                                 }
@@ -1731,7 +1834,7 @@ public:
                         matOptionsStr += ",tex2:" + materials[i].textures[2]->name;
                     if (materials[i].textures[3])
                         matOptionsStr += ",tex3:" + materials[i].textures[3]->name;
-                    j.writeFieldString("name", string("material") + Format("%02d", i) + " [" + matOptionsStr + "]");
+                    j.writeFieldString("name", string("mat") + Format("%d", i + 1) + " [" + matOptionsStr + "]");
                     if (materials[i].doubleSided)
                         j.writeFieldBool("doubleSided", true);
                     if (!materials[i].alphaMode.empty())

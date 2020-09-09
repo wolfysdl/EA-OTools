@@ -17,6 +17,9 @@ using namespace std::filesystem;
 
 struct GlobalOptions {
     bool processingFolders = false;
+    bool stadium = false;
+    bool srgb = false;
+    bool fshForceAlphaCheck = false;
     // import options
     unsigned int hwnd = 0;
     bool conformant = false;
@@ -32,6 +35,10 @@ struct GlobalOptions {
     aiColor4D setVCol = { 0.0f, 0.0f, 0.0f, 1.0f };
     bool hasSetVCol = false;
     float vColScale = 0.0f;
+    aiColor4D maxVCol = { 0.0f, 0.0f, 0.0f, 1.0f };
+    bool hasMaxVCol = false;
+    aiColor4D minVCol = { 0.0f, 0.0f, 0.0f, 1.0f };
+    bool hasMinVCol = false;
     bool genTexNames = false;
     bool writeFsh = false;
     string fshOutput;
@@ -42,10 +49,11 @@ struct GlobalOptions {
     vector<string> fshAddTextures;
     bool fshDisableTextureIgnore = false;
     set<string> fshIgnoreTextures;
+    bool fshUniqueHashForEachTexture = false;
     bool preTransformVertices = false;
     bool sortByName = false;
     bool sortByAlpha = false;
-    bool ignoreMatColor = false;
+    bool useMatColor = false;
     bool head = false;
     bool hd = false;
     unsigned int pad = 0;
@@ -66,6 +74,7 @@ struct GlobalOptions {
     bool dummyTextures = false;
     bool jpegTextures = false;
     bool noMeshJoin = false;
+    bool updateOldStadium = false;
     // dump options
     bool onlyFirstTechnique = false;
     // fsh unpack options

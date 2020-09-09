@@ -75,6 +75,7 @@
     <ClInclude Include="NvTriStrip\NvTriStripObjects.h" />
     <ClInclude Include="NvTriStrip\VertexCache.h" />
     <ClInclude Include="shaders.h" />
+    <ClInclude Include="srgb\SrgbTransform.hpp" />
     <ClInclude Include="target.h" />
     <ClInclude Include="utils.h" />
   </ItemGroup>
@@ -101,6 +102,7 @@
     <ClCompile Include="NvTriStrip\NvTriStripObjects.cpp" />
     <ClCompile Include="NvTriStrip\VertexCache.cpp" />
     <ClCompile Include="shaders.cpp" />
+    <ClCompile Include="srgb\SrgbTransform.cpp" />
     <ClCompile Include="target.cpp" />
     <ClCompile Include="target_cl0405.cpp" />
     <ClCompile Include="target_cricket07.cpp" />

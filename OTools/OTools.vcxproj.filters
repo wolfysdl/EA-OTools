@@ -35,6 +35,9 @@
     </ClInclude>
     <ClInclude Include="jsonwriter.h" />
     <ClInclude Include="message.h" />
+    <ClInclude Include="srgb\SrgbTransform.hpp">
+      <Filter>srgb</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dump.cpp" />
@@ -88,6 +91,9 @@
     <ClCompile Include="message.cpp" />
     <ClCompile Include="fshop.cpp" />
     <ClCompile Include="target_nhl04.cpp" />
+    <ClCompile Include="srgb\SrgbTransform.cpp">
+      <Filter>srgb</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="NvTriStrip">
@@ -98,6 +104,9 @@
     </Filter>
     <Filter Include="D3DDevice">
       <UniqueIdentifier>{88226ef0-ebc6-4c4b-a968-a4ab04b3e0f6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="srgb">
+      <UniqueIdentifier>{4c52a252-3c90-4fd8-80d3-5e5c2aa29c57}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
 </Project>
