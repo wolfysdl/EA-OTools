@@ -14,7 +14,6 @@
 #include "NvTriStrip/NvTriStrip.h"
 #include "Fsh\Fsh.h"
 #include "FifamReadWrite.h"
-#include "igl/ambient_occlusion.h"
 #include "srgb/SrgbTransform.hpp"
 
 struct Vector4D {
@@ -819,7 +818,7 @@ void oimport(path const &out, path const &in) {
     Assimp::Importer importer;
     importer.SetPropertyInteger(AI_CONFIG_PP_SBP_REMOVE, aiPrimitiveType_POINT | aiPrimitiveType_LINE);
     //importer.SetPropertyInteger(AI_CONFIG_IMPORT_REMOVE_EMPTY_BONES, 0);
-    importer.SetPropertyInteger(AI_CONFIG_PP_SLM_TRIANGLE_LIMIT, 32'767);
+    importer.SetPropertyInteger(AI_CONFIG_PP_SLM_VERTEX_LIMIT, 32'767);
     unsigned int sceneLoadingFlags = aiProcess_Triangulate | aiProcess_GenSmoothNormals | aiProcess_GenUVCoords | aiProcess_SplitLargeMeshes |
         aiProcess_SortByPType | aiProcess_PopulateArmatureData;
     if (options().scale > 0.0f && options().scale != 1.0f) {
@@ -1048,15 +1047,6 @@ void oimport(path const &out, path const &in) {
             }
         }
     }
-
-    Eigen::MatrixXd AO_CAST_positions;
-    Eigen::MatrixXd AO_positions;
-    Eigen::MatrixXd AO_normals;
-    Eigen::MatrixXi AO_faces;
-    Eigen::VectorXd AO_result_colors;
-
-    // generate AO_CAST_positions
-
 
     for (auto &n : nodes) {
         for (unsigned int m = 0; m < n.node->mNumMeshes; m++) {
@@ -1537,13 +1527,49 @@ void oimport(path const &out, path const &in) {
                                 if (options().hasSetVCol)
                                     vertexColor = options().setVCol;
                                 else {
-                                    if (numColors > 0 && mesh->HasVertexColors(0) && mesh->mColors[0]) {
-                                        vertexColor = mesh->mColors[0][v];
-                                        swap(vertexColor.r, vertexColor.b);
-                                        if (options().srgb) {
+                                    auto GetMeshVCol = [](aiMesh *colMesh, unsigned int index, unsigned int vertexId, bool swapRB, bool srgb) {
+                                        aiColor4D out = colMesh->mColors[index][vertexId];
+                                        if (swapRB)
+                                            swap(out.r, out.b);
+                                        if (srgb) {
                                             for (unsigned int ci = 0; ci < 3; ci++)
-                                                vertexColor[ci] = SrgbTransform::linearToSrgb(vertexColor[ci]);
+                                                out[ci] = SrgbTransform::linearToSrgb(out[ci]);
                                         }
+                                        return out;
+                                    };
+                                    bool colorPostProcess = true;
+                                    if (options().mergeVCols) {
+                                        bool hasVColMergeConfig = !options().vColMergeConfig.empty();
+                                        vertexColor = { 1.0f, 1.0f, 1.0f, 1.0f };
+                                        unsigned int startColIndex = hasVColMergeConfig ? 0 : 1;
+                                        unsigned int endColIndex = hasVColMergeConfig ? options().vColMergeConfig.size() : AI_MAX_NUMBER_OF_COLOR_SETS;
+                                        for (unsigned int colIndex = 0; colIndex < AI_MAX_NUMBER_OF_COLOR_SETS; colIndex++) {
+                                            if (numColors > colIndex &&mesh->HasVertexColors(colIndex) && mesh->mColors[colIndex]) {
+                                                bool colIndexUsed = hasVColMergeConfig ? options().vColMergeConfig.contains(colIndex) : true;
+                                                if (colIndexUsed) {
+                                                    auto vColLayer = GetMeshVCol(mesh, colIndex, v, true, options().srgb);
+                                                    if (hasVColMergeConfig) {
+                                                        auto const &config = options().vColMergeConfig[colIndex];
+                                                        vColLayer = config.bottomRange + vColLayer * (config.topRange - config.bottomRange);
+                                                    }
+                                                    for (unsigned int clrComp = 0; clrComp < 4; clrComp++)
+                                                        vertexColor[clrComp] *= vColLayer[clrComp];
+                                                }
+                                            }
+                                        }
+                                    }
+                                    else {
+                                        if (numColors > 0 && mesh->HasVertexColors(0) && mesh->mColors[0])
+                                            vertexColor = GetMeshVCol(mesh, 0, v, true, options().srgb);
+                                        else {
+                                            if (options().hasDefaultVCol)
+                                                vertexColor = options().defaultVCol;
+                                            else
+                                                vertexColor = DEFAULT_COLOR;
+                                            colorPostProcess = false;
+                                        }
+                                    }
+                                    if (colorPostProcess) {                                        
                                         if (options().vColScale != 0.0f) {
                                             vertexColor.r *= options().vColScale;
                                             vertexColor.g *= options().vColScale;
@@ -1566,12 +1592,6 @@ void oimport(path const &out, path const &in) {
                                                 vertexColor.b = options().maxVCol.b;
                                         }
                                     }
-                                    else {
-                                        if (options().hasDefaultVCol)
-                                            vertexColor = options().defaultVCol;
-                                        else
-                                            vertexColor = DEFAULT_COLOR;
-                                    }
                                 }
                                 if (options().useMatColor) {
                                     if (hasMatColor) {
@@ -1584,7 +1604,7 @@ void oimport(path const &out, path const &in) {
                                 }
                                 unsigned char rgba[4];
                                 for (unsigned int clr = 0; clr < 4; clr++)
-                                    rgba[clr] = unsigned char(vertexColor[clr] * 255);
+                                    rgba[clr] = unsigned char(clamp(vertexColor[clr], 0.0f, 1.0f) * 255);
                                 Memory_Copy(&vertexBuffer.data()[vertexOffset], rgba, 4);
                             }
                             break;
@@ -2562,6 +2582,11 @@ void oimport(path const &out, path const &in) {
                 // writing head texture
                 string headTexName;
                 map<string, TextureToAdd> fshTextures1;
+
+                unsigned int fshFormat32Bit = options().hasFshFormat ? options().fshFormat : D3DFMT_DXT1;
+                unsigned int fshFormat32BitAlpha = options().hasFshFormat ? options().fshFormat : D3DFMT_DXT5;
+                unsigned int fshFormat16Bit = options().hasFshFormat ? options().fshFormat : D3DFMT_R5G6B5;
+                unsigned int fshFormat16BitAlpha = options().hasFshFormat ? options().fshFormat : D3DFMT_A4R4G4B4;
                 
                 if (targetName == "FIFA03")
                     headTexName = "PlayerTexObj.texobj11__texture12__" + playerIdStr + "_0_0.fsh";
@@ -2574,24 +2599,24 @@ void oimport(path const &out, path const &in) {
 
                 if (targetName == "CL0405") {
                     if (options().hd) {
-                        fshTextures1["glos"] = { "glos", "glos@" + playerIdStr, D3DFMT_DXT1, 99 };
-                        fshTextures1["face"] = { "face", "face@" + playerIdStr, D3DFMT_DXT1, 99 };
+                        fshTextures1["glos"] = { "glos", "glos@" + playerIdStr, fshFormat32Bit, 99 };
+                        fshTextures1["face"] = { "face", "face@" + playerIdStr, fshFormat32Bit, 99 };
                     }
                     else {
-                        fshTextures1["glos"] = { "glos", "glos@" + playerIdStr, D3DFMT_R5G6B5, 1 };
-                        fshTextures1["face"] = { "face", "face@" + playerIdStr, D3DFMT_DXT1, 1 };
+                        fshTextures1["glos"] = { "glos", "glos@" + playerIdStr, fshFormat16Bit, 1 };
+                        fshTextures1["face"] = { "face", "face@" + playerIdStr, fshFormat32Bit, 1 };
                     }
                 }
                 else {
                     if (options().hd)
-                        fshTextures1["tp01"] = { "tp01", "tp01@" + playerIdStr, D3DFMT_DXT1, 99 };
+                        fshTextures1["tp01"] = { "tp01", "tp01@" + playerIdStr, fshFormat32Bit, 99 };
                     else {
                         if (targetName == "FIFA03")
-                            fshTextures1["tp01"] = { "tp01", "tp01@" + playerIdStr, D3DFMT_DXT1, 7 };
+                            fshTextures1["tp01"] = { "tp01", "tp01@" + playerIdStr, fshFormat32Bit, 7 };
                         else if (targetName == "FIFA10")
-                            fshTextures1["tp01"] = { "tp01", "tp01@" + playerIdStr, D3DFMT_DXT1, 8 };
+                            fshTextures1["tp01"] = { "tp01", "tp01@" + playerIdStr, fshFormat32Bit, 8 };
                         else
-                            fshTextures1["tp01"] = { "tp01", "tp01@" + playerIdStr, D3DFMT_DXT1, 1 };
+                            fshTextures1["tp01"] = { "tp01", "tp01@" + playerIdStr, fshFormat32Bit, 1 };
                     }
                 }
                 WriteFsh(out.parent_path() / headTexName, in.parent_path(), fshTextures1);
@@ -2608,12 +2633,12 @@ void oimport(path const &out, path const &in) {
                     
                     map<string, TextureToAdd> fshTextures2;
                     if (options().hd)
-                        fshTextures2["tp02"] = { "tp02", "tp02@" + playerIdStr, D3DFMT_DXT5, 99 };
+                        fshTextures2["tp02"] = { "tp02", "tp02@" + playerIdStr, fshFormat32BitAlpha, 99 };
                     else {
                         int hairTexLevels = 99;
-                        unsigned int hairTexFormat = D3DFMT_A4R4G4B4;
+                        unsigned int hairTexFormat = fshFormat16BitAlpha;
                         if (targetName == "FIFA08" || targetName == "EURO08")
-                            hairTexFormat = D3DFMT_DXT1;
+                            hairTexFormat = fshFormat32Bit;
                         fshTextures2["tp02"] = { "tp02", "tp02@" + playerIdStr, hairTexFormat, 7 };
                     }
                     WriteFsh(out.parent_path() / hairTexName, in.parent_path(), fshTextures2);
@@ -2621,74 +2646,91 @@ void oimport(path const &out, path const &in) {
             }
         }
         else {
-            path fshPath;
-            if (!options().fshOutput.empty()) {
-                if (options().processingFolders)
-                    fshPath = path(options().fshOutput) / (out.stem().string() + ".fsh");
-                else
-                    fshPath = options().fshOutput;
-            }
-            else {
-                fshPath = out;
-                fshPath.replace_extension(".fsh");
-            }
-            map<string, TextureToAdd> fshTextures;
-            if (!options().fshTextures.empty()) {
-                for (auto const &a : options().fshTextures) {
+            if (!options().stadium || stadExtra.used) {
+                path fshPath;
+                bool hasFshName = false;
+                if (stadExtra.used) {
+                    if (stadExtra.stadType == StadiumExtra::STAD_CUSTOM) {
+                        fshPath = out;
+                        fshPath.replace_filename("texture_" + to_string(stadExtra.lightingId) + ".fsh");
+                        hasFshName = true;
+                    }
+                    else if (stadExtra.stadType == StadiumExtra::STAD_DEFAULT) {
+                        fshPath = out;
+                        fshPath.replace_filename("t226__" + to_string(stadExtra.stadiumId) + "_" + to_string(stadExtra.lightingId) + ".fsh");
+                        hasFshName = true;
+                    }
+                }
+                if (!hasFshName) {
+                    if (!options().fshOutput.empty()) {
+                        if (options().processingFolders)
+                            fshPath = path(options().fshOutput) / (out.stem().string() + ".fsh");
+                        else
+                            fshPath = options().fshOutput;
+                    }
+                    else {
+                        fshPath = out;
+                        fshPath.replace_extension(".fsh");
+                    }
+                }
+                map<string, TextureToAdd> fshTextures;
+                if (!options().fshTextures.empty()) {
+                    for (auto const &a : options().fshTextures) {
+                        path ap = a;
+                        string texFilenameLowered = ToLower(ap.stem().string());
+                        string afilename = ap.stem().string();
+                        if (!afilename.empty()) {
+                            if (afilename.length() > 4)
+                                afilename = afilename.substr(0, 4);
+                            string akey = ToLower(afilename);
+                            if (!fshTextures.contains(akey)) {
+                                bool texFound = false;
+                                for (auto const &[k, img] : textures) {
+                                    auto imgLoweredName = ToLower(img.name);
+                                    auto imgLoweredFilename = ToLower(path(img.filepath).stem().string());
+                                    if (imgLoweredFilename == texFilenameLowered) {
+                                        fshTextures[imgLoweredName] = { img.name, img.filepath, options().fshFormat, options().fshLevels, img.embedded };
+                                        texFound = true;
+                                        break;
+                                    }
+                                }
+                                if (!texFound)
+                                    fshTextures[akey] = { afilename, a, options().fshFormat, options().fshLevels };
+                            }
+                        }
+                    }
+                }
+                else {
+                    static set<string> defaultTexturesToIgnore = { "eyeb", "rwa0", "rwa1", "rwa2", "rwa3", "rwh0", "rwh1", "rwh2", "rwh3", "rwn0", "rwn1", "rwn2", "rwn3", "abna", "abnb", "abnc", "afla", "aflb", "aflc", "hbna", "hbnb", "hbnc", "hfla", "hflb", "hflc", "adba", "adbb", "adbc", "chf0", "chf1", "chf2", "chf3","caf0", "caf1", "caf2", "caf3", "hcrs", "acrs", "hcla", "hclb", "acla", "aclb" };
+                    for (auto const &[k, img] : textures) {
+                        auto imgLoweredName = ToLower(img.name);
+                        auto imgLoweredFilename = ToLower(path(img.filepath).stem().string());
+                        bool ignoreThisTexture = false;
+                        if (!options().fshDisableTextureIgnore) {
+                            if (defaultTexturesToIgnore.contains(imgLoweredName) || options().fshIgnoreTextures.contains(imgLoweredName)
+                                || defaultTexturesToIgnore.contains(imgLoweredFilename) || options().fshIgnoreTextures.contains(imgLoweredFilename))
+                            {
+                                ignoreThisTexture = true;
+                            }
+                        }
+                        if (!ignoreThisTexture) {
+                            fshTextures[imgLoweredName] = { img.name, img.filepath, options().fshFormat, options().fshLevels, img.embedded };
+                        }
+                    }
+                }
+                for (auto const &a : options().fshAddTextures) {
                     path ap = a;
-                    string texFilenameLowered = ToLower(ap.stem().string());
                     string afilename = ap.stem().string();
                     if (!afilename.empty()) {
                         if (afilename.length() > 4)
                             afilename = afilename.substr(0, 4);
                         string akey = ToLower(afilename);
-                        if (!fshTextures.contains(akey)) {
-                            bool texFound = false;
-                            for (auto const &[k, img] : textures) {
-                                auto imgLoweredName = ToLower(img.name);
-                                auto imgLoweredFilename = ToLower(path(img.filepath).stem().string());
-                                if (imgLoweredFilename == texFilenameLowered) {
-                                    fshTextures[imgLoweredName] = { img.name, img.filepath, options().fshFormat, options().fshLevels, img.embedded };
-                                    texFound = true;
-                                    break;
-                                }
-                            }
-                            if (!texFound)
-                                fshTextures[akey] = { afilename, a, options().fshFormat, options().fshLevels };
-                        }
+                        if (!fshTextures.contains(akey))
+                            fshTextures[akey] = { afilename, a, options().fshFormat, options().fshLevels };
                     }
                 }
+                WriteFsh(fshPath, in.parent_path(), fshTextures);
             }
-            else {
-                static set<string> defaultTexturesToIgnore = { "eyeb", "rwa0", "rwa1", "rwa2", "rwa3", "rwh0", "rwh1", "rwh2", "rwh3", "rwn0", "rwn1", "rwn2", "rwn3", "abna", "abnb", "abnc", "afla", "aflb", "aflc", "hbna", "hbnb", "hbnc", "hfla", "hflb", "hflc", "adba", "adbb", "adbc", "chf0", "chf1", "chf2", "chf3","caf0", "caf1", "caf2", "caf3" };
-                for (auto const &[k, img] : textures) {
-                    auto imgLoweredName = ToLower(img.name);
-                    auto imgLoweredFilename = ToLower(path(img.filepath).stem().string());
-                    bool ignoreThisTexture = false;
-                    if (!options().fshDisableTextureIgnore) {
-                        if (defaultTexturesToIgnore.contains(imgLoweredName) || options().fshIgnoreTextures.contains(imgLoweredName)
-                            || defaultTexturesToIgnore.contains(imgLoweredFilename) || options().fshIgnoreTextures.contains(imgLoweredFilename))
-                        {
-                            ignoreThisTexture = true;
-                        }
-                    }
-                    if (!ignoreThisTexture) {
-                        fshTextures[imgLoweredName] = { img.name, img.filepath, options().fshFormat, options().fshLevels, img.embedded };
-                    }
-                }
-            }
-            for (auto const &a : options().fshAddTextures) {
-                path ap = a;
-                string afilename = ap.stem().string();
-                if (!afilename.empty()) {
-                    if (afilename.length() > 4)
-                        afilename = afilename.substr(0, 4);
-                    string akey = ToLower(afilename);
-                    if (!fshTextures.contains(akey))
-                        fshTextures[akey] = { afilename, a, options().fshFormat, options().fshLevels };
-                }
-            }
-            WriteFsh(fshPath, in.parent_path(), fshTextures);
         }
     }
 
@@ -2768,7 +2810,13 @@ void oimport(path const &out, path const &in) {
                     effNode->mTransformation.Decompose(scaling, rotation, position);
                     p.pos = position;
                     p.dir = aiVector3D(m.a2, m.b2, m.c2);
-                    p.type = effOptions.contains("dir") ? 2 : 1;
+                    p.type = 1;
+                    if (effOptions.contains("dir")) {
+                        if (effOptions["dir"] == "null")
+                            p.type = 3;
+                        else
+                            p.type = 2;
+                    }
                     if (effects.empty() || effects.back().first != effType)
                         effects.emplace_back();
                     effects.back().first = effType;
@@ -2778,7 +2826,7 @@ void oimport(path const &out, path const &in) {
                 for (auto const &[name, ev] : effects) {
                     bool hasDir = false;
                     for (auto const &e : ev) {
-                        if (e.type == 2) {
+                        if (e.type == 2 || e.type == 3) {
                             hasDir = true;
                             break;
                         }
@@ -2788,8 +2836,12 @@ void oimport(path const &out, path const &in) {
                         effHeader += " Direction";
                     writer.WriteLine(effHeader);
                     for (auto const &e : ev) {
-                        if (hasDir)
-                            writer.WriteLine(Format(L"%f %f %f %f %f %f", e.pos.x / 1.12f, e.pos.y / 1.12f, e.pos.z / 1.12f, e.dir.x, e.dir.y, e.dir.z));
+                        if (hasDir) {
+                            if (e.type == 2)
+                                writer.WriteLine(Format(L"%f %f %f %f %f %f", e.pos.x / 1.12f, e.pos.y / 1.12f, e.pos.z / 1.12f, e.dir.x, e.dir.y, e.dir.z));
+                            else
+                                writer.WriteLine(Format(L"%f %f %f 0 0 0", e.pos.x / 1.12f, e.pos.y / 1.12f, e.pos.z / 1.12f));
+                        }
                         else
                             writer.WriteLine(Format(L"%f %f %f", e.pos.x / 1.12f, e.pos.y / 1.12f, e.pos.z / 1.12f));
                     }

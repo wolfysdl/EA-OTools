@@ -3,9 +3,12 @@
 #include "commandline.h"
 #include "message.h"
 #include "Fsh/Fsh.h"
+#include <fstream>
+#include <sstream>
+#include <iostream>
 
-const char *OTOOLS_VERSION = "0.163";
-const unsigned int OTOOLS_VERSION_INT = 163;
+const char *OTOOLS_VERSION = "0.166";
+const unsigned int OTOOLS_VERSION_INT = 166;
 
 GlobalOptions &options() {
     static GlobalOptions go;
@@ -25,11 +28,11 @@ int main(int argc, char *argv[]) {
     CommandLine cmd(argc, argv, { "i", "o", "game", "scale", "defaultVCol", "setVCol", "vColScale", "fshOutput", "fshLevels", "fshFormat", "fshTextures",
         "fshAddTextures", "fshIgnoreTextures", "startsWith", "pad", "padFsh", "instances", "computationIndex", "hwnd", "fshUnpackImageFormat",
         "forceShader", "fshHash", "fshId", "boneRemap", "skeletonData", "skeleton", "bonesFile", "maxBonesPerVertex", "vertexWeightPaletteSize",
-        "translate", "minVCol", "maxVCol" },
+        "translate", "minVCol", "maxVCol", "vColMergeConfig" },
         { "tristrip", "noTextures", "recursive", "createSubDir", "silent", "console", "onlyFirstTechnique", "dummyTextures", "jpegTextures", "embeddedTextures", 
         "swapYZ", "forceLighting", "noMetadata", "genTexNames", "writeFsh", "fshRescale", "fshDisableTextureIgnore", "preTransformVertices", "sortByName", 
         "sortByAlpha", "useMatColor", "noMeshJoin", "head", "hd", "ignoreEmbeddedTextures", "ord", "keepTex0InMatOptions", "fshWriteToParentDir",
-        "conformant", "fshUniqueHashForEachTexture", "updateOldStadium", "stadium", "srgb", "fshForceAlphaCheck" });
+        "conformant", "fshUniqueHashForEachTexture", "updateOldStadium", "stadium", "srgb", "fshForceAlphaCheck", "mergeVCols" });
     if (cmd.HasOption("silent"))
         SetMessageDisplayType(MessageDisplayType::MSG_NONE);
     else {
@@ -263,6 +266,26 @@ int main(int argc, char *argv[]) {
             if (cmd.HasArgument("vColScale"))
                 options().vColScale = cmd.GetArgumentFloat("vColScale");
         }
+        if (cmd.HasOption("mergeVCols")) {
+            options().mergeVCols = true;
+            if (cmd.HasArgument("vColMergeConfig")) {
+                path vColMergeConfig = cmd.GetArgumentString("vColMergeConfig");
+                if (exists(vColMergeConfig) && is_regular_file(vColMergeConfig)) {
+                    ifstream f(vColMergeConfig);
+                    for (string line; getline(f, line); ) {
+                        auto info = Split(line, ',');
+                        if (info.size() >= 3) {
+                            unsigned int index = SafeConvertInt<unsigned int>(info[0]);
+                            VColMergeLayerConfig config;
+                            config.bottomRange = SafeConvertFloat(info[1]);
+                            config.topRange = SafeConvertFloat(info[2]);
+                            //Error("Index: %d %f %f", index, config.bottomRange, config.topRange);
+                            options().vColMergeConfig[index] = config;
+                        }
+                    }
+                }
+            }
+        }
         if (cmd.HasOption("genTexNames"))
             options().genTexNames = true;
         if (cmd.HasOption("preTransformVertices"))
@@ -359,6 +382,7 @@ int main(int argc, char *argv[]) {
         }
         options().fshFormat = unsigned int(-4);
         if (cmd.HasArgument("fshFormat")) {
+            options().hasFshFormat = true;
             string format = ToLower(cmd.GetArgumentString("fshFormat"));
             if (!format.empty()) {
                 if (format == "dxt")
@@ -418,8 +442,19 @@ int main(int argc, char *argv[]) {
             options().fshForceAlphaCheck = true;
     }
     if (opType == EXPORT || opType == IMPORT) {
-        if (cmd.HasOption("stadium"))
+        if (cmd.HasOption("stadium")) {
             options().stadium = true;
+            bool hasSkcd = false;
+            for (auto const &t : options().fshAddTextures) {
+                if (ToLower(t) == "skcd") {
+                    hasSkcd = true;
+                    break;
+                }
+            }
+            if (!hasSkcd)
+                options().fshAddTextures.push_back("skcd");
+            options().fshForceAlphaCheck = true;
+        }
         if (cmd.HasOption("srgb"))
             options().srgb = true;
     }

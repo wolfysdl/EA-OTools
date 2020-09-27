@@ -565,8 +565,15 @@ public:
                                                 if (hasDirection) {
                                                     if (swscanf(l.c_str(), L"%f %f %f %f %f %f", &p.pos.x, &p.pos.y, &p.pos.z, &p.dir.x, &p.dir.y, &p.dir.z) != 6)
                                                         break;
-                                                    p.type = 2;
-                                                    p.name = WtoA(effectType) + "_" + to_string(++effectTypes[effectType]) + " [dir]";
+                                                    p.name = WtoA(effectType) + "_" + to_string(++effectTypes[effectType]);
+                                                    if (p.dir.x == 0.0f && p.dir.y == 0.0f && p.dir.z == 0.0f) {
+                                                        p.name += " [dir:null]";
+                                                        p.type = 3;
+                                                    }
+                                                    else {
+                                                        p.name += " [dir]";
+                                                        p.type = 2;
+                                                    }
                                                     p.pos.x *= 1.12f;
                                                     p.pos.y *= 1.12f;
                                                     p.pos.z *= 1.12f;
@@ -840,6 +847,7 @@ public:
                     if (effects[i].type == 2) {
                         j.openArray("matrix");
                         aiMatrix4x4 m;
+
                         auto Cross = [](aiVector3D &a, aiVector3D &b) {
                             float ni = a.y * b.z - a.z * b.y;
                             float nj = a.z * b.x - a.x * b.z;

@@ -15,6 +15,11 @@
 using namespace std;
 using namespace std::filesystem;
 
+struct VColMergeLayerConfig {
+    float bottomRange = 0.0f;
+    float topRange = 1.0f;
+};
+
 struct GlobalOptions {
     bool processingFolders = false;
     bool stadium = false;
@@ -39,10 +44,13 @@ struct GlobalOptions {
     bool hasMaxVCol = false;
     aiColor4D minVCol = { 0.0f, 0.0f, 0.0f, 1.0f };
     bool hasMinVCol = false;
+    bool mergeVCols = false;
+    map<unsigned int, VColMergeLayerConfig> vColMergeConfig;
     bool genTexNames = false;
     bool writeFsh = false;
     string fshOutput;
     int fshLevels = 0;
+    bool hasFshFormat = false;
     unsigned int fshFormat = 0;
     bool fshRescale = false;
     vector<string> fshTextures;
