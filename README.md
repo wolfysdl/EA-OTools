@@ -26,7 +26,7 @@ The file may contain model data, skeleton information, animations, rendering inf
 
 ✅ FIFA series (FIFA 2003 ... FIFA 10)
 
-🟡 FIFA Manager series (only FIFA Manager 13)
+✅ FIFA Manager series (Total Club Manager 2004 ... FIFA Manager 14)
 
 🟡 Cricket series (only Cricker 07; game-specific features are not implemented)
 
