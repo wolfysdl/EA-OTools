@@ -9,6 +9,7 @@
 #include "utils.h"
 #include <assimp/color4.h>
 #include <assimp/vector3.h>
+#include <assimp/aabb.h>
 #include "target.h"
 #include "Fsh/Fsh.h"
 
@@ -18,6 +19,18 @@ using namespace std::filesystem;
 struct VColMergeLayerConfig {
     float bottomRange = 0.0f;
     float topRange = 1.0f;
+};
+
+struct BoneRemapTarget {
+    string boneName;
+    int boneIndex = -1;
+    float factor = 1.0f;
+    aiAABB bound;
+};
+
+struct BoneTargets {
+    bool hasBounds = false;
+    vector<BoneRemapTarget> targetBones;
 };
 
 struct GlobalOptions {
@@ -77,6 +90,9 @@ struct GlobalOptions {
     path bonesFile;
     unsigned int maxBonesPerVertex = 0; // default
     unsigned int vertexWeightPaletteSize = 0; // default
+    float bboxScale = 1.0f;
+    unsigned int layerFlags = 0;
+    unsigned int uid = 0;
     // export options
     bool noTextures = false;
     bool dummyTextures = false;
@@ -96,6 +112,7 @@ struct GlobalOptions {
     unsigned int fshId = 1;
     unsigned int fshHash = 0;
     bool useFshHash = false;
+    bool fshName = false;
 };
 
 GlobalOptions &options();
@@ -120,6 +137,8 @@ struct TextureToAdd {
 
 struct GlobalVars {
     Target *target = nullptr;
+    map<string, BoneTargets> boneRemap;
+    map<string, unsigned char> customBones;
     map<string, pair<unsigned char, string>> maxColorValue;
     map<string, map<vector<unsigned char>, vector<string>>> shaders;
     ea::FshImage::FileFormat fshUnpackImageFormat = ea::FshImage::PNG;

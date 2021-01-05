@@ -36,7 +36,12 @@ void unpackfsh(path const &out, path const &in) {
     ea::Fsh fsh;
     fsh.Read(in);
     fsh.ForAllImages([&](ea::FshImage &image) {
-        image.WriteToFile(out.parent_path() / (image.GetTag() + "." + options().fshUnpackImageFormat), globalVars().fshUnpackImageFormat);
+        string fshName;
+        if (options().fshName)
+            fshName = image.GetTag() + "@" + in.stem().string();
+        else
+            fshName = image.GetTag();
+        image.WriteToFile(out.parent_path() / (fshName + "." + options().fshUnpackImageFormat), globalVars().fshUnpackImageFormat);
     });
 }
 

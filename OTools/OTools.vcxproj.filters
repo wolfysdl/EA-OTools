@@ -94,6 +94,8 @@
     <ClCompile Include="srgb\SrgbTransform.cpp">
       <Filter>srgb</Filter>
     </ClCompile>
+    <ClCompile Include="target_tcm05.cpp" />
+    <ClCompile Include="target_fm06.cpp" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="NvTriStrip">

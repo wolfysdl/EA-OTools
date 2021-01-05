@@ -139,6 +139,46 @@ class TargetCL0607 : public Target {
     Shader *DecideShader(MaterialProperties const &properties);
 };
 
+class TargetTCM04 : public Target {
+    char const *Name();
+    int Version();
+    Shader *Shaders();
+    unsigned int NumShaders();
+    Shader *DecideShader(MaterialProperties const &properties);
+};
+
+class TargetTCM05 : public Target {
+    char const *Name();
+    int Version();
+    Shader *Shaders();
+    unsigned int NumShaders();
+    Shader *DecideShader(MaterialProperties const &properties);
+};
+
+class TargetFM06 : public Target {
+    char const *Name();
+    int Version();
+    Shader *Shaders();
+    unsigned int NumShaders();
+    Shader *DecideShader(MaterialProperties const &properties);
+};
+
+class TargetFM07 : public Target {
+    char const *Name();
+    int Version();
+    Shader *Shaders();
+    unsigned int NumShaders();
+    Shader *DecideShader(MaterialProperties const &properties);
+};
+
+class TargetFM08 : public Target {
+    char const *Name();
+    int Version();
+    Shader *Shaders();
+    unsigned int NumShaders();
+    Shader *DecideShader(MaterialProperties const &properties);
+};
+
 class TargetFM13 : public Target {
     char const *Name();
     int Version();

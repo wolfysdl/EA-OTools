@@ -7,8 +7,8 @@
 #include <sstream>
 #include <iostream>
 
-const char *OTOOLS_VERSION = "0.166";
-const unsigned int OTOOLS_VERSION_INT = 166;
+const char *OTOOLS_VERSION = "0.168";
+const unsigned int OTOOLS_VERSION_INT = 168;
 
 GlobalOptions &options() {
     static GlobalOptions go;
@@ -28,11 +28,11 @@ int main(int argc, char *argv[]) {
     CommandLine cmd(argc, argv, { "i", "o", "game", "scale", "defaultVCol", "setVCol", "vColScale", "fshOutput", "fshLevels", "fshFormat", "fshTextures",
         "fshAddTextures", "fshIgnoreTextures", "startsWith", "pad", "padFsh", "instances", "computationIndex", "hwnd", "fshUnpackImageFormat",
         "forceShader", "fshHash", "fshId", "boneRemap", "skeletonData", "skeleton", "bonesFile", "maxBonesPerVertex", "vertexWeightPaletteSize",
-        "translate", "minVCol", "maxVCol", "vColMergeConfig" },
+        "translate", "minVCol", "maxVCol", "vColMergeConfig", "bboxScale", "layerFlags", "uid" },
         { "tristrip", "noTextures", "recursive", "createSubDir", "silent", "console", "onlyFirstTechnique", "dummyTextures", "jpegTextures", "embeddedTextures", 
         "swapYZ", "forceLighting", "noMetadata", "genTexNames", "writeFsh", "fshRescale", "fshDisableTextureIgnore", "preTransformVertices", "sortByName", 
         "sortByAlpha", "useMatColor", "noMeshJoin", "head", "hd", "ignoreEmbeddedTextures", "ord", "keepTex0InMatOptions", "fshWriteToParentDir",
-        "conformant", "fshUniqueHashForEachTexture", "updateOldStadium", "stadium", "srgb", "fshForceAlphaCheck", "mergeVCols" });
+        "conformant", "fshUniqueHashForEachTexture", "updateOldStadium", "stadium", "srgb", "fshForceAlphaCheck", "mergeVCols", "fshName" });
     if (cmd.HasOption("silent"))
         SetMessageDisplayType(MessageDisplayType::MSG_NONE);
     else {
@@ -134,9 +134,33 @@ int main(int argc, char *argv[]) {
         static TargetNHL04 defaultNHLTarget;
         globalVars().target = &defaultNHLTarget;
     }
+    else if (game == "tcm") {
+        static TargetTCM05 defaultTCMTarget;
+        globalVars().target = &defaultTCMTarget;
+    }
     else if (game == "fm13") {
         static TargetFM13 targetFM13;
         globalVars().target = &targetFM13;
+    }
+    else if (game == "fm08") {
+        static TargetFM08 targetFM08;
+        globalVars().target = &targetFM08;
+    }
+    else if (game == "fm07") {
+        static TargetFM07 targetFM07;
+        globalVars().target = &targetFM07;
+    }
+    else if (game == "fm06") {
+        static TargetFM06 targetFM06;
+        globalVars().target = &targetFM06;
+    }
+    else if (game == "tcm05" || game == "tcm2005") {
+        static TargetTCM05 targetTCM05;
+        globalVars().target = &targetTCM05;
+    }
+    else if (game == "tcm04" || game == "tcm2004") {
+        static TargetTCM04 targetTCM04;
+        globalVars().target = &targetTCM04;
     }
     else if (game == "fifa10") {
         static TargetFIFA10 targetFIFA10;
@@ -310,16 +334,93 @@ int main(int argc, char *argv[]) {
             options().computationIndex = cmd.GetArgumentInt("computationIndex");
         if (cmd.HasArgument("forceShader"))
             options().forceShader = cmd.GetArgumentString("forceShader");
-        if (cmd.HasArgument("boneRemap"))
+        if (cmd.HasArgument("bonesFile")) {
+            options().bonesFile = cmd.GetArgumentString("bonesFile");
+            if (!options().bonesFile.empty()) {
+                if (exists(options().bonesFile)) {
+                    ifstream bf(options().bonesFile);
+                    unsigned int boneIndex = 0;
+                    for (string line; getline(bf, line); ) {
+                        Trim(line);
+                        if (!line.empty())
+                            globalVars().customBones[line] = boneIndex++;
+                    }
+                }
+                else
+                    Error("File for bones doesn't exist");
+            }
+        }
+        if (cmd.HasArgument("boneRemap")) {
             options().boneRemap = cmd.GetArgumentString("boneRemap");
+            if (!options().boneRemap.empty()) {
+                if (exists(options().boneRemap)) {
+                    ifstream br(options().boneRemap);
+                    for (string line; getline(br, line); ) {
+                        auto info = Split(line, '\t', true, true);
+                        // sourceBoneName,globalFactor,numTargetBones,[targetBoneName],[factor],[minX,minY,minZ,maxX,maxY,maxZ]
+                        if (info.size() >= 3) {
+                            unsigned int numTargetBones = SafeConvertInt<unsigned int>(info[2]);
+                            if (numTargetBones > 0 && info.size() >= (3 + numTargetBones)) {
+                                float globalFactor = SafeConvertFloat(info[1]);
+                                if (globalFactor > 0.0f) {
+                                    BoneTargets targets;
+                                    string sourceBoneName = info[0];
+                                    bool hasFactors = (info.size() >= (3 + numTargetBones * 2));
+                                    targets.hasBounds = hasFactors && (info.size() >= (3 + numTargetBones * 8));
+                                    targets.targetBones.resize(numTargetBones);
+                                    bool failedToAdd = false;
+                                    for (unsigned int tb = 0; tb < numTargetBones; tb++) {
+                                        targets.targetBones[tb].boneName = info[3 + tb];
+                                        if (globalVars().customBones.contains(targets.targetBones[tb].boneName))
+                                            targets.targetBones[tb].boneIndex = globalVars().customBones[targets.targetBones[tb].boneName];
+                                        else {
+                                            Error("Target bone %s is not present in custom bones file", targets.targetBones[tb].boneName.c_str());
+                                            failedToAdd = true;
+                                            break;
+                                        }
+                                        if (hasFactors)
+                                            targets.targetBones[tb].factor = SafeConvertFloat(info[3 + numTargetBones + tb]);
+                                        else {
+                                            if (numTargetBones == 1)
+                                                targets.targetBones[tb].factor = 1.0f;
+                                            else
+                                                targets.targetBones[tb].factor = 1.0f / numTargetBones;
+                                        }
+                                        if (globalFactor != 1.0f)
+                                            targets.targetBones[tb].factor *= globalFactor;
+                                        if (targets.hasBounds) {
+                                            targets.targetBones[tb].bound.mMin.x = SafeConvertFloat(info[3 + numTargetBones * 2 + tb * 6 + 0]);
+                                            targets.targetBones[tb].bound.mMin.x = SafeConvertFloat(info[3 + numTargetBones * 2 + tb * 6 + 1]);
+                                            targets.targetBones[tb].bound.mMin.x = SafeConvertFloat(info[3 + numTargetBones * 2 + tb * 6 + 2]);
+                                            targets.targetBones[tb].bound.mMax.x = SafeConvertFloat(info[3 + numTargetBones * 2 + tb * 6 + 3]);
+                                            targets.targetBones[tb].bound.mMax.x = SafeConvertFloat(info[3 + numTargetBones * 2 + tb * 6 + 4]);
+                                            targets.targetBones[tb].bound.mMax.x = SafeConvertFloat(info[3 + numTargetBones * 2 + tb * 6 + 5]);
+                                        }
+                                        //Error("%s - %s %f", sourceBoneName.c_str(), targets.targetBones[tb].boneName.c_str(), targets.targetBones[tb].factor);
+                                    }
+                                    if (!failedToAdd)
+                                        globalVars().boneRemap[sourceBoneName] = targets;
+                                }
+                            }
+                        }
+                    }
+                }
+                else
+                    Error("File for bone remap doesn't exist");
+            }
+        }
         if (cmd.HasArgument("skeletonData"))
             options().skeletonData = cmd.GetArgumentString("skeletonData");
-        if (cmd.HasArgument("bonesFile"))
-            options().bonesFile = cmd.GetArgumentString("bonesFile");
         if (cmd.HasArgument("maxBonesPerVertex"))
             options().maxBonesPerVertex = cmd.GetArgumentInt("maxBonesPerVertex");
         if (cmd.HasArgument("vertexWeightPaletteSize"))
             options().vertexWeightPaletteSize = cmd.GetArgumentInt("vertexWeightPaletteSize");
+        if (cmd.HasArgument("bboxScale"))
+            options().bboxScale = cmd.GetArgumentFloat("bboxScale");
+        if (cmd.HasArgument("layerFlags"))
+            options().layerFlags = cmd.GetArgumentInt("layerFlags");
+        if (cmd.HasArgument("uid"))
+            options().uid = cmd.GetArgumentInt("uid");
     }
     else if (opType == OperationType::DUMP) {
         if (cmd.HasOption("onlyFirstTechnique"))
@@ -458,7 +559,9 @@ int main(int argc, char *argv[]) {
         if (cmd.HasOption("srgb"))
             options().srgb = true;
     }
-
+    if (opType == PACKFSH || opType == UNPACKFSH || (opType == IMPORT && cmd.HasOption("writeFsh"))) {
+        options().fshName = cmd.HasOption("fshName");
+    }
     path o;
     bool hasOutput = cmd.HasArgument("o");
     if (hasOutput)

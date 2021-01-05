@@ -558,12 +558,6 @@ unsigned int FshHash (string const &name) {
     return hash;
 };
 
-struct BoneRemapTarget {
-    string boneName;
-    float multiply = 1.0f;
-    float add = 0.0f;
-};
-
 map<string, string> GetNameOptions(string const &name, bool isMaterial = false) {
     map<string, string> result;
     auto be = name.find('[');
@@ -702,6 +696,18 @@ void ProcessBoundBox(aiVector3D &boundMin, aiVector3D &boundMax, bool &anyVertex
         if (pos.z > boundMax.z)
             boundMax.z = pos.z;
     }
+}
+
+void ScaleBoundBox(aiVector3D& boundMin, aiVector3D& boundMax) {
+    aiVector3D boundCenter = boundMax - boundMin;
+    boundCenter /= 2.0f;
+    boundCenter += boundMin;
+    aiVector3D boundUp = boundMax - boundCenter;
+    aiVector3D boundLow = boundMin - boundCenter;
+    boundUp *= options().bboxScale;
+    boundLow *= options().bboxScale;
+    boundMax = boundCenter + boundUp;
+    boundMin = boundCenter + boundLow;
 }
 
 unsigned int SamplerIndex(unsigned int argType) {
@@ -875,7 +881,9 @@ void oimport(path const &out, path const &in) {
     string modelName = out.stem().string();
     auto outExt = out.extension().string();
     bool isOrd = ToLower(outExt) == ".ord";
-    unsigned int uid = Hash(modelName);
+    unsigned int uid = options().uid;
+    if (uid == 0)
+        uid = Hash(modelName);
     aiColor4D DEFAULT_COLOR = { 0.5f, 0.5f, 0.5f, 1.0f };
 
     vector<Symbol> symbols;
@@ -890,42 +898,6 @@ void oimport(path const &out, path const &in) {
     vector<Node> nodes;
     map<string, BoneInfo> bones; // name -> [index, aiBone]
     map<string, Tex> textures;
-    map<string, BoneRemapTarget> boneRemap;
-    map<string, unsigned char> customBones;
-
-    if (!options().boneRemap.empty()) {
-        if (exists(options().boneRemap)) {
-            ifstream br(options().boneRemap);
-            for (string line; getline(br, line); ) {
-                auto info = Split(line, '\t');
-                if (info.size() >= 2) {
-                    BoneRemapTarget target;
-                    target.boneName = info[1];
-                    if (info.size() >= 3)
-                        target.multiply = SafeConvertFloat(info[2]);
-                    if (info.size() >= 4)
-                        target.add = SafeConvertFloat(info[3]);
-                    boneRemap[info[0]] = target;
-                }
-            }
-        }
-        else
-            throw runtime_error("File for bone remap doesn't exist");
-    }
-
-    if (!options().bonesFile.empty()) {
-        if (exists(options().bonesFile)) {
-            ifstream bf(options().bonesFile);
-            unsigned int boneIndex = 0;
-            for (string line; getline(bf, line); ) {
-                Trim(line);
-                if (!line.empty())
-                    customBones[line] = boneIndex++;
-            }
-        }
-        else
-            throw runtime_error("File for bones doesn't exist");
-    }
 
     StadiumExtra stadExtra;
 
@@ -1054,6 +1026,50 @@ void oimport(path const &out, path const &in) {
             aiMaterial *mat = scene->mMaterials[mesh->mMaterialIndex];
             string matName = mat->GetName().C_Str();
             auto matOptions = GetNameOptions(matName, true);
+
+            if (matOptions.empty() && options().head && (targetName == "FIFA09" || targetName == "FIFA10" || targetName == "FM13")) {
+                string matNameL = ToLower(matName);
+                enum class HeadMatType { None, Head, Hair, Haircap, Eyes } headMatType = HeadMatType::None;
+                if (matNameL == "head" || matNameL == "face" || matNameL == "skin" || matNameL == "mouth" || matNameL == "teeth" || matNameL == "oral")
+                    headMatType = HeadMatType::Head;
+                else if (matNameL == "hair")
+                    headMatType = HeadMatType::Hair;
+                else if (matNameL == "haircap")
+                    headMatType = HeadMatType::Haircap;
+                else if (matNameL == "eyes" || matNameL == "eye")
+                    headMatType = HeadMatType::Eyes;
+                if (headMatType == HeadMatType::None) {
+                    string nodeNameL = ToLower(n.node->mName.C_Str());
+                    if (nodeNameL == "head" || nodeNameL == "face" || nodeNameL == "skin" || nodeNameL == "mouth" || nodeNameL == "teeth" || nodeNameL == "oral")
+                        headMatType = HeadMatType::Head;
+                    else if (nodeNameL == "hair")
+                        headMatType = HeadMatType::Hair;
+                    else if (nodeNameL == "haircap")
+                        headMatType = HeadMatType::Haircap;
+                    else if (nodeNameL == "eyes" || nodeNameL == "eye")
+                        headMatType = HeadMatType::Eyes;
+                }
+                if (headMatType != HeadMatType::None) {
+                    if (headMatType == HeadMatType::Eyes) {
+                        matOptions["shader"] = "LitTextureEye_Skin";
+                        matOptions["tex0"] = "eyeb";
+                    }
+                    else if (headMatType == HeadMatType::Head) {
+                        matOptions["shader"] = "LitTexture4Head_Skin";
+                        matOptions["tex0"] = "tp01";
+                        matOptions["tex1"] = "tp02";
+                    }
+                    else if (headMatType == HeadMatType::Haircap) {
+                        matOptions["shader"] = "LitTexture2Haircap_Skin";
+                        matOptions["tex0"] = "tp02";
+                    }
+                    else if (headMatType == HeadMatType::Hair) {
+                        matOptions["shader"] = "LitTexture2Hair_Skin";
+                        matOptions["tex0"] = "tp02";
+                    }
+                }
+            }
+
             Shader *shader = nullptr;
             bool meshHasBones = mesh->HasBones();
             bool isMeshSkinned = false;
@@ -1274,25 +1290,13 @@ void oimport(path const &out, path const &in) {
                 for (unsigned int b = 0; b < mesh->mNumBones; b++) {
                     aiBone *bone = mesh->mBones[b];
                     if (bone->mNumWeights > 1 || (bone->mNumWeights == 1 && bone->mWeights[0].mWeight > 0.0f)) {
-                        auto bit = bones.find(bone->mNode->mName.C_Str());
-                        if (bit != bones.end()) {
-                            float multiply = 1.0f;
-                            float add = 0.0f;
-                            unsigned char targetIndex = (*bit).second.index;
+                        if (bones.contains(bone->mNode->mName.C_Str())) {
+                            auto const &boneInfo = bones[bone->mNode->mName.C_Str()];
+                            BoneTargets *targets = nullptr;
                             bool use = true;
                             if (!options().boneRemap.empty()) {
-                                auto br = boneRemap.find((*bit).second.name);
-                                if (br != boneRemap.end()) {
-                                    multiply = (*br).second.multiply;
-                                    add = (*br).second.add;
-                                    auto rit = customBones.find((*br).second.boneName);
-                                    if (rit != customBones.end())
-                                        targetIndex = (*rit).second;
-                                    else {
-                                        use = false; // false
-                                        //throw runtime_error(Format("Failed to find bone for remap (%s)", (*br).second.boneName));
-                                    }
-                                }
+                                if (globalVars().boneRemap.contains(boneInfo.name))
+                                    targets = &globalVars().boneRemap[boneInfo.name];
                                 else {
                                     use = false; // false
                                     //throw runtime_error(Format("No remap info for bone %s", bone->mNode->mName.C_Str()));
@@ -1302,27 +1306,43 @@ void oimport(path const &out, path const &in) {
                             if (use) {
                                 for (unsigned int w = 0; w < bone->mNumWeights; w++) {
                                     if (bone->mWeights[w].mWeight > 0) {
-                                        float weight = bone->mWeights[w].mWeight;
-                                        if (multiply != 1.0f)
-                                            weight *= multiply;
-                                        if (add != 0.0f)
-                                            weight += add;
-                                        if (weight <= 0.0f)
-                                            continue;
                                         auto &vw = allMeshesVertexWeights[bone->mWeights[w].mVertexId];
-                                        bool found = false;
-                                        for (auto &b : vw.bones) {
-                                            if (b.boneIndex == targetIndex) {
-                                                b.weight += weight;
-                                                found = true;
-                                                break;
+                                        if (targets) {
+                                            auto const &targetBones = targets->targetBones;
+                                            for (auto const &tb : targetBones) {
+                                                float weight = bone->mWeights[w].mWeight * tb.factor;
+                                                bool found = false;
+                                                for (auto &b : vw.bones) {
+                                                    if (b.boneIndex == tb.boneIndex) {
+                                                        b.weight += weight;
+                                                        found = true;
+                                                        break;
+                                                    }
+                                                }
+                                                if (!found) {
+                                                    VertexBoneInfo vwi;
+                                                    vwi.weight = weight;
+                                                    vwi.boneIndex = tb.boneIndex;
+                                                    vw.bones.push_back(vwi);
+                                                }
                                             }
                                         }
-                                        if (!found) {
-                                            VertexBoneInfo vwi;
-                                            vwi.weight = weight;
-                                            vwi.boneIndex = targetIndex;
-                                            vw.bones.push_back(vwi);
+                                        else {
+                                            float weight = bone->mWeights[w].mWeight;
+                                            bool found = false;
+                                            for (auto &b : vw.bones) {
+                                                if (b.boneIndex == boneInfo.index) {
+                                                    b.weight += weight;
+                                                    found = true;
+                                                    break;
+                                                }
+                                            }
+                                            if (!found) {
+                                                VertexBoneInfo vwi;
+                                                vwi.weight = weight;
+                                                vwi.boneIndex = boneInfo.index;
+                                                vw.bones.push_back(vwi);
+                                            }
                                         }
                                     }
                                 }
@@ -2059,6 +2079,8 @@ void oimport(path const &out, path const &in) {
                 meshCounter++;
             }
         }
+        if (options().bboxScale != 0.0f && options().bboxScale != 1.0f)
+            ScaleBoundBox(n.boundMin, n.boundMax);
         nodeCounter++;
     }
     // BBOX
@@ -2079,7 +2101,7 @@ void oimport(path const &out, path const &in) {
     // Skeleton
     if (hasSkeleton) {
         vector<BoneInfo> vecBones;
-        if (customBones.empty()) {
+        if (globalVars().customBones.empty()) {
             if (!bones.empty()) {
                 vecBones.resize(bones.size());
                 for (auto const &[name, info] : bones)
@@ -2087,8 +2109,8 @@ void oimport(path const &out, path const &in) {
             }
         }
         else {
-            vecBones.resize(customBones.size());
-            for (auto const &[name, index] : customBones) {
+            vecBones.resize(globalVars().customBones.size());
+            for (auto const &[name, index] : globalVars().customBones) {
                 vecBones[index].name = name;
                 vecBones[index].index = index;
                 vecBones[index].bone = nullptr;
@@ -2160,7 +2182,7 @@ void oimport(path const &out, path const &in) {
     // ModelLayers
     unsigned int modelLayersOffset = bufData.Position();
     if (target->Version() >= 3) {
-        bufData.Put(ZERO);
+        bufData.Put(0);
         for (auto const &n : nodes) {
             bufData.Put(n.renderDescriptorsOffsets.size());
             for (auto const &d : n.renderDescriptorsOffsets) {
@@ -2296,7 +2318,7 @@ void oimport(path const &out, path const &in) {
         bufData.Put(ZERO);
         // Model layers states
         unsigned int modelLayersStatesOffset = bufData.Position();
-        bufData.Put(ZERO);
+        bufData.Put(options().layerFlags);
         for (auto const &n : nodes) {
             bufData.Put<unsigned short>(ONE); // TODO
             bufData.Put<unsigned short>(ONE);

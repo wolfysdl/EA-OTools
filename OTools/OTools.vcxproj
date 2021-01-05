@@ -112,8 +112,10 @@
     <ClCompile Include="target_fifa06.cpp" />
     <ClCompile Include="target_fifa09.cpp" />
     <ClCompile Include="target_fifa10.cpp" />
+    <ClCompile Include="target_fm06.cpp" />
     <ClCompile Include="target_fm13.cpp" />
     <ClCompile Include="target_nhl04.cpp" />
+    <ClCompile Include="target_tcm05.cpp" />
     <ClCompile Include="target_wc06.cpp" />
     <ClCompile Include="utils.cpp" />
   </ItemGroup>
