@@ -9,22 +9,37 @@ TextureToAdd::TextureToAdd(string const &_name, string const &_filepath, unsigne
 }
 
 void packfsh_collect(path const &out, path const &in) {
-    auto &fsh = globalVars().fshToBuild[out.parent_path()];
     auto filename = in.stem().string();
     auto texkey = ToLower(filename);
-    if (!fsh.contains(texkey)) {
-        auto &tex = fsh[texkey];
-        tex.name = filename;
-        tex.filepath = filename;
-        tex.format = options().fshFormat;
-        tex.levels = options().fshLevels;
+    auto atPos = filename.find('@');
+    if (atPos != string::npos) {
+        auto &fsh = globalVars().fshToBuild[out.parent_path() / filename.substr(atPos + 1)];
+        if (!fsh.contains(texkey)) {
+            auto &tex = fsh[texkey];
+            tex.name = filename.substr(0, atPos);
+            tex.filepath = in.string();
+            tex.format = options().fshFormat;
+            tex.levels = options().fshLevels;
+        }
+    }
+    else {
+        auto &fsh = globalVars().fshToBuild[out.parent_path() / out.parent_path().stem()];
+        if (!fsh.contains(texkey)) {
+            auto &tex = fsh[texkey];
+            tex.name = filename;
+            tex.filepath = in.string();
+            tex.format = options().fshFormat;
+            tex.levels = options().fshLevels;
+        }
     }
 }
 
 void packfsh_pack() {
     for (auto const &[fshPath, fshImages] : globalVars().fshToBuild) {
         path fshFinalPath;
-        if (options().fshWriteToParentDir && fshPath.has_parent_path())
+        if (options().fshWriteToParentDir && fshPath.has_parent_path() && fshPath.parent_path().has_parent_path())
+            fshFinalPath = fshPath.parent_path().parent_path() / (fshPath.filename().string() + ".fsh");
+        else if (fshPath.has_parent_path())
             fshFinalPath = fshPath.parent_path() / (fshPath.filename().string() + ".fsh");
         else
             fshFinalPath = fshPath / (fshPath.filename().string() + ".fsh");
@@ -97,7 +112,9 @@ void WriteFsh(path const &fshFilePath, path const &searchDir, map<string, Textur
                 path imgPath = img.filepath;
                 auto imgParentDir = imgPath.parent_path();
                 auto imgFileName = imgPath.filename().string();
-                auto atPos = imgFileName.find('@');
+                size_t atPos = string::npos;
+                if (options().head)
+                    atPos = imgFileName.find('@');
                 unsigned int numSearchPasses = 1;
                 if (atPos != string::npos && atPos != 0)
                     numSearchPasses = 2;

@@ -827,8 +827,9 @@ void oimport(path const &out, path const &in) {
     importer.SetPropertyInteger(AI_CONFIG_PP_SLM_VERTEX_LIMIT, 32'767);
     unsigned int sceneLoadingFlags = aiProcess_Triangulate | aiProcess_GenSmoothNormals | aiProcess_GenUVCoords | aiProcess_SplitLargeMeshes |
         aiProcess_SortByPType | aiProcess_PopulateArmatureData;
-    if (options().scale > 0.0f && options().scale != 1.0f) {
-        importer.SetPropertyFloat(AI_CONFIG_GLOBAL_SCALE_FACTOR_KEY, options().scale);
+    bool doScale = options().scale.x != 1.0f || options().scale.y != 1.0f || options().scale.z != 1.0f;
+    if (doScale && !options().scaleXYZ) {
+        importer.SetPropertyFloat(AI_CONFIG_GLOBAL_SCALE_FACTOR_KEY, options().scale.x);
         sceneLoadingFlags |= aiProcess_GlobalScale;
     }
     if (!options().swapYZ)
@@ -1522,6 +1523,11 @@ void oimport(path const &out, path const &in) {
                         case Shader::Position:
                             if (d.type == Shader::Float3 && mesh->mVertices) {
                                 aiVector3D vecPos = mesh->mVertices[v];
+                                if (doScale && options().scaleXYZ) {
+                                    vecPos.x *= options().scale.x;
+                                    vecPos.y *= options().scale.y;
+                                    vecPos.z *= options().scale.z;
+                                }
                                 if (doTranslate) {
                                     vecPos.x += options().translate.x;
                                     vecPos.y += options().translate.y;
@@ -2787,6 +2793,16 @@ void oimport(path const &out, path const &in) {
                     aiVector3D scaling, position;
                     aiQuaternion rotation;
                     flagNode->mTransformation.Decompose(scaling, rotation, position);
+                    if (doScale && options().scaleXYZ) {
+                        position.x *= options().scale.x;
+                        position.y *= options().scale.y;
+                        position.z *= options().scale.z;
+                    }
+                    if (doTranslate) {
+                        position.x += options().translate.x;
+                        position.y += options().translate.y;
+                        position.z += options().translate.z;
+                    }
                     writer.WriteLine(Format(L"%f %f %f %d %f %f %f", position.x / 100.0f, position.y / 100.0f, position.z / 100.0f, flagType, scaling.x, scaling.y, scaling.z));
                 }
             }
@@ -2830,6 +2846,16 @@ void oimport(path const &out, path const &in) {
                     aiVector3D scaling, position;
                     aiQuaternion rotation;
                     effNode->mTransformation.Decompose(scaling, rotation, position);
+                    if (doScale && options().scaleXYZ) {
+                        position.x *= options().scale.x;
+                        position.y *= options().scale.y;
+                        position.z *= options().scale.z;
+                    }
+                    if (doTranslate) {
+                        position.x += options().translate.x;
+                        position.y += options().translate.y;
+                        position.z += options().translate.z;
+                    }
                     p.pos = position;
                     p.dir = aiVector3D(m.a2, m.b2, m.c2);
                     p.type = 1;
@@ -2907,8 +2933,19 @@ void oimport(path const &out, path const &in) {
                     for (unsigned int f = 0; f < mesh->mNumFaces; f++) {
                         auto const &face = mesh->mFaces[f];
                         aiVector3D triPos[3];
-                        for (unsigned int v = 0; v < 3; v++)
+                        for (unsigned int v = 0; v < 3; v++) {
                             triPos[v] = mesh->mVertices[face.mIndices[v]];
+                            if (doScale && options().scaleXYZ) {
+                                triPos[v].x *= options().scale.x;
+                                triPos[v].y *= options().scale.y;
+                                triPos[v].z *= options().scale.z;
+                            }
+                            if (doTranslate) {
+                                triPos[v].x += options().translate.x;
+                                triPos[v].y += options().translate.y;
+                                triPos[v].z += options().translate.z;
+                            }
+                        }
                         if (triPos[0] == triPos[1] || triPos[1] == triPos[2]) {
                             if (triPos[0] != triPos[2]) {
                                 CollLine line;

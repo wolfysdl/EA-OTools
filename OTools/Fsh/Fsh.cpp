@@ -891,9 +891,8 @@ void ea::Fsh::Read(std::filesystem::path const & filepath) {
 			} break;
 			case 0x7C: {
 				auto numIntPairs = f.Read<size_t>();
-				if (numIntPairs > 0) {
-					if (numIntPairs % 3)
-						throw Exception("unsupported hotspot section format in " + filepath.string());
+				if (numIntPairs > 0 && !(numIntPairs % 3)) {
+					//throw Exception("unsupported hotspot section format in " + filepath.string());
 					auto &regions = image.AddData(new FshHotSpot())->As<FshHotSpot>()->Regions();
 					size_t numRegions = numIntPairs / 3;
 					regions.resize(numRegions);

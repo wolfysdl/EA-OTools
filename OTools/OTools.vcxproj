@@ -80,6 +80,7 @@
     <ClInclude Include="utils.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="alignfile.cpp" />
     <ClCompile Include="binbuf.cpp" />
     <ClCompile Include="commandline.cpp" />
     <ClCompile Include="D3DDevice\D3DDevice.cpp" />

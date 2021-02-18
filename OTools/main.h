@@ -41,7 +41,8 @@ struct GlobalOptions {
     // import options
     unsigned int hwnd = 0;
     bool conformant = false;
-    float scale = 1.0f;
+    aiVector3D scale = { 1.0f, 1.0f, 1.0f };
+    bool scaleXYZ = false;
     aiVector3D translate = { 0.0f, 0.0f, 0.0f };
     bool tristrip = false;
     bool embeddedTextures = false;
@@ -99,6 +100,8 @@ struct GlobalOptions {
     bool jpegTextures = false;
     bool noMeshJoin = false;
     bool updateOldStadium = false;
+    bool stadium07to10 = false;
+    bool stadium10to07 = false;
     // dump options
     bool onlyFirstTechnique = false;
     // fsh unpack options
@@ -162,3 +165,4 @@ void dumpshaders(path const &out, path const &in);
 void packfsh_collect(path const &out, path const &in);
 void unpackfsh(path const &out, path const &in);
 void packfsh_pack();
+void align_file(path const &out, path const &in);

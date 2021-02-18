@@ -7,8 +7,8 @@
 #include <sstream>
 #include <iostream>
 
-const char *OTOOLS_VERSION = "0.168";
-const unsigned int OTOOLS_VERSION_INT = 168;
+const char *OTOOLS_VERSION = "0.170";
+const unsigned int OTOOLS_VERSION_INT = 170;
 
 GlobalOptions &options() {
     static GlobalOptions go;
@@ -32,7 +32,8 @@ int main(int argc, char *argv[]) {
         { "tristrip", "noTextures", "recursive", "createSubDir", "silent", "console", "onlyFirstTechnique", "dummyTextures", "jpegTextures", "embeddedTextures", 
         "swapYZ", "forceLighting", "noMetadata", "genTexNames", "writeFsh", "fshRescale", "fshDisableTextureIgnore", "preTransformVertices", "sortByName", 
         "sortByAlpha", "useMatColor", "noMeshJoin", "head", "hd", "ignoreEmbeddedTextures", "ord", "keepTex0InMatOptions", "fshWriteToParentDir",
-        "conformant", "fshUniqueHashForEachTexture", "updateOldStadium", "stadium", "srgb", "fshForceAlphaCheck", "mergeVCols", "fshName" });
+        "conformant", "fshUniqueHashForEachTexture", "updateOldStadium", "stadium", "srgb", "fshForceAlphaCheck", "mergeVCols", "fshName",
+        "stadium10to07", "stadium07to10" });
     if (cmd.HasOption("silent"))
         SetMessageDisplayType(MessageDisplayType::MSG_NONE);
     else {
@@ -42,7 +43,7 @@ int main(int argc, char *argv[]) {
             SetMessageDisplayType(MessageDisplayType::MSG_MESSAGE_BOX);
     }
     enum OperationType {
-        UNKNOWN, VERSION, DUMP, EXPORT, IMPORT, INFO, DUMPSHADERS, PACKFSH, UNPACKFSH
+        UNKNOWN, VERSION, DUMP, EXPORT, IMPORT, INFO, DUMPSHADERS, PACKFSH, UNPACKFSH, ALIGNFILES
     } opType = OperationType::UNKNOWN;
     void (*callback)(path const &, path const &) = nullptr;
     bool isCustom = false;
@@ -96,6 +97,11 @@ int main(int argc, char *argv[]) {
             callback = packfsh_collect;
             inExt = { ".png", ".jpg", ".jpeg", ".bmp", ".tga", ".dds" };
             createDevice = true;
+        }
+        else if (opTypeStr == "align" || opTypeStr == "alignfile") {
+            opType = OperationType::ALIGNFILES;
+            callback = align_file;
+            inExt = { ".o", ".fsh" };
         }
     }
     if (opType == OperationType::UNKNOWN) {
@@ -241,14 +247,32 @@ int main(int argc, char *argv[]) {
             options().skeleton = cmd.GetArgumentString("skeleton");
         if (cmd.HasOption("updateOldStadium"))
             options().updateOldStadium = true;
+        if (cmd.HasOption("stadium10to07"))
+            options().stadium10to07 = true;
+        if (cmd.HasOption("stadium07to10"))
+            options().stadium07to10 = true;
     }
     else if (opType == OperationType::IMPORT) {
         if (cmd.HasOption("conformant"))
             options().conformant = true;
         if (cmd.HasOption("noMetadata"))
             options().noMetadata = true;
-        if (cmd.HasArgument("scale"))
-            options().scale = cmd.GetArgumentFloat("scale");
+        if (cmd.HasArgument("scale")) {
+            auto scaleLine = cmd.GetArgumentString("scale");
+            auto scaleParts = Split(scaleLine, ',');
+            if (scaleParts.size() == 1) {
+                options().scale.x = SafeConvertFloat(scaleParts[0]);
+                options().scale.y = options().scale.x;
+                options().scale.z = options().scale.x;
+                options().scaleXYZ = false;
+            }
+            else if (scaleParts.size() == 3) {
+                options().scale.x = SafeConvertFloat(scaleParts[0]);
+                options().scale.y = SafeConvertFloat(scaleParts[1]);
+                options().scale.z = SafeConvertFloat(scaleParts[2]);
+                options().scaleXYZ = true;
+            }
+        }
         if (cmd.HasArgument("translate")) {
             auto translateLine = cmd.GetArgumentString("translate");
             auto translateParts = Split(translateLine, ',');
@@ -324,8 +348,6 @@ int main(int argc, char *argv[]) {
             options().head = true;
         if (cmd.HasOption("hd"))
             options().hd = true;
-        if (cmd.HasArgument("pad"))
-            options().pad = cmd.GetArgumentInt("pad");
         if (cmd.HasOption("ignoreEmbeddedTextures"))
             options().ignoreEmbeddedTextures = true;
         if (cmd.HasArgument("instances"))
@@ -529,8 +551,6 @@ int main(int argc, char *argv[]) {
                 }
             }
         }
-        if (cmd.HasArgument("padFsh"))
-            options().padFsh = cmd.GetArgumentInt("padFsh");
         if (cmd.HasArgument("fshHash")) {
             options().fshHash = cmd.GetArgumentInt("fshHash");
             options().useFshHash = true;
@@ -561,6 +581,12 @@ int main(int argc, char *argv[]) {
     }
     if (opType == PACKFSH || opType == UNPACKFSH || (opType == IMPORT && cmd.HasOption("writeFsh"))) {
         options().fshName = cmd.HasOption("fshName");
+    }
+    if (opType == PACKFSH || opType == IMPORT || opType == ALIGNFILES) {
+        if (cmd.HasArgument("pad"))
+            options().pad = cmd.GetArgumentInt("pad");
+        if (cmd.HasArgument("padFsh"))
+            options().padFsh = cmd.GetArgumentInt("padFsh");
     }
     path o;
     bool hasOutput = cmd.HasArgument("o");

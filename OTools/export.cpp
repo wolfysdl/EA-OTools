@@ -973,6 +973,7 @@ public:
                             unsigned int rmCodeOffset = At<unsigned char>(renderMethod, 8) - data;
                             void *vertexBuffer = nullptr;
                             string texNameOriginal;
+                            bool bannersTex = false;
                             unsigned int vertexSize = 0;
                             unsigned int numVertices = 0;
                             void *indexBuffer = nullptr;
@@ -993,6 +994,7 @@ public:
                                 if (codeName.ends_with("__EAGLMicroCode")) {
                                     shaderName = codeName.substr(0, codeName.length() - 15);
                                     mat.shader = shaderName;
+
                                     string shaderLowered = ToLower(mat.shader);
                                     if (shaderLowered == "cliptextureaddnodepthwrite" || shaderLowered == "cliptexturealphablend" || shaderLowered.find("transparent") != string::npos)
                                         mat.alphaMode = "BLEND";
@@ -1116,12 +1118,86 @@ public:
                                                 }
                                                 Texture *pTex = nullptr;
                                                 if (!tex.name.empty()) {
+                                                    if (options().stadium07to10) {
+                                                        if (tex.name == "rwh0" || tex.name == "rwn0") {
+                                                            tex.name = "chf0";
+                                                            mat.shader = "FIFACrowdh";
+                                                        }
+                                                        else if (tex.name == "rwh1" || tex.name == "rwn1") {
+                                                            tex.name = "chf1";
+                                                            mat.shader = "FIFACrowdh";
+                                                        }
+                                                        else if (tex.name == "rwh2" || tex.name == "rwn2") {
+                                                            tex.name = "chf2";
+                                                            mat.shader = "FIFACrowdh";
+                                                        }
+                                                        else if (tex.name == "rwh3" || tex.name == "rwn3") {
+                                                            tex.name = "chf3";
+                                                            mat.shader = "FIFACrowdh";
+                                                        }
+                                                        else if (tex.name == "rwa0") {
+                                                            tex.name = "caf0";
+                                                            mat.shader = "FIFACrowda";
+                                                        }
+                                                        else if (tex.name == "rwa1") {
+                                                            tex.name = "caf1";
+                                                            mat.shader = "FIFACrowda";
+                                                        }
+                                                        else if (tex.name == "rwa2") {
+                                                            tex.name = "caf2";
+                                                            mat.shader = "FIFACrowda";
+                                                        }
+                                                        else if (tex.name == "rwa3") {
+                                                            tex.name = "caf3";
+                                                            mat.shader = "FIFACrowda";
+                                                        }
+                                                    }
+                                                    if (options().stadium10to07) {
+                                                        if (tex.name == "chf0") {
+                                                            tex.name = "rwh0";
+                                                            mat.shader = "ClipTextureNoAlphaBlend";
+                                                        }
+                                                        else if (tex.name == "chf1") {
+                                                            tex.name = "rwh1";
+                                                            mat.shader = "ClipTextureNoAlphaBlend";
+                                                        }
+                                                        else if (tex.name == "chf2") {
+                                                            tex.name = "rwh2";
+                                                            mat.shader = "ClipTextureNoAlphaBlend";
+                                                        }
+                                                        else if (tex.name == "chf3") {
+                                                            tex.name = "rwh3";
+                                                            mat.shader = "ClipTextureNoAlphaBlend";
+                                                        }
+                                                        else if (tex.name == "caf0") {
+                                                            tex.name = "rwa0";
+                                                            mat.shader = "ClipTextureNoAlphaBlend";
+                                                        }
+                                                        else if (tex.name == "caf1") {
+                                                            tex.name = "rwa1";
+                                                            mat.shader = "ClipTextureNoAlphaBlend";
+                                                        }
+                                                        else if (tex.name == "caf2") {
+                                                            tex.name = "rwa2";
+                                                            mat.shader = "ClipTextureNoAlphaBlend";
+                                                        }
+                                                        else if (tex.name == "caf3") {
+                                                            tex.name = "rwa3";
+                                                            mat.shader = "ClipTextureNoAlphaBlend";
+                                                        }
+                                                    }
                                                     if (options().updateOldStadium) {
                                                         texNameOriginal = tex.name;
                                                         if (tex.name == "adbb" || tex.name == "adbc")
                                                             tex.name = "adba";
-                                                        else if (tex.name == "_bna" || tex.name == "_bnb" || tex.name == "_bnc")
+                                                        else if (tex.name == "_bna" || tex.name == "_bnb" || tex.name == "_bnc" || tex.name == "_fla" || tex.name == "_flb" || tex.name == "_flc" || tex.name == "hbna" || tex.name == "hbnb" || tex.name == "hbnc" || tex.name == "hfla" || tex.name == "hflb" || tex.name == "hflc") {
                                                             tex.name = "hbna";
+                                                            bannersTex = true;
+                                                        }
+                                                        else if (tex.name == "abna" || tex.name == "abnb" || tex.name == "abnc" || tex.name == "afla" || tex.name == "aflb" || tex.name == "aflc") {
+                                                            tex.name = "abna";
+                                                            bannersTex = true;
+                                                        }
                                                     }
                                                     auto texKey = ToLower(tex.name);
                                                     if (samplerIndex == 1 && (texKey == "spec")) {
@@ -1245,6 +1321,19 @@ public:
                                 }
                             }
                             j.openScope();
+                            if ((geoPrimMode == 4 || geoPrimMode == 5 || geoPrimMode == 6) && numIndices < 3) {
+                                static vector<unsigned char> dummyVB;
+                                static vector<unsigned char> dummyIB;
+                                unsigned int newIBSize = indexSize * 3;
+                                if (dummyVB.size() < vertexSize)
+                                    dummyVB.resize(vertexSize, 0);
+                                if (dummyIB.size() < newIBSize)
+                                    dummyIB.resize(newIBSize, 0);
+                                vertexBuffer = dummyVB.data();
+                                indexBuffer = dummyIB.data();
+                                numVertices = 1;
+                                numIndices = 3;
+                            }
                             if (vertexBuffer) {
                                 if (!shader) {
                                     if (skinVertexDataBuffer)
@@ -1377,15 +1466,23 @@ public:
                                         }
                                     }
                                     else if (options().updateOldStadium && d.usage == Shader::Texcoord0) {
-                                        if (texNameOriginal == "_bna" || texNameOriginal == "_bnb" || texNameOriginal == "_bnc") {
+                                        if (bannersTex) {
                                             float *uv = (float *)(unsigned int(vertexBuffer) + a.offset);
                                             for (unsigned int vert = 0; vert < numVertices; vert++) {
                                                 uv[0] *= 0.25f;
                                                 uv[1] *= 0.25f;
-                                                if (texNameOriginal == "_bnb")
+                                                if (texNameOriginal == "_bnb" || texNameOriginal == "hbnb" || texNameOriginal == "abnb")
                                                     uv[0] += 0.25f;
-                                                else if (texNameOriginal == "_bnc")
+                                                else if (texNameOriginal == "_bnc" || texNameOriginal == "hbnc" || texNameOriginal == "abnc")
                                                     uv[0] += 0.5f;
+                                                else if (texNameOriginal == "_fla" || texNameOriginal == "hfla" || texNameOriginal == "afla")
+                                                    uv[0] += 0.75f;
+                                                else if (texNameOriginal == "_flb" || texNameOriginal == "hflb" || texNameOriginal == "aflb")
+                                                    uv[1] += 0.25f;
+                                                else if (texNameOriginal == "_flc" || texNameOriginal == "hflc" || texNameOriginal == "aflc") {
+                                                    uv[0] += 0.25f;
+                                                    uv[1] += 0.5f;
+                                                }
                                                 uv = (float *)(unsigned int(uv) + a.stride);
                                             }
                                         }
