@@ -177,6 +177,7 @@ struct Tex {
     MipMapMode mipMapMode = Linear;
     unsigned int offset = 0;
     bool isGlobal = false;
+    bool runtimeConstructed = true;
     string filepath;
     TexEmbedded embedded;
 
@@ -208,7 +209,7 @@ struct Tex {
     }
 
     bool IsRuntimeConstructed() const {
-        return !IsFIFAAdboardsTexture();
+        return runtimeConstructed;
     }
 
     bool IsFIFAAdboardsTexture() const {
@@ -711,13 +712,21 @@ void ScaleBoundBox(aiVector3D& boundMin, aiVector3D& boundMax) {
 }
 
 unsigned int SamplerIndex(unsigned int argType) {
-    if (argType == Shader::Sampler1)
+    if (argType == Shader::Sampler1 || argType == Shader::Sampler1Local)
         return 1;
-    else if (argType == Shader::Sampler2)
+    else if (argType == Shader::Sampler2 || argType == Shader::Sampler2Local)
         return 2;
-    else if (argType == Shader::Sampler3)
+    else if (argType == Shader::Sampler3 || argType == Shader::Sampler3Local)
         return 3;
     return 0;
+}
+
+bool IsGlobalSampler(unsigned int argType) {
+    return argType == Shader::Sampler0 || argType == Shader::Sampler1 || argType == Shader::Sampler2 || argType == Shader::Sampler3;
+}
+
+bool IsLocalSampler(unsigned int argType) {
+    return argType == Shader::Sampler0Local || argType == Shader::Sampler1Local || argType == Shader::Sampler2Local || argType == Shader::Sampler3Local;
 }
 
 bool GetTexInfo(aiScene const *scene, aiMaterial const *mat, aiTextureType texType, aiTextureMapMode &mapMode, path &texFilePath, string &texFileName, string &texFileNameLowered, bool &isGlobal, TexEmbedded &embedded) {
@@ -1891,6 +1900,15 @@ void oimport(path const &out, path const &in) {
                     case Shader::Contrast:
                         globalArgs.emplace_back("__COORD4:::Hbs::Render::MowPattern::Contrast");
                         break;
+                    case Shader::GlobalDiffuse:
+                        globalArgs.emplace_back("__COORD4:::GlobalDiffuse");
+                        break;
+                    case Shader::TextureProjectionMatrix:
+                        globalArgs.emplace_back("__const MATRIX4:::TextureProjectionMatrix");
+                        break;
+                    case Shader::LocalLightDirection:
+                        globalArgs.emplace_back("__COORD3:::LocalLightDirection");
+                        break;
                     case Shader::UVOffset0:
                     {
                         Vector4D uvOffset0;
@@ -1928,29 +1946,51 @@ void oimport(path const &out, path const &in) {
                         globalArgs.emplace_back(modifiables.GetArg((arg.type == Shader::RuntimeGeoPrimState ? "GeoPrimState::State" : "State::GeoPrimState"), geoPrimStateFormat, sizeof(GeoPrimState)));
                     }
                     break;
+                    case Shader::CrowdState:
+                        globalArgs.emplace_back(modifiables.GetArg("State::State", "__EAGL::GeoPrimState:::crowd_state", sizeof(GeoPrimState)));
+                        break;
+                    case Shader::LineNoDepthWriteState:
+                        globalArgs.emplace_back(modifiables.GetArg("GeoPrimState::State", "__EAGL::GeoPrimState:::line_no_depth_write_state", sizeof(GeoPrimState)));
+                        break;
+                    case Shader::GlowerState:
+                        globalArgs.emplace_back(modifiables.GetArg("State::State", "__EAGL::GeoPrimState:::glower_state", sizeof(GeoPrimState)));
+                        break;
+                    case Shader::ProjectiveShadow2State:
+                        globalArgs.emplace_back(modifiables.GetArg("State::State", "__EAGL::GeoPrimState:::projective_shadow2_state", sizeof(GeoPrimState)));
+                        break;
+                    case Shader::FlagLightBlock:
+                        globalArgs.emplace_back(modifiables.GetArg("Light::LightBlock", "__EAGL::LightBlock:::FlagLightBlock", sizeof(Light)));
+                        break;
                     case Shader::Sampler0:
                     case Shader::Sampler1:
                     case Shader::Sampler2:
                     case Shader::Sampler3:
+                    case Shader::Sampler0Local:
+                    case Shader::Sampler1Local:
+                    case Shader::Sampler2Local:
+                    case Shader::Sampler3Local:
                     {
                         unsigned int s = SamplerIndex(arg.type);
                         if (tex[s].isGlobal)
                             globalArgs.emplace_back("__EAGL::TAR:::" + tex[s].name);
                         else {
                             if (texAlreadyPresent[s]) {
-                                if (tex[s].IsRuntimeConstructed())
+                                if (IsGlobalSampler(arg.type))
                                     globalArgs.emplace_back(tex[s].GetRuntimeConstructorLine(uid, numVariations));
                                 else
                                     globalArgs.emplace_back(tex[s].offset);
                             }
                             else {
-                                if (tex[s].IsRuntimeConstructed())
+                                if (IsGlobalSampler(arg.type)) {
                                     globalArgs.emplace_back(tex[s].GetRuntimeConstructorLine(uid, numVariations));
+                                    tex[s].runtimeConstructed = true;
+                                }
                                 else {
+                                    tex[s].runtimeConstructed = false;
                                     bufData.Align(16);
                                     tex[s].offset = bufData.Position();
                                     globalArgs.emplace_back(bufData.Position(), 1);
-                                    symbols.emplace_back("__EAGL::TAR:::" + tex[s].name + "_" + to_string(Hash(modelName + "_" + tex[s].name)), bufData.Position());
+                                    symbols.emplace_back("__EAGL::TAR:::tar_" + tex[s].name + "_" + to_string(Hash(modelName + "_" + tex[s].name)), bufData.Position());
                                     TAR tar;
                                     strncpy(tar.tag, tex[s].name.c_str(), 4);
                                     bufData.Put(tar);
@@ -1996,6 +2036,12 @@ void oimport(path const &out, path const &in) {
                     {
                         Matrix4x4 uvMatrix;
                         globalArgs.emplace_back(modifiables.GetArg("Matrix::" + n.name + "::UVMatrix", bufData, uvMatrix, true, false));
+                    }
+                    break;
+                    case Shader::InstanceColour:
+                    {
+                        Vector4D instanceColour;
+                        globalArgs.emplace_back(modifiables.GetArg("Coordinate4::" + n.name + "::InstanceColour", bufData, instanceColour, true, false));
                     }
                     break;
                     }
@@ -2160,8 +2206,18 @@ void oimport(path const &out, path const &in) {
             symbols.emplace_back("__Skeleton:::" + modelName, bufData.Position());
             if (options().skeletonData.empty()) {
                 bufData.Put(unsigned short(ANIM_VERSION));
-                bufData.Put(unsigned short(510));
-                bufData.Put(unsigned short(ANIM_VERSION));
+                if (ANIM_VERSION == 0xDB15) {
+                    bufData.Put(unsigned short(690));
+                    bufData.Put(unsigned short(ZERO));
+                }
+                else if (ANIM_VERSION == 0x0504) {
+                    bufData.Put(unsigned short(660));
+                    bufData.Put(unsigned short(ZERO));
+                }
+                else {
+                    bufData.Put(unsigned short(510));
+                    bufData.Put(unsigned short(ANIM_VERSION));
+                }
                 bufData.Put(unsigned short(ZERO));
                 bufData.Put(vecBones.size());
                 bufData.Put(ZERO);

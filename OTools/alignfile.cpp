@@ -12,7 +12,7 @@ void align_file(path const &out, path const &in) {
             FILE *f = _wfopen(in.c_str(), L"rb");
             if (f) {
                 fseek(f, 0, SEEK_END);
-                auto fsize = ftell(f);
+                unsigned int fsize = ftell(f);
                 if (fsize < pad) {
                     fseek(f, 0, SEEK_SET);
                     vector<unsigned char> fdata(pad, 0);

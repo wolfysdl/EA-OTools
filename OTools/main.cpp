@@ -240,6 +240,18 @@ int main(int argc, char *argv[]) {
         static TargetRUGBY2005 targetRUGBY2005;
         globalVars().target = &targetRUGBY2005;
     }
+    else if (game == "mvp2005" || game == "mvp05") {
+        static TargetMVP2005 targetMVP2005;
+        globalVars().target = &targetMVP2005;
+    }
+    else if (game == "mvp2004" || game == "mvp04") {
+        static TargetMVP2004 targetMVP2004;
+        globalVars().target = &targetMVP2004;
+    }
+    else if (game == "mvp2003" || game == "mvp03") {
+        static TargetMVP2003 targetMVP2003;
+        globalVars().target = &targetMVP2003;
+    }
     else {
         static TargetFM13 defaultTarget;
         globalVars().target = &defaultTarget;

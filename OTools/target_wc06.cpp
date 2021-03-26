@@ -5020,7 +5020,7 @@ Shader shaders_FIFAWC06[23] = {
     Shader::ViewMatrix,
     Shader::ProjectionMatrix,
     { Shader::RuntimeGeoPrimState, "SetTextureEnable=true;SetAlphaBlendMode=EAGL::ABM_OFF;SetTransparencyMethod=EAGL::TM_OPAQUE;SetAlphaTestEnable=false;SetAlphaCompareValue=190;" },
-    Shader::Sampler0,
+    Shader::Sampler0Local,
     Shader::ComputationIndex,
     Shader::VertexData,
     Shader::IndexData

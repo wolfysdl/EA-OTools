@@ -2762,8 +2762,8 @@ Shader shaders_UEFACL0405[18] = {
     {
     Shader::GeometryInfo,
     { Shader::RuntimeGeoPrimState, "SetAlphaBlendMode=EAGL::ABM_BLEND;SetTransparencyMethod=EAGL::TM_ALPHA;SetTextureEnable=true" },
-    Shader::Sampler0,
-    Shader::Sampler1,
+    Shader::Sampler0Local,
+    Shader::Sampler1Local,
     Shader::ComputationIndex,
     Shader::StarBall_MatrixMVP,
     Shader::StarBall_MatrixMV,
@@ -3107,7 +3107,7 @@ Shader shaders_UEFACL0405[18] = {
     Shader::FogParameters1,
     Shader::FogParameters2,
     Shader::GeoPrimState,
-    Shader::Sampler0,
+    Shader::Sampler0Local,
     Shader::ComputationIndex,
     Shader::VertexData,
     Shader::IndexData

@@ -227,3 +227,32 @@ class TargetRUGBY08 : public Target {
     unsigned int NumShaders();
     Shader *DecideShader(MaterialProperties const &properties);
 };
+
+Shader *DecideShader_MVP_2004_2005(Target *target, MaterialProperties const &properties);
+
+class TargetMVP2005 : public Target {
+    char const *Name();
+    int Version();
+    unsigned short AnimVersion();
+    Shader *Shaders();
+    unsigned int NumShaders();
+    Shader *DecideShader(MaterialProperties const &properties);
+};
+
+class TargetMVP2004 : public Target {
+    char const *Name();
+    int Version();
+    unsigned short AnimVersion();
+    Shader *Shaders();
+    unsigned int NumShaders();
+    Shader *DecideShader(MaterialProperties const &properties);
+};
+
+class TargetMVP2003 : public Target {
+    char const *Name();
+    int Version();
+    unsigned short AnimVersion();
+    Shader *Shaders();
+    unsigned int NumShaders();
+    Shader *DecideShader(MaterialProperties const &properties);
+};

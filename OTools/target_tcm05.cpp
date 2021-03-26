@@ -2076,7 +2076,7 @@ Shader shaders_TCM05[13] = {
     Shader::XFade,
     Shader::FogParameters,
     Shader::GeoPrimState,
-    Shader::Sampler0,
+    Shader::Sampler0Local,
     Shader::ComputationIndex,
     Shader::VertexData,
     Shader::IndexData

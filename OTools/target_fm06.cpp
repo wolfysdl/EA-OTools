@@ -2892,7 +2892,7 @@ Shader shaders_FM06[17] = {
     Shader::FogParameters1,
     Shader::FogParameters2,
     Shader::GeoPrimState,
-    Shader::Sampler0,
+    Shader::Sampler0Local,
     Shader::ComputationIndex,
     Shader::VertexData,
     Shader::IndexData

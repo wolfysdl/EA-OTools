@@ -3,10 +3,18 @@
 #include <iostream>
 #include "shaders.h"
 
+enum SamplerArgumentType {
+    SamplerUndefined = 0,
+    SamplerGlobal = 1,
+    SamplerLocalPublic = 2,
+    SamplerLocalPrivate = 4
+};
+
 struct ShaderInfo : public Shader {
     set<string> files;
     unsigned int numFiles = 0;
     unsigned int debugVertexSize = 0;
+    unsigned int samplerArguments[4] = { SamplerUndefined, SamplerUndefined, SamplerUndefined, SamplerUndefined };
 };
 
 bool operator==(ShaderInfo const &a, ShaderInfo const &b) {
@@ -91,6 +99,10 @@ string GetShaderAttributeName(int attr) {
     case Shader::Sampler1:                  return "Shader::Sampler1";
     case Shader::Sampler2:                  return "Shader::Sampler2";
     case Shader::Sampler3:                  return "Shader::Sampler3";
+    case Shader::Sampler0Local:             return "Shader::Sampler0Local";
+    case Shader::Sampler1Local:             return "Shader::Sampler1Local";
+    case Shader::Sampler2Local:             return "Shader::Sampler2Local";
+    case Shader::Sampler3Local:             return "Shader::Sampler3Local";
     case Shader::Sampler0Size:              return "Shader::Sampler0Size";
     case Shader::Sampler1Size:              return "Shader::Sampler1Size";
     case Shader::Sampler2Size:              return "Shader::Sampler2Size";
@@ -160,6 +172,15 @@ string GetShaderAttributeName(int attr) {
     case Shader::Vec40200000Local:          return "Shader::Vec40200000Local";
     case Shader::UVOffset_Layer:            return "Shader::UVOffset_Layer";
     case Shader::UVMatrix_Layer:            return "Shader::UVMatrix_Layer";
+    case Shader::CrowdState:                return "Shader::CrowdState";
+    case Shader::LineNoDepthWriteState:     return "Shader::LineNoDepthWriteState";
+    case Shader::GlowerState:               return "Shader::GlowerState";
+    case Shader::InstanceColour:            return "Shader::InstanceColour";
+    case Shader::FlagLightBlock:            return "Shader::FlagLightBlock";
+    case Shader::GlobalDiffuse:             return "Shader::GlobalDiffuse";
+    case Shader::TextureProjectionMatrix:   return "Shader::TextureProjectionMatrix";
+    case Shader::LocalLightDirection:       return "Shader::LocalLightDirection";
+    case Shader::ProjectiveShadow2State:    return "Shader::ProjectiveShadow2State";
     }
     return string();
 }
@@ -209,7 +230,15 @@ int GetShaderAttributeFromSymbolName(string const &symbolName) {
         { "__COORD4:::gpFaceIrradiance", Shader::FaceIrradiance },
         { "__COORD4:::ColourScaleFactor", Shader::ColourScaleFactor },
         { "__COORD4:::Hbs::Render::EyeVector", Shader::EyeVector },
-        { "__COORD4:::Hbs::Render::MowPattern::Contrast", Shader::Contrast }
+        { "__COORD4:::Hbs::Render::MowPattern::Contrast", Shader::Contrast },
+        { "__EAGL::GeoPrimState:::crowd_state", Shader::CrowdState },
+        { "__EAGL::GeoPrimState:::line_no_depth_write_state", Shader::LineNoDepthWriteState },
+        { "__EAGL::GeoPrimState:::glower_state", Shader::GlowerState },
+        { "__EAGL::LightBlock:::FlagLightBlock", Shader::FlagLightBlock },
+        { "__COORD4:::GlobalDiffuse", Shader::GlobalDiffuse },
+        { "__const MATRIX4:::TextureProjectionMatrix", Shader::TextureProjectionMatrix },
+        { "__COORD3:::LocalLightDirection", Shader::LocalLightDirection },
+        { "__EAGL::GeoPrimState:::projective_shadow2_state", Shader::ProjectiveShadow2State }
     };
     auto it = attrMap.find(symbolName);
     if (it != attrMap.end())
@@ -221,6 +250,7 @@ class ShaderDumper {
     map<string, pair<unsigned int, vector<Shader::VertexDeclElement>>> shadersDef;
     vector<ShaderInfo> shaders;
     set<string> notFoundShaders;
+    map<string, unsigned int> shaderTextures;
 
     struct FileSymbol : public Elf32_Sym {
         unsigned int id = 0;
@@ -762,6 +792,7 @@ public:
                                                         break;
                                                     case 9:
                                                     case 32:
+                                                    {
                                                         if (info.commands[g + 1].arguments.size() > 0) {
                                                             switch (info.commands[g + 1].arguments[0]) {
                                                             case 0:
@@ -781,7 +812,55 @@ public:
                                                                 break;
                                                             }
                                                         }
-                                                        break;
+                                                        Texture const *tar = GetAt<Texture *>(globalParameters, 4);
+                                                        string tarAttributes;
+                                                        if (tar) { // local texture
+                                                            char texTag[5];
+                                                            Memory_Copy(texTag, tar->tag, 4);
+                                                            texTag[4] = '\0';
+                                                            string texName = texTag;
+                                                            string texSymbolName = "__EAGL::TAR:::tar_" + texName + "_";
+                                                            unsigned int samplerArgType = SamplerArgumentType::SamplerLocalPrivate;
+                                                            for (auto const &ts : symbols) {
+                                                                if (ts.name.starts_with(texSymbolName)) {
+                                                                    samplerArgType = SamplerArgumentType::SamplerLocalPublic;
+                                                                    break;
+                                                                }
+                                                            }
+                                                            shaderTextures[texTag] |= samplerArgType;
+                                                            if (info.commands[g + 1].arguments.size() > 0 && info.commands[g + 1].arguments[0] < 4)
+                                                                info.samplerArguments[info.commands[g + 1].arguments[0]] |= samplerArgType;
+                                                        }
+                                                        else { // global or runtime-constructed texture
+                                                            unsigned int tarOffset = unsigned int(At<Texture *>(globalParameters, 4)) - unsigned int(data);
+                                                            auto it2 = symbolRelocations.find(tarOffset);
+                                                            if (it2 != symbolRelocations.end()) {
+                                                                auto const &s = (*it2).second;
+                                                                if (s.name.length() > 14 && s.name.starts_with("__EAGL::TAR:::")) {
+                                                                    tarAttributes = s.name.substr(14);
+                                                                    string texName;
+                                                                    if (!tarAttributes.starts_with("RUNTIME_ALLOC"))
+                                                                        texName = tarAttributes;
+                                                                    else {
+                                                                        auto shapenamePos = tarAttributes.find("SHAPENAME=");
+                                                                        if (shapenamePos != string::npos) {
+                                                                            auto semiColonPos = tarAttributes.find_first_of(",;", shapenamePos + 10);
+                                                                            if (semiColonPos != string::npos)
+                                                                                texName = tarAttributes.substr(shapenamePos + 10, semiColonPos - shapenamePos - 10);
+                                                                            else
+                                                                                texName = tarAttributes.substr(shapenamePos + 10);
+                                                                        }
+                                                                    }
+                                                                    if (!texName.empty()) {
+                                                                        shaderTextures[texName] |= SamplerArgumentType::SamplerGlobal;
+                                                                        if (info.commands[g + 1].arguments.size() > 0 && info.commands[g + 1].arguments[0] < 4)
+                                                                            info.samplerArguments[info.commands[g + 1].arguments[0]] |= SamplerArgumentType::SamplerGlobal;
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                    break;
                                                     default:
                                                         {
                                                             auto rit = symbolRelocations.find(unsigned int(argDataPtr) - unsigned int(data));
@@ -845,6 +924,8 @@ public:
                                                                                 info.globalArguments[g].type = Shader::UVMatrix_Layer;
                                                                             else if (mname == "Coordinate4::ColourScale")
                                                                                 info.globalArguments[g].type = Shader::ColourScale;
+                                                                            else if (mname.length() >= 29 && mname.starts_with("Coordinate4::") && mname.ends_with("::InstanceColour"))
+                                                                                info.globalArguments[g].type = Shader::InstanceColour;
                                                                         }
                                                                         else {
                                                                             if (!memcmp(argData, vec0123, 16))
@@ -958,7 +1039,80 @@ public:
                         return false;
                     return a.files.size() > b.files.size();
                 });
-
+                vector<string> samplersLocalPublic;
+                vector<string> samplersLocalPrivate;
+                vector<string> samplersLocalPublicAndPrivate;
+                vector<string> samplersLocalPublicAndGlobal;
+                vector<string> samplersLocalPrivateAndGlobal;
+                vector<string> samplersLocalPublicAndPrivateAndGlobal;
+                for (auto const &[texName, type] : shaderTextures) {
+                    if (type == (SamplerArgumentType::SamplerLocalPublic))
+                        samplersLocalPublic.push_back(texName);
+                    else if (type == (SamplerArgumentType::SamplerLocalPrivate))
+                        samplersLocalPrivate.push_back(texName);
+                    else if (type == (SamplerArgumentType::SamplerLocalPublic | SamplerArgumentType::SamplerLocalPrivate))
+                        samplersLocalPublicAndPrivate.push_back(texName);
+                    else if (type == (SamplerArgumentType::SamplerLocalPublic | SamplerArgumentType::SamplerGlobal))
+                        samplersLocalPublicAndGlobal.push_back(texName);
+                    else if (type == (SamplerArgumentType::SamplerLocalPrivate | SamplerArgumentType::SamplerGlobal))
+                        samplersLocalPrivateAndGlobal.push_back(texName);
+                    else if (type == (SamplerArgumentType::SamplerLocalPublic | SamplerArgumentType::SamplerLocalPrivate | SamplerArgumentType::SamplerGlobal))
+                        samplersLocalPublicAndPrivateAndGlobal.push_back(texName);
+                }
+                if (!samplersLocalPublic.empty()) {
+                    fputs("// local public samplers: ", out);
+                    for (unsigned int n = 0; n < samplersLocalPublic.size(); n++) {
+                        if (n != 0)
+                            fputs(", ", out);
+                        fputs(("\"" + samplersLocalPublic[n] + "\"").c_str(), out);
+                    }
+                    fputs("\n", out);
+                }
+                if (!samplersLocalPrivate.empty()) {
+                    fputs("// local private samplers: ", out);
+                    for (unsigned int n = 0; n < samplersLocalPrivate.size(); n++) {
+                        if (n != 0)
+                            fputs(", ", out);
+                        fputs(("\"" + samplersLocalPrivate[n] + "\"").c_str(), out);
+                    }
+                    fputs("\n", out);
+                }
+                if (!samplersLocalPublicAndPrivate.empty()) {
+                    fputs("// local public/private samplers: ", out);
+                    for (unsigned int n = 0; n < samplersLocalPublicAndPrivate.size(); n++) {
+                        if (n != 0)
+                            fputs(", ", out);
+                        fputs(("\"" + samplersLocalPublicAndPrivate[n] + "\"").c_str(), out);
+                    }
+                    fputs("\n", out);
+                }
+                if (!samplersLocalPublicAndGlobal.empty()) {
+                    fputs("// local public/global samplers: ", out);
+                    for (unsigned int n = 0; n < samplersLocalPublicAndGlobal.size(); n++) {
+                        if (n != 0)
+                            fputs(", ", out);
+                        fputs(("\"" + samplersLocalPublicAndGlobal[n] + "\"").c_str(), out);
+                    }
+                    fputs("\n", out);
+                }
+                if (!samplersLocalPrivateAndGlobal.empty()) {
+                    fputs("// local private/global samplers: ", out);
+                    for (unsigned int n = 0; n < samplersLocalPrivateAndGlobal.size(); n++) {
+                        if (n != 0)
+                            fputs(", ", out);
+                        fputs(("\"" + samplersLocalPrivateAndGlobal[n] + "\"").c_str(), out);
+                    }
+                    fputs("\n", out);
+                }
+                if (!samplersLocalPublicAndPrivateAndGlobal.empty()) {
+                    fputs("// local public/private/global samplers: ", out);
+                    for (unsigned int n = 0; n < samplersLocalPublicAndPrivateAndGlobal.size(); n++) {
+                        if (n != 0)
+                            fputs(", ", out);
+                        fputs(("\"" + samplersLocalPublicAndPrivateAndGlobal[n] + "\"").c_str(), out);
+                    }
+                    fputs("\n", out);
+                }
                 fprintf(out, "Shader %s[%d] = {\n", targetName.c_str(), shaders.size());
                 string lastShaderName;
                 unsigned int nameCounter = 1;
@@ -1098,8 +1252,6 @@ public:
                     if (!s.globalArguments.empty() && s.numTechniques > 0) {
                         for (unsigned int gi = 0; gi < s.globalArguments.size(); gi++) {
                             auto const &g = s.globalArguments[gi];
-                            if (gi != 0)
-                                fputs(",\n", out);
                             fputs("    ", out);
                             if (!g.format.empty())
                                 fputs("{ ", out);
@@ -1113,6 +1265,43 @@ public:
                                 fputs(g.format.c_str(), out);
                                 fputs("\" }", out);
                             }
+                            int samplerIndex = -1;
+                            if (astr.starts_with("Shader::Sampler")) {
+                                if (astr.ends_with("0"))
+                                    samplerIndex = 0;
+                                else if (astr.ends_with("1"))
+                                    samplerIndex = 1;
+                                else if (astr.ends_with("2"))
+                                    samplerIndex = 2;
+                                else if (astr.ends_with("3"))
+                                    samplerIndex = 3;
+                            }
+                            if (samplerIndex >= 0 && samplerIndex <= 3) {
+                                unsigned int type = s.samplerArguments[samplerIndex];
+                                if (type == SamplerArgumentType::SamplerLocalPublic || type == SamplerArgumentType::SamplerLocalPrivate || type == (SamplerArgumentType::SamplerLocalPublic | SamplerArgumentType::SamplerLocalPrivate))
+                                    fputs("Local", out);
+                            }
+                            if (gi != (s.globalArguments.size() - 1))
+                                fputs(",", out);
+                            if (samplerIndex >= 0 && samplerIndex <= 3) {
+                                unsigned int type = s.samplerArguments[samplerIndex];
+                                if (type == (SamplerArgumentType::SamplerGlobal))
+                                    fputs(" // global", out);
+                                else if (type == (SamplerArgumentType::SamplerLocalPublic))
+                                    fputs(" // local public", out);
+                                else if (type == (SamplerArgumentType::SamplerLocalPrivate))
+                                    fputs(" // local private", out);
+                                else if (type == (SamplerArgumentType::SamplerLocalPublic | SamplerArgumentType::SamplerLocalPrivate))
+                                    fputs(" // local public/private", out);
+                                else if (type == (SamplerArgumentType::SamplerLocalPublic | SamplerArgumentType::SamplerGlobal))
+                                    fputs(" // local public/global", out);
+                                else if (type == (SamplerArgumentType::SamplerLocalPrivate | SamplerArgumentType::SamplerGlobal))
+                                    fputs(" // local private/global", out);
+                                else if (type == (SamplerArgumentType::SamplerLocalPublic | SamplerArgumentType::SamplerLocalPrivate | SamplerArgumentType::SamplerGlobal))
+                                    fputs(" // local public/private/global", out);
+                            }
+                            if (gi != (s.globalArguments.size() - 1))
+                                fputs("\n", out);
                         }
                     }
                     fputs("\n    }\n", out);

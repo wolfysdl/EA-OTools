@@ -64,6 +64,10 @@ struct Shader {
         Sampler1,
         Sampler2,
         Sampler3,
+        Sampler0Local,
+        Sampler1Local,
+        Sampler2Local,
+        Sampler3Local,
         Sampler0Size,
         Sampler1Size,
         Sampler2Size,
@@ -132,7 +136,16 @@ struct Shader {
         Contrast,
         Vec40200000Local,
         UVOffset_Layer,
-        UVMatrix_Layer
+        UVMatrix_Layer,
+        CrowdState,
+        LineNoDepthWriteState,
+        GlowerState,
+        InstanceColour,
+        FlagLightBlock,
+        GlobalDiffuse,
+        TextureProjectionMatrix,
+        LocalLightDirection,
+        ProjectiveShadow2State
     };
 
     struct Command {
