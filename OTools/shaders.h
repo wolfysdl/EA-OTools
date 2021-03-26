@@ -127,7 +127,12 @@ struct Shader {
         UVOffset,
         UVMatrix,
         ColourScale,
-        ColourScaleFactor
+        ColourScaleFactor,
+        EyeVector,
+        Contrast,
+        Vec40200000Local,
+        UVOffset_Layer,
+        UVMatrix_Layer
     };
 
     struct Command {

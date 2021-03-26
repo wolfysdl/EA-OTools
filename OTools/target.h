@@ -204,3 +204,26 @@ class TargetNHL04 : public Target {
     Shader *DecideShader(MaterialProperties const &properties);
 };
 
+class TargetRUGBY2005 : public Target {
+    char const *Name();
+    int Version();
+    Shader *Shaders();
+    unsigned int NumShaders();
+    Shader *DecideShader(MaterialProperties const &properties);
+};
+
+class TargetRUGBY06 : public Target {
+    char const *Name();
+    int Version();
+    Shader *Shaders();
+    unsigned int NumShaders();
+    Shader *DecideShader(MaterialProperties const &properties);
+};
+
+class TargetRUGBY08 : public Target {
+    char const *Name();
+    int Version();
+    Shader *Shaders();
+    unsigned int NumShaders();
+    Shader *DecideShader(MaterialProperties const &properties);
+};

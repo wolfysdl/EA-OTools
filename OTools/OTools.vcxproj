@@ -116,6 +116,9 @@
     <ClCompile Include="target_fm06.cpp" />
     <ClCompile Include="target_fm13.cpp" />
     <ClCompile Include="target_nhl04.cpp" />
+    <ClCompile Include="target_rugby06.cpp" />
+    <ClCompile Include="target_rugby08.cpp" />
+    <ClCompile Include="target_rugby2005.cpp" />
     <ClCompile Include="target_tcm05.cpp" />
     <ClCompile Include="target_wc06.cpp" />
     <ClCompile Include="utils.cpp" />

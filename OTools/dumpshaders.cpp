@@ -5,7 +5,8 @@
 
 struct ShaderInfo : public Shader {
     set<string> files;
-    unsigned int debugVertexSize;
+    unsigned int numFiles = 0;
+    unsigned int debugVertexSize = 0;
 };
 
 bool operator==(ShaderInfo const &a, ShaderInfo const &b) {
@@ -154,6 +155,11 @@ string GetShaderAttributeName(int attr) {
     case Shader::UVMatrix:                  return "Shader::UVMatrix";
     case Shader::ColourScale:               return "Shader::ColourScale";
     case Shader::ColourScaleFactor:         return "Shader::ColourScaleFactor";
+    case Shader::EyeVector:                 return "Shader::EyeVector";
+    case Shader::Contrast:                  return "Shader::Contrast";
+    case Shader::Vec40200000Local:          return "Shader::Vec40200000Local";
+    case Shader::UVOffset_Layer:            return "Shader::UVOffset_Layer";
+    case Shader::UVMatrix_Layer:            return "Shader::UVMatrix_Layer";
     }
     return string();
 }
@@ -201,7 +207,9 @@ int GetShaderAttributeFromSymbolName(string const &symbolName) {
         { "__COORD4:::Hbs::Render::Fresnel", Shader::Fresnel },
         { "__COORD4:::gpIrradiance", Shader::Irradiance },
         { "__COORD4:::gpFaceIrradiance", Shader::FaceIrradiance },
-        { "__COORD4:::ColourScaleFactor", Shader::ColourScaleFactor }
+        { "__COORD4:::ColourScaleFactor", Shader::ColourScaleFactor },
+        { "__COORD4:::Hbs::Render::EyeVector", Shader::EyeVector },
+        { "__COORD4:::Hbs::Render::MowPattern::Contrast", Shader::Contrast }
     };
     auto it = attrMap.find(symbolName);
     if (it != attrMap.end())
@@ -556,6 +564,7 @@ public:
                 static unsigned int vec0505051[4] = { 0x3EFEFF00, 0x3EFEFF00, 0x3EFEFF00, 0x3F800000 };
                 static unsigned int vec3E30B0B1[4] = { 0x3E30B0B1, 0x3E30B0B1, 0x3E30B0B1, 0x3E30B0B1};
                 static unsigned int vec3DA0A0A1[4] = { 0x3DA0A0A1, 0x3DA0A0A1, 0x3DA0A0A1, 0x3DA0A0A1 };
+                static unsigned int vec40200000[4] = { 0x40200000, 0x40A00000, 0x3F000000, 0x3F800000 };
                 map<void const *, ModifiableData const *> modifiables;
                 for (unsigned int m = 0; m < model->mNumModifiableDatas; m++)
                     modifiables[model->mModifiableData[m].mEntries] = &model->mModifiableData[m];
@@ -828,8 +837,12 @@ public:
                                                                                 info.globalArguments[g].type = Shader::LightMultipliers;
                                                                             else if (mname == "Coordinate4::UVOffset")
                                                                                 info.globalArguments[g].type = Shader::UVOffset;
-                                                                            else if (mname == "Matrix::UVMatrix")
+                                                                            else if (mname == "Coordinate4::UVMatrix")
                                                                                 info.globalArguments[g].type = Shader::UVMatrix;
+                                                                            else if (mname.ends_with("::UVOffset"))
+                                                                                info.globalArguments[g].type = Shader::UVOffset_Layer;
+                                                                            else if (mname.ends_with("::UVMatrix"))
+                                                                                info.globalArguments[g].type = Shader::UVMatrix_Layer;
                                                                             else if (mname == "Coordinate4::ColourScale")
                                                                                 info.globalArguments[g].type = Shader::ColourScale;
                                                                         }
@@ -854,6 +867,10 @@ public:
                                                                                 else if (!memcmp(argData, vec3DA0A0A1, 16))
                                                                                     info.globalArguments[g].type = Shader::Vec3DA0A0A1Local;
                                                                             }
+                                                                            else if (shaderName == "MowPattern") {
+                                                                                if (!memcmp(argData, vec40200000, 16))
+                                                                                    info.globalArguments[g].type = Shader::Vec40200000Local;
+                                                                            }
                                                                         }
                                                                     }
                                                                 }
@@ -869,6 +886,7 @@ public:
                                         for (auto &si : shaders) {
                                             if (si == info) {
                                                 si.files.insert(filename);
+                                                si.numFiles += 1;
                                                 found = true;
                                                 break;
                                             }
@@ -877,6 +895,7 @@ public:
                                             info.numTechniques = shader.first;
                                             info.declaration = shader.second;
                                             info.files.insert(filename);
+                                            info.numFiles = 1;
                                             info.Update(false);
                                             shaders.push_back(info);
                                         }
@@ -976,7 +995,7 @@ public:
                     fputs("\n", out);
                     if (s.debugVertexSize != s.VertexSize())
                         fprintf(out, "    // NOTE: vertex size mismatch (%d calculated, %d in code)", s.VertexSize(), s.debugVertexSize);
-                    fputs("    // in files: ", out);
+                    fprintf(out, "    // in files (%d): ", s.numFiles);
                     bool first = true;
                     for (auto const &f : s.files) {
                         if (first)

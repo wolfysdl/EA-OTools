@@ -866,6 +866,7 @@ void oimport(path const &out, path const &in) {
     Vector4D_int vec0505051 = { 0x3EFEFF00, 0x3EFEFF00, 0x3EFEFF00, 0x3F800000 };
     Vector4D_int vec3E30B0B1 = { 0x3E30B0B1, 0x3E30B0B1, 0x3E30B0B1, 0x3E30B0B1 };
     Vector4D_int vec3DA0A0A1 = { 0x3DA0A0A1, 0x3DA0A0A1, 0x3DA0A0A1, 0x3DA0A0A1 };
+    Vector4D_int vec40200000 = { 0x40200000, 0x40A00000, 0x3F000000, 0x3F800000 };
 
     bool flipAxis = options().swapYZ;
     bool doTranslate = options().translate.x != 0 || options().translate.y != 0 || options().translate.z != 0;
@@ -1762,6 +1763,11 @@ void oimport(path const &out, path const &in) {
                         bufData.Put(vec3DA0A0A1);
                         bufData.Put(ZERO);
                         break;
+                    case Shader::Vec40200000Local:
+                        globalArgs.emplace_back(bufData.Position());
+                        bufData.Put(vec40200000);
+                        bufData.Put(ZERO);
+                        break;
                     case Shader::EnvmapColour:
                         globalArgs.emplace_back("__COORD4:::EnvmapColour");
                         break;
@@ -1879,6 +1885,12 @@ void oimport(path const &out, path const &in) {
                     case Shader::ColourScaleFactor:
                         globalArgs.emplace_back("__COORD4:::ColourScaleFactor");
                         break;
+                    case Shader::EyeVector:
+                        globalArgs.emplace_back("__COORD4:::Hbs::Render::EyeVector");
+                        break;
+                    case Shader::Contrast:
+                        globalArgs.emplace_back("__COORD4:::Hbs::Render::MowPattern::Contrast");
+                        break;
                     case Shader::UVOffset0:
                     {
                         Vector4D uvOffset0;
@@ -1964,7 +1976,7 @@ void oimport(path const &out, path const &in) {
                     case Shader::UVMatrix:
                     {
                         Matrix4x4 uvMatrix;
-                        SetAt<unsigned int>(&uvMatrix, 0, 0x01000000);
+                        //SetAt<unsigned int>(&uvMatrix, 0, 0x01000000);
                         globalArgs.emplace_back(modifiables.GetArg("Matrix::UVMatrix", bufData, uvMatrix, true, false));
                     }
                     break;
@@ -1972,6 +1984,18 @@ void oimport(path const &out, path const &in) {
                     {
                         Vector4D_int colourScale = { -1, -1, -1, -1 };
                         globalArgs.emplace_back(modifiables.GetArg("Coordinate4::ColourScale", bufData, colourScale, true, false));
+                    }
+                    break;
+                    case Shader::UVOffset_Layer:
+                    {
+                        Vector4D uvOffset;
+                        globalArgs.emplace_back(modifiables.GetArg("Coordinate4::" + n.name + "::UVOffset", bufData, uvOffset, true, false));
+                    }
+                    break;
+                    case Shader::UVMatrix_Layer:
+                    {
+                        Matrix4x4 uvMatrix;
+                        globalArgs.emplace_back(modifiables.GetArg("Matrix::" + n.name + "::UVMatrix", bufData, uvMatrix, true, false));
                     }
                     break;
                     }

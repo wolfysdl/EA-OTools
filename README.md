@@ -28,6 +28,8 @@ The file may contain model data, skeleton information, animations, rendering inf
 
 ✅ FIFA Manager series (Total Club Manager 2004 ... FIFA Manager 14)
 
+✅ Rugby series (Rugby 2005 ... Rugby 08)
+
 🟡 Cricket series (only Cricker 07; game-specific features are not implemented)
 
 🟡 NHL series (only NHL 2004; some game-specific features are not implemented)
@@ -35,8 +37,6 @@ The file may contain model data, skeleton information, animations, rendering inf
 ❌ NBA series
 
 ❌ MLB series
-
-❌ Rugby series
 
 ❌ Need For Speed series
 
@@ -91,7 +91,7 @@ Possible operations:
 
 Additional options:
 
-`-game <gameId>` - set the source/target game. Currently implemented games are: `fifa2003`, `fifa2004`, `fifa2005`, `fifa06`, `fifa07`, `fifa08`, `fifa09`, `fifa10`, `euro2004`, `euro2008`, `wc2006`, `cl0405`, `cl0607`, `fm13`, `cricket07`, `nhl04`
+`-game <gameId>` - set the source/target game. Currently implemented games are: `fifa2003`, `fifa2004`, `fifa2005`, `fifa06`, `fifa07`, `fifa08`, `fifa09`, `fifa10`, `euro2004`, `euro2008`, `wc2006`, `cl0405`, `cl0607`, `fm13`, `fm08`, `fm07`, `fm06`, `tcm2005`, `tcm2004`, `cricket07`, `nhl04`, `rugby2005`, `rugby06`, `rugby08`
 
 `-o <output path>` - output filename (for single file as input) or output folder (for folder as input)
 

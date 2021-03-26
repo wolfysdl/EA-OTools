@@ -97,6 +97,9 @@
     <ClCompile Include="target_tcm05.cpp" />
     <ClCompile Include="target_fm06.cpp" />
     <ClCompile Include="alignfile.cpp" />
+    <ClCompile Include="target_rugby06.cpp" />
+    <ClCompile Include="target_rugby08.cpp" />
+    <ClCompile Include="target_rugby2005.cpp" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="NvTriStrip">
