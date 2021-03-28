@@ -1508,6 +1508,10 @@ int TargetCRICKET07::Version() {
     return 4;
 }
 
+unsigned short TargetCRICKET07::AnimVersion() {
+    return 0x0181;
+}
+
 Shader *TargetCRICKET07::Shaders() {
     return shaders_CRICKET07;
 }

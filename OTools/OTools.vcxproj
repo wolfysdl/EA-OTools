@@ -107,6 +107,7 @@
     <ClCompile Include="target.cpp" />
     <ClCompile Include="target_cl0405.cpp" />
     <ClCompile Include="target_cricket07.cpp" />
+    <ClCompile Include="target_cricket2005.cpp" />
     <ClCompile Include="target_euro04.cpp" />
     <ClCompile Include="target_fifa03.cpp" />
     <ClCompile Include="target_fifa04.cpp" />

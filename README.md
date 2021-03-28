@@ -28,11 +28,11 @@ The file may contain model data, skeleton information, animations, rendering inf
 
 ✅ FIFA Manager series (Total Club Manager 2004 ... FIFA Manager 14)
 
+✅ Cricket series (Cricket 2005, Cricker 07)
+
 ✅ Rugby series (Rugby 2005 ... Rugby 08)
 
 ✅ MVP series (MVP Baseball 2003 ... MVP Baseball 2005)
-
-🟡 Cricket series (only Cricker 07; game-specific features are not implemented)
 
 🟡 NHL series (only NHL 2004; some game-specific features are not implemented)
 

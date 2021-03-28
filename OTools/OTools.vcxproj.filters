@@ -103,6 +103,7 @@
     <ClCompile Include="target_mvp2005.cpp" />
     <ClCompile Include="target_mvp2004.cpp" />
     <ClCompile Include="target_mvp2003.cpp" />
+    <ClCompile Include="target_cricket2005.cpp" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="NvTriStrip">

@@ -781,6 +781,20 @@ unsigned int WriteVertexBuffer(void *baseObj, string const &name, unsigned char 
     unsigned int numVertices = GetAt<unsigned int>(baseObj, 28);
     unsigned int vertexSize = GetAt<unsigned int>(baseObj, 8);
     Writer::writeLine(to_string(numVertices) + " vertices (vertex stride " + to_string(vertexSize) + " bytes) [...]");
+    // TODO: remove this
+    unsigned char *vb = At<unsigned char>(currentData, GetAt<unsigned int>(baseObj, 24));
+    for (unsigned int i = 0; i < numVertices; i++) {
+        aiVector3D *pos = (aiVector3D *)vb;
+        unsigned char *clr1 = vb + 12;
+        aiVector3D *nrm = (aiVector3D *)(vb + 16);
+        unsigned char *clr0 = vb + 28;
+        float *txc = (float *)(vb + 32);
+        //{ Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color1 }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 }
+        Writer::writeLine(Format("%.4f %.4f %.4f n %.4f %.4f %.4f t %.4f %.4f c0 %d %d %d %d c1 %d %d %d %d", pos->x, pos->y, pos->z, nrm->x, nrm->y, nrm->z, txc[0], txc[1], 
+            clr0[0], clr0[1], clr0[2], clr0[3], clr1[0], clr1[1], clr1[2], clr1[3]));
+        vb += vertexSize;
+    }
+    //
     Writer::closeScope();
     return numVertices * vertexSize;
 }
@@ -1099,6 +1113,10 @@ void AnalyzeFile(string const &filename, unsigned char *fileData, unsigned int f
     auto WriteUnknown = [&](unsigned int endOffset) {
         if (previousStructEnd == -1)
             previousStructEnd = 0;
+        if (previousStructEnd > endOffset) {
+            return;
+            Error("previousStructEnd (%X) > endOffset (%X)", previousStructEnd, endOffset);
+        }
         unsigned int size = endOffset - previousStructEnd;
         Writer::openScope("Unknown [" + Format("%u", size) + "]", previousStructEnd); // TODO: write references
         string ary;

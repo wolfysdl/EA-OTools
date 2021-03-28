@@ -190,6 +190,16 @@ class TargetFM13 : public Target {
 class TargetCRICKET07 : public Target {
     char const *Name();
     int Version();
+    unsigned short AnimVersion();
+    Shader *Shaders();
+    unsigned int NumShaders();
+    Shader *DecideShader(MaterialProperties const &properties);
+};
+
+class TargetCRICKET2005 : public Target {
+    char const *Name();
+    int Version();
+    unsigned short AnimVersion();
     Shader *Shaders();
     unsigned int NumShaders();
     Shader *DecideShader(MaterialProperties const &properties);

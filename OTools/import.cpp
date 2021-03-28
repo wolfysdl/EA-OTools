@@ -905,7 +905,7 @@ void oimport(path const &out, path const &in) {
         numVariations = options().instances;
     unsigned short computationIndex = 2;
     if (options().computationIndex != -1)
-        numVariations = unsigned short(options().computationIndex);
+        computationIndex = unsigned short(options().computationIndex);
     vector<Node> nodes;
     map<string, BoneInfo> bones; // name -> [index, aiBone]
     map<string, Tex> textures;
@@ -1942,7 +1942,10 @@ void oimport(path const &out, path const &in) {
                     case Shader::RuntimeGeoPrimState:
                     case Shader::RuntimeGeoPrimState2:
                     {
-                        string geoPrimStateFormat = "__EAGL::GeoPrimState:::RUNTIME_ALLOC::UID=" + to_string(uid) + ";" + arg.format + "SetPrimitiveType=EAGL::" + (options().tristrip ? "PT_TRIANGLESTRIP" : "PT_TRIANGLELIST");
+                        string fmt = arg.format;
+                        if (!fmt.ends_with(';'))
+                            fmt += ";";
+                        string geoPrimStateFormat = "__EAGL::GeoPrimState:::RUNTIME_ALLOC::UID=" + to_string(uid) + ";" + fmt + "SetPrimitiveType=EAGL::" + (options().tristrip ? "PT_TRIANGLESTRIP" : "PT_TRIANGLELIST");
                         globalArgs.emplace_back(modifiables.GetArg((arg.type == Shader::RuntimeGeoPrimState ? "GeoPrimState::State" : "State::GeoPrimState"), geoPrimStateFormat, sizeof(GeoPrimState)));
                     }
                     break;
@@ -1990,10 +1993,16 @@ void oimport(path const &out, path const &in) {
                                     bufData.Align(16);
                                     tex[s].offset = bufData.Position();
                                     globalArgs.emplace_back(bufData.Position(), 1);
-                                    symbols.emplace_back("__EAGL::TAR:::tar_" + tex[s].name + "_" + to_string(Hash(modelName + "_" + tex[s].name)), bufData.Position());
                                     TAR tar;
                                     strncpy(tar.tag, tex[s].name.c_str(), 4);
-                                    bufData.Put(tar);
+                                    string tarSymbolName = "__EAGL::TAR:::tar_" + tex[s].name + "_" + to_string(Hash(modelName + "_" + tex[s].name));
+                                    for (unsigned int iv = 0; iv < numVariations; iv++) {
+                                        if (iv == 0)
+                                            symbols.emplace_back(tarSymbolName, bufData.Position());
+                                        else
+                                            symbols.emplace_back(tarSymbolName + "_" + to_string(iv + 1), bufData.Position());
+                                        bufData.Put(tar);
+                                    }
                                 }
                                 textures[ToLower(tex[s].name)] = tex[s];
                             }
@@ -2196,7 +2205,18 @@ void oimport(path const &out, path const &in) {
             bufData.Align(16);
             // bones
             for (auto const &b : vecBones) {
-                symbols.emplace_back("__Bone:::" + modelName + "." + b.name, bufData.Position());
+                string boneSymbolName;
+                if (!globalVars().customBones.empty())
+                    boneSymbolName = "__Bone:::" + b.name;
+                else if (targetName.starts_with("MVP")) {
+                    if (!b.name.starts_with("FBXdummyNode."))
+                        boneSymbolName = "__Bone:::FBXdummyNode." + b.name;
+                    else
+                        boneSymbolName = "__Bone:::" + b.name;
+                }
+                else
+                    boneSymbolName = "__Bone:::" + modelName + "." + b.name;
+                symbols.emplace_back(boneSymbolName, bufData.Position());
                 bufData.Put(unsigned int(b.index));
                 bufData.Put(ZERO);
                 bufData.Put(ZERO);
@@ -2213,6 +2233,10 @@ void oimport(path const &out, path const &in) {
                 else if (ANIM_VERSION == 0x0504) {
                     bufData.Put(unsigned short(660));
                     bufData.Put(unsigned short(ZERO));
+                }
+                else if (ANIM_VERSION == 0x0181) {
+                    bufData.Put(unsigned short(520));
+                    bufData.Put(unsigned short(ANIM_VERSION));
                 }
                 else {
                     bufData.Put(unsigned short(510));

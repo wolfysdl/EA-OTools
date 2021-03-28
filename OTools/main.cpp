@@ -7,8 +7,8 @@
 #include <sstream>
 #include <iostream>
 
-const char *OTOOLS_VERSION = "0.171";
-const unsigned int OTOOLS_VERSION_INT = 171;
+const char *OTOOLS_VERSION = "0.172";
+const unsigned int OTOOLS_VERSION_INT = 172;
 
 GlobalOptions &options() {
     static GlobalOptions go;
@@ -144,6 +144,14 @@ int main(int argc, char *argv[]) {
         static TargetTCM05 defaultTCMTarget;
         globalVars().target = &defaultTCMTarget;
     }
+    else if (game == "rugby") {
+        static TargetRUGBY08 defaultRugbyTarget;
+        globalVars().target = &defaultRugbyTarget;
+    }
+    else if (game == "mvp") {
+        static TargetMVP2005 defaultMVPTarget;
+        globalVars().target = &defaultMVPTarget;
+    }
     else if (game == "fm13") {
         static TargetFM13 targetFM13;
         globalVars().target = &targetFM13;
@@ -223,6 +231,10 @@ int main(int argc, char *argv[]) {
     else if (game == "cricket07") {
         static TargetCRICKET07 targetCRICKET07;
         globalVars().target = &targetCRICKET07;
+    }
+    else if (game == "cricket2005" || game == "cricket05") {
+        static TargetCRICKET2005 targetCRICKET2005;
+        globalVars().target = &targetCRICKET2005;
     }
     else if (game == "nhl04" || game == "nhl2004") {
         static TargetNHL04 targetNHL04;
