@@ -782,18 +782,18 @@ unsigned int WriteVertexBuffer(void *baseObj, string const &name, unsigned char 
     unsigned int vertexSize = GetAt<unsigned int>(baseObj, 8);
     Writer::writeLine(to_string(numVertices) + " vertices (vertex stride " + to_string(vertexSize) + " bytes) [...]");
     // TODO: remove this
-    unsigned char *vb = At<unsigned char>(currentData, GetAt<unsigned int>(baseObj, 24));
-    for (unsigned int i = 0; i < numVertices; i++) {
-        aiVector3D *pos = (aiVector3D *)vb;
-        unsigned char *clr1 = vb + 12;
-        aiVector3D *nrm = (aiVector3D *)(vb + 16);
-        unsigned char *clr0 = vb + 28;
-        float *txc = (float *)(vb + 32);
-        //{ Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color1 }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 }
-        Writer::writeLine(Format("%.4f %.4f %.4f n %.4f %.4f %.4f t %.4f %.4f c0 %d %d %d %d c1 %d %d %d %d", pos->x, pos->y, pos->z, nrm->x, nrm->y, nrm->z, txc[0], txc[1], 
-            clr0[0], clr0[1], clr0[2], clr0[3], clr1[0], clr1[1], clr1[2], clr1[3]));
-        vb += vertexSize;
-    }
+    //unsigned char *vb = At<unsigned char>(currentData, GetAt<unsigned int>(baseObj, 24));
+    //for (unsigned int i = 0; i < numVertices; i++) {
+    //    aiVector3D *pos = (aiVector3D *)vb;
+    //    unsigned char *clr1 = vb + 12;
+    //    aiVector3D *nrm = (aiVector3D *)(vb + 16);
+    //    unsigned char *clr0 = vb + 28;
+    //    float *txc = (float *)(vb + 32);
+    //    //{ Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color1 }, { Shader::Float3, Shader::Normal }, { Shader::D3DColor, Shader::Color0 }, { Shader::Float2, Shader::Texcoord0 }
+    //    Writer::writeLine(Format("%.4f %.4f %.4f n %.4f %.4f %.4f t %.4f %.4f c0 %d %d %d %d c1 %d %d %d %d", pos->x, pos->y, pos->z, nrm->x, nrm->y, nrm->z, txc[0], txc[1], 
+    //        clr0[0], clr0[1], clr0[2], clr0[3], clr1[0], clr1[1], clr1[2], clr1[3]));
+    //    vb += vertexSize;
+    //}
     //
     Writer::closeScope();
     return numVertices * vertexSize;
@@ -813,17 +813,17 @@ unsigned int WriteBoneWeightsBuffer(void *baseObj, string const &name, unsigned 
     struct boneweight { union boneref { float weight; unsigned char boneIndex; }; boneref bones[4]; };
     boneweight *weights = At<boneweight>(currentData, GetAt<unsigned int>(baseObj, 4));
     Writer::writeLine(to_string(numBoneWeights) + " bone weights [...]");
-    for (unsigned int i = 0; i < numBoneWeights; i++) {
-        string line;
-        for (unsigned int b = 0; b < 4; b++) {
-            float weight = weights[i].bones[b].weight;
-            *(unsigned char *)(&weight) = 0;
-            line += Format("bone %2d %.4f", weights[i].bones[b].boneIndex, weight);
-            if (b != 3)
-                line += "   ";
-        }
-        Writer::writeLine(line);
-    }
+    //for (unsigned int i = 0; i < numBoneWeights; i++) {
+    //    string line;
+    //    for (unsigned int b = 0; b < 4; b++) {
+    //        float weight = weights[i].bones[b].weight;
+    //        *(unsigned char *)(&weight) = 0;
+    //        line += Format("bone %2d %.4f", weights[i].bones[b].boneIndex, weight);
+    //        if (b != 3)
+    //            line += "   ";
+    //    }
+    //    Writer::writeLine(line);
+    //}
     Writer::closeScope();
     return numBoneWeights * 16;
 }
