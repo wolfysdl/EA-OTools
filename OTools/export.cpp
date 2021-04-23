@@ -237,6 +237,52 @@ class exporter {
         vector<unsigned short> triIndexBuffer;
         vector<unsigned short> edgeIndexBuffer;
     };
+
+    template<typename T>
+    static void convert_index_buffer_trilist(void *src_ib, void *dst_ib, unsigned int numIndices, unsigned int &indexCounter) {
+        T *src = (T *)src_ib;
+        T *dst = (T *)dst_ib;
+        for (unsigned int f = 0; f < (numIndices / 3); f++) {
+            dst[indexCounter + 0] = src[f * 3 + 0];
+            dst[indexCounter + 2] = src[f * 3 + 1];
+            dst[indexCounter + 1] = src[f * 3 + 2];
+            if (dst[indexCounter + 0] != dst[indexCounter + 1] && dst[indexCounter + 0] != dst[indexCounter + 2])
+                indexCounter += 3;
+        }
+    }
+
+    template<typename T>
+    static void convert_index_buffer_tristrip(void *src_ib, void *dst_ib, unsigned int numIndices, unsigned int &indexCounter) {
+        T *src = (T *)src_ib;
+        T *dst = (T *)dst_ib;
+        for (unsigned int ind = 0; ind < (numIndices - 2); ind++) {
+            if (ind % 2 == 0) {
+                dst[indexCounter + 0] = src[ind + 0];
+                dst[indexCounter + 2] = src[ind + 1];
+                dst[indexCounter + 1] = src[ind + 2];
+            }
+            else {
+                dst[indexCounter + 0] = src[ind + 0];
+                dst[indexCounter + 2] = src[ind + 2];
+                dst[indexCounter + 1] = src[ind + 1];
+            }
+            if (dst[indexCounter + 0] != dst[indexCounter + 1] && dst[indexCounter + 0] != dst[indexCounter + 2])
+                indexCounter += 3;
+        }
+    }
+
+    template<typename T>
+    static void convert_index_buffer_trifan(void *src_ib, void *dst_ib, unsigned int numIndices, unsigned int &indexCounter) {
+        T *src = (T *)src_ib;
+        T *dst = (T *)dst_ib;
+        for (unsigned int ind = 0; ind < (numIndices - 2); ind++) {
+            dst[indexCounter + 0] = src[0];
+            dst[indexCounter + 2] = src[ind + 1];
+            dst[indexCounter + 1] = src[ind + 2];
+            if (dst[indexCounter + 0] != dst[indexCounter + 1] && dst[indexCounter + 0] != dst[indexCounter + 2])
+                indexCounter += 3;
+        }
+    }
 public:
     void convert_o_to_gltf(unsigned char *fileData, unsigned int fileDataSize, path const &outPath, path const &inPath) {
 
@@ -411,6 +457,7 @@ public:
         vector<Prop> effects;
         vector<Buffer> colBuffers;
         vector<CollisionGeometry> colGeometries;
+        vector<vector<unsigned char>> convertedIBs;
 
         for (auto const &s : symbols) {
             if (isSymbolDataPresent(s)) {
@@ -1321,19 +1368,48 @@ public:
                                 }
                             }
                             j.openScope();
+                            auto &convertedIB = convertedIBs.emplace_back();
+                            unsigned int indexCounter = 0;
                             if ((geoPrimMode == 4 || geoPrimMode == 5 || geoPrimMode == 6) && numIndices < 3) {
                                 static vector<unsigned char> dummyVB;
-                                static vector<unsigned char> dummyIB;
                                 unsigned int newIBSize = indexSize * 3;
                                 if (dummyVB.size() < vertexSize)
                                     dummyVB.resize(vertexSize, 0);
-                                if (dummyIB.size() < newIBSize)
-                                    dummyIB.resize(newIBSize, 0);
+                                convertedIB.resize(newIBSize, 0);
                                 vertexBuffer = dummyVB.data();
-                                indexBuffer = dummyIB.data();
                                 numVertices = 1;
-                                numIndices = 3;
+                                indexCounter = 3;
                             }
+                            else if (geoPrimMode == 4) {
+                                convertedIB.resize(numIndices * indexSize, 0);
+                                if (indexSize == 1)
+                                    convert_index_buffer_trilist<unsigned char>(indexBuffer, convertedIB.data(), numIndices, indexCounter);
+                                else if (indexSize == 2)
+                                    convert_index_buffer_trilist<unsigned short>(indexBuffer, convertedIB.data(), numIndices, indexCounter);
+                                else if (indexSize == 4)
+                                    convert_index_buffer_trilist<unsigned int>(indexBuffer, convertedIB.data(), numIndices, indexCounter);
+                            }
+                            else if (geoPrimMode == 5) {
+                                convertedIB.resize((numIndices - 2) * 3 * indexSize, 0);
+                                if (indexSize == 1)
+                                    convert_index_buffer_tristrip<unsigned char>(indexBuffer, convertedIB.data(), numIndices, indexCounter);
+                                else if (indexSize == 2)
+                                    convert_index_buffer_tristrip<unsigned short>(indexBuffer, convertedIB.data(), numIndices, indexCounter);
+                                else if (indexSize == 4)
+                                    convert_index_buffer_tristrip<unsigned int>(indexBuffer, convertedIB.data(), numIndices, indexCounter);
+                            }
+                            else if (geoPrimMode == 6) {
+                                convertedIB.resize((numIndices - 2) * 3 * indexSize, 0);
+                                if (indexSize == 1)
+                                    convert_index_buffer_trifan<unsigned char>(indexBuffer, convertedIB.data(), numIndices, indexCounter);
+                                else if (indexSize == 2)
+                                    convert_index_buffer_trifan<unsigned short>(indexBuffer, convertedIB.data(), numIndices, indexCounter);
+                                else if (indexSize == 4)
+                                    convert_index_buffer_trifan<unsigned int>(indexBuffer, convertedIB.data(), numIndices, indexCounter);
+                            }
+                            geoPrimMode = 4;
+                            indexBuffer = convertedIB.data();
+                            numIndices = indexCounter;
                             if (vertexBuffer) {
                                 if (!shader) {
                                     if (skinVertexDataBuffer)
@@ -1429,6 +1505,7 @@ public:
                                         Vector3 boundMax = { 0.0f, 0.0f, 0.0f };
                                         bool anyVertexProcessed = false;
                                         Vector3 *posn = (Vector3 *)(unsigned int(vertexBuffer) + a.offset);
+                                        //posn->y = -posn->y;
                                         for (unsigned int vert = 0; vert < numVertices; vert++) {
                                             if (!anyVertexProcessed) {
                                                 boundMin = *posn;
@@ -1453,6 +1530,18 @@ public:
                                         }
                                         a.min = boundMin;
                                         a.max = boundMax;
+                                    }
+                                    else if (d.usage == Shader::Normal) {
+                                        float *nrm = (float *)(unsigned int(vertexBuffer) + a.offset);
+                                        for (unsigned int vert = 0; vert < numVertices; vert++) {
+                                            //nrm[1] = -nrm[1];
+                                            if (options().flipNormals) {
+                                                nrm[0] = -nrm[0];
+                                                nrm[1] = -nrm[1];
+                                                nrm[2] = -nrm[2];
+                                            }
+                                            nrm = (float *)(unsigned int(nrm) + a.stride);
+                                        }
                                     }
                                     else if (d.usage == Shader::Color0) {
                                         unsigned char *clr = (unsigned char *)(unsigned int(vertexBuffer) + a.offset);

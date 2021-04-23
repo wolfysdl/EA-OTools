@@ -23,7 +23,7 @@ void packfsh_collect(path const &out, path const &in) {
         }
     }
     else {
-        auto &fsh = globalVars().fshToBuild[out.parent_path() / out.parent_path().stem()];
+        auto &fsh = globalVars().fshToBuild[out.parent_path() / out.parent_path().filename()];
         if (!fsh.contains(texkey)) {
             auto &tex = fsh[texkey];
             tex.name = filename;

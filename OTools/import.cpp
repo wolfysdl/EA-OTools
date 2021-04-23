@@ -729,6 +729,11 @@ bool IsLocalSampler(unsigned int argType) {
     return argType == Shader::Sampler0Local || argType == Shader::Sampler1Local || argType == Shader::Sampler2Local || argType == Shader::Sampler3Local;
 }
 
+bool ShouldBeLocalSampler(string const &texName) {
+    string name = ToLower(texName);
+    return name == "adba" || name == "adbb" || name == "adbc";
+}
+
 bool GetTexInfo(aiScene const *scene, aiMaterial const *mat, aiTextureType texType, aiTextureMapMode &mapMode, path &texFilePath, string &texFileName, string &texFileNameLowered, bool &isGlobal, TexEmbedded &embedded) {
     mapMode = aiTextureMapMode_Wrap;
     texFilePath.clear();
@@ -835,7 +840,7 @@ void oimport(path const &out, path const &in) {
     //importer.SetPropertyInteger(AI_CONFIG_IMPORT_REMOVE_EMPTY_BONES, 0);
     importer.SetPropertyInteger(AI_CONFIG_PP_SLM_VERTEX_LIMIT, 32'767);
     unsigned int sceneLoadingFlags = aiProcess_Triangulate | aiProcess_GenSmoothNormals | aiProcess_GenUVCoords | aiProcess_SplitLargeMeshes |
-        aiProcess_SortByPType | aiProcess_PopulateArmatureData;
+        aiProcess_SortByPType | aiProcess_PopulateArmatureData | aiProcess_FlipWindingOrder;
     bool doScale = options().scale.x != 1.0f || options().scale.y != 1.0f || options().scale.z != 1.0f;
     if (doScale && !options().scaleXYZ) {
         importer.SetPropertyFloat(AI_CONFIG_GLOBAL_SCALE_FACTOR_KEY, options().scale.x);
@@ -1554,6 +1559,8 @@ void oimport(path const &out, path const &in) {
                                 aiVector3D vecNormal = mesh->mNormals[v];
                                 if (flipAxis)
                                     swap(vecNormal.y, vecNormal.z);
+                                if (options().flipNormals)
+                                    vecNormal = -vecNormal;
                                 Memory_Copy(&vertexBuffer.data()[vertexOffset], &vecNormal, 12);
                             }
                             break;
@@ -1978,13 +1985,13 @@ void oimport(path const &out, path const &in) {
                             globalArgs.emplace_back("__EAGL::TAR:::" + tex[s].name);
                         else {
                             if (texAlreadyPresent[s]) {
-                                if (IsGlobalSampler(arg.type))
+                                if (tex[s].IsRuntimeConstructed())
                                     globalArgs.emplace_back(tex[s].GetRuntimeConstructorLine(uid, numVariations));
                                 else
                                     globalArgs.emplace_back(tex[s].offset);
                             }
                             else {
-                                if (IsGlobalSampler(arg.type)) {
+                                if (IsGlobalSampler(arg.type) && !ShouldBeLocalSampler(tex[s].name)) {
                                     globalArgs.emplace_back(tex[s].GetRuntimeConstructorLine(uid, numVariations));
                                     tex[s].runtimeConstructed = true;
                                 }

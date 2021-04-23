@@ -812,10 +812,12 @@ void ea::Fsh::ForAllImages(std::function<void(FshImage&)> callback) {
 
 void ea::Fsh::Read(std::filesystem::path const & filepath) {
 	File f(filepath, File::READ);
+	if (f.FileSize() <= 1)
+		return;
 	auto signature = f.Read<unsigned int>();
 	f.Read<unsigned int>();
 	if (signature != 'IPHS')
-		throw Exception("not a correct shape file (" + filepath.string() + ")");
+		return; // throw Exception("not a correct shape file (" + filepath.string() + ")");
 	auto numImages = f.Read<size_t>();
 	f.Read(mTag, 4);
 	bool doBuyErtsCheck = false;

@@ -7,8 +7,8 @@
 #include <sstream>
 #include <iostream>
 
-const char *OTOOLS_VERSION = "0.172";
-const unsigned int OTOOLS_VERSION_INT = 172;
+const char *OTOOLS_VERSION = "0.174";
+const unsigned int OTOOLS_VERSION_INT = 174;
 
 GlobalOptions &options() {
     static GlobalOptions go;
@@ -33,7 +33,7 @@ int main(int argc, char *argv[]) {
         "swapYZ", "forceLighting", "noMetadata", "genTexNames", "writeFsh", "fshRescale", "fshDisableTextureIgnore", "preTransformVertices", "sortByName", 
         "sortByAlpha", "useMatColor", "noMeshJoin", "head", "hd", "ignoreEmbeddedTextures", "ord", "keepTex0InMatOptions", "fshWriteToParentDir",
         "conformant", "fshUniqueHashForEachTexture", "updateOldStadium", "stadium", "srgb", "fshForceAlphaCheck", "mergeVCols", "fshName",
-        "stadium10to07", "stadium07to10" });
+        "stadium10to07", "stadium07to10", "flipNormals" });
     if (cmd.HasOption("silent"))
         SetMessageDisplayType(MessageDisplayType::MSG_NONE);
     else {
@@ -614,6 +614,8 @@ int main(int argc, char *argv[]) {
         }
         if (cmd.HasOption("srgb"))
             options().srgb = true;
+        if (cmd.HasOption("flipNormals"))
+            options().flipNormals = true;
     }
     if (opType == PACKFSH || opType == UNPACKFSH || (opType == IMPORT && cmd.HasOption("writeFsh"))) {
         options().fshName = cmd.HasOption("fshName");

@@ -94,6 +94,7 @@ struct GlobalOptions {
     float bboxScale = 1.0f;
     unsigned int layerFlags = 0;
     unsigned int uid = 0;
+    bool flipNormals = false;
     // export options
     bool noTextures = false;
     bool dummyTextures = false;
