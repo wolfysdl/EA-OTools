@@ -38,17 +38,11 @@ The file may contain model data, skeleton information, animations, rendering inf
 
 ❌ NBA series
 
-❌ Need For Speed series
-
-❌ Def Jam FFNY
+❌ Need For Speed Hot Pursuit 2
 
 **By platform:**
 
 ✅ PC
-
-❌ PlayStation 2
-
-❌ XBOX
 
 ## Overview
 
