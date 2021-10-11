@@ -1,5 +1,5 @@
 #include "target.h"
-#include "utils.h"
+#include "outils.h"
 
 unsigned int Target::GetMaxBoneWeightsPerVertex() {
     return 3;

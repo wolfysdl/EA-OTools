@@ -5,7 +5,7 @@
     <ClInclude Include="memory.h" />
     <ClInclude Include="main.h" />
     <ClInclude Include="binbuf.h" />
-    <ClInclude Include="utils.h" />
+    <ClInclude Include="outils.h" />
     <ClInclude Include="commandline.h" />
     <ClInclude Include="shaders.h" />
     <ClInclude Include="NvTriStrip\NvTriStrip.h">
@@ -38,6 +38,9 @@
     <ClInclude Include="srgb\SrgbTransform.hpp">
       <Filter>srgb</Filter>
     </ClInclude>
+    <ClInclude Include="modelfsh_shared.h" />
+    <ClInclude Include="WinInclude.h" />
+    <ClInclude Include="D3DInclude.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dump.cpp" />
@@ -45,7 +48,7 @@
     <ClCompile Include="import.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="binbuf.cpp" />
-    <ClCompile Include="utils.cpp" />
+    <ClCompile Include="outils.cpp" />
     <ClCompile Include="commandline.cpp" />
     <ClCompile Include="info.cpp" />
     <ClCompile Include="shaders.cpp" />

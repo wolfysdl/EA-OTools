@@ -1,5 +1,5 @@
-#include "utils.h"
-#include <Windows.h>
+#include "outils.h"
+#include "WinInclude.h"
 
 unsigned int FormattingUtils::currentBuf = 0;
 char FormattingUtils::buf[FormattingUtils::BUF_SIZE][4096];

@@ -1,5 +1,5 @@
 #include "D3DDevice.h"
-#include "d3d9.h"
+#include "..\D3DInclude.h"
 #include <stdexcept>
 
 using namespace std;

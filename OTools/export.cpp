@@ -1410,6 +1410,23 @@ public:
                             geoPrimMode = 4;
                             indexBuffer = convertedIB.data();
                             numIndices = indexCounter;
+                            if (options().flipFaces) {
+                                if (indexSize == 1) {
+                                    unsigned char *fi = (unsigned char *)indexBuffer;
+                                    for (unsigned int f = 0; f < (numIndices / 3); f++)
+                                        swap(fi[f * 3 + 0], fi[f * 3 + 2]);
+                                }
+                                else if (indexSize == 2) {
+                                    unsigned short *fi = (unsigned short *)indexBuffer;
+                                    for (unsigned int f = 0; f < (numIndices / 3); f++)
+                                        swap(fi[f * 3 + 0], fi[f * 3 + 2]);
+                                }
+                                else if (indexSize == 4) {
+                                    unsigned int *fi = (unsigned int *)indexBuffer;
+                                    for (unsigned int f = 0; f < (numIndices / 3); f++)
+                                        swap(fi[f * 3 + 0], fi[f * 3 + 2]);
+                                }
+                            }
                             if (vertexBuffer) {
                                 if (!shader) {
                                     if (skinVertexDataBuffer)

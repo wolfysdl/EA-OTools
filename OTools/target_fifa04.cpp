@@ -2071,12 +2071,8 @@ Shader *DecideShader_FIFA_04_05(Target *target, MaterialProperties const &proper
                 return target->FindShader("Gouraud");
         }
         else {
-            if (properties.isTextured) {
-                if (properties.isTransparent)
-                    return target->FindShader("LitTexture2Alpha2x_Skin");
-                else
-                    return target->FindShader("LitTexture2x_Skin");
-            }
+            if (properties.isTextured)
+                return target->FindShader("LitTexture2x_Skin");
             else
                 return target->FindShader("Gouraud_Skin");
         }

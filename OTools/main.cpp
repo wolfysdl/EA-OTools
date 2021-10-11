@@ -1,4 +1,4 @@
-#include "d3dx9.h"
+#include "D3DInclude.h"
 #include "main.h"
 #include "commandline.h"
 #include "message.h"
@@ -7,8 +7,8 @@
 #include <sstream>
 #include <iostream>
 
-const char *OTOOLS_VERSION = "0.174";
-const unsigned int OTOOLS_VERSION_INT = 174;
+const char *OTOOLS_VERSION = "0.175";
+const unsigned int OTOOLS_VERSION_INT = 175;
 
 GlobalOptions &options() {
     static GlobalOptions go;
@@ -28,12 +28,13 @@ int main(int argc, char *argv[]) {
     CommandLine cmd(argc, argv, { "i", "o", "game", "scale", "defaultVCol", "setVCol", "vColScale", "fshOutput", "fshLevels", "fshFormat", "fshTextures",
         "fshAddTextures", "fshIgnoreTextures", "startsWith", "pad", "padFsh", "instances", "computationIndex", "hwnd", "fshUnpackImageFormat",
         "forceShader", "fshHash", "fshId", "boneRemap", "skeletonData", "skeleton", "bonesFile", "maxBonesPerVertex", "vertexWeightPaletteSize",
-        "translate", "minVCol", "maxVCol", "vColMergeConfig", "bboxScale", "layerFlags", "uid" },
+        "translate", "minVCol", "maxVCol", "vColMergeConfig", "bboxScale", "layerFlags", "uid", "fshPalette", "hairSpec" },
         { "tristrip", "noTextures", "recursive", "createSubDir", "silent", "console", "onlyFirstTechnique", "dummyTextures", "jpegTextures", "embeddedTextures", 
         "swapYZ", "forceLighting", "noMetadata", "genTexNames", "writeFsh", "fshRescale", "fshDisableTextureIgnore", "preTransformVertices", "sortByName", 
         "sortByAlpha", "useMatColor", "noMeshJoin", "head", "hd", "ignoreEmbeddedTextures", "ord", "keepTex0InMatOptions", "fshWriteToParentDir",
         "conformant", "fshUniqueHashForEachTexture", "updateOldStadium", "stadium", "srgb", "fshForceAlphaCheck", "mergeVCols", "fshName",
-        "stadium10to07", "stadium07to10", "flipNormals" });
+        "stadium10to07", "stadium07to10", "flipNormals", "flipFaces", "fshKits", "fshShoes", "fshBalls", "fshPatterns", "fshJNumbers",
+        "fshSNumbers", "sortHairFaces", "sortFaces" });
     if (cmd.HasOption("silent"))
         SetMessageDisplayType(MessageDisplayType::MSG_NONE);
     else {
@@ -479,6 +480,12 @@ int main(int argc, char *argv[]) {
             options().layerFlags = cmd.GetArgumentInt("layerFlags");
         if (cmd.HasArgument("uid"))
             options().uid = cmd.GetArgumentInt("uid");
+        if (cmd.HasArgument("hairSpec"))
+            options().hairSpec = cmd.GetArgumentFloat("hairSpec");
+        if (cmd.HasOption("sortHairFaces"))
+            options().sortHairFaces = true;
+        if (cmd.HasOption("sortFaces"))
+            options().sortFaces = true;
     }
     else if (opType == OperationType::DUMP) {
         if (cmd.HasOption("onlyFirstTechnique"))
@@ -495,6 +502,10 @@ int main(int argc, char *argv[]) {
             options().fshShoes = true;
         if (cmd.HasOption("fshPatterns"))
             options().fshPatterns = true;
+        if (cmd.HasOption("fshJNumbers"))
+            options().fshJNumbers = true;
+        if (cmd.HasOption("fshSNumbers"))
+            options().fshSNumbers = true;
     }
     else if (opType == OperationType::UNPACKFSH) {
         if (cmd.HasArgument("fshUnpackImageFormat")) {
@@ -526,7 +537,7 @@ int main(int argc, char *argv[]) {
             }
         }
     }
-    if (opType == PACKFSH || (opType == IMPORT && cmd.HasOption("writeFsh"))) {
+    if (opType == PACKFSH || (opType == IMPORT && (cmd.HasOption("writeFsh") || cmd.HasOption("embeddedTextures")))) {
         options().writeFsh = true;
         if (cmd.HasArgument("fshOutput"))
             options().fshOutput = cmd.GetArgumentString("fshOutput");
@@ -538,6 +549,11 @@ int main(int argc, char *argv[]) {
                 options().fshLevels = D3DX_FROM_FILE;
             else if (options().fshLevels < -1 || options().fshLevels > 13)
                 options().fshLevels = D3DX_DEFAULT;
+        }
+        if (cmd.HasArgument("fshPalette")) {
+            options().fshPalette = cmd.GetArgumentInt("fshPalette");
+            if (options().fshPalette != 24 && options().fshPalette != 32)
+                options().fshPalette = -1;
         }
         options().fshFormat = unsigned int(-4);
         if (cmd.HasArgument("fshFormat")) {
@@ -568,6 +584,10 @@ int main(int argc, char *argv[]) {
                     options().fshFormat = D3DFMT_A1R5G5B5;
                 else if (format == "565")
                     options().fshFormat = D3DFMT_R5G6B5;
+                else if (format == "pal4")
+                    options().fshFormat = unsigned int(-7);
+                else if (format == "pal" || format == "pal8")
+                    options().fshFormat = unsigned int(-8);
             }
         }
         if (cmd.HasOption("fshRescale"))
@@ -616,6 +636,8 @@ int main(int argc, char *argv[]) {
             options().srgb = true;
         if (cmd.HasOption("flipNormals"))
             options().flipNormals = true;
+        if (cmd.HasOption("flipFaces"))
+            options().flipFaces = true;
     }
     if (opType == PACKFSH || opType == UNPACKFSH || (opType == IMPORT && cmd.HasOption("writeFsh"))) {
         options().fshName = cmd.HasOption("fshName");

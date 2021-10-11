@@ -25,9 +25,13 @@ ea::Buffer &ea::Buffer::operator=(Buffer const &rhs) {
 
 ea::Buffer &ea::Buffer::operator=(Buffer &&rhs) {
 	if (rhs.HasData()) {
-		SetData(rhs.GetData(), rhs.GetSize(), true);
-		rhs.mData = nullptr;
-		rhs.mSize = 0;
+		if (rhs.mOwner) {
+			SetData(rhs.GetData(), rhs.GetSize(), true);
+			rhs.mData = nullptr;
+			rhs.mSize = 0;
+		}
+		else
+			Allocate(rhs.GetSize(), rhs.GetData());
 	}
 	else
 		Clear();

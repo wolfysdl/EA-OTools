@@ -2119,12 +2119,8 @@ Shader *TargetFIFA03::DecideShader(MaterialProperties const &properties) {
                 return FindShader("Gouraud");
         }
         else {
-            if (properties.isTextured) {
-                if (properties.isTransparent)
-                    return FindShader("LitTexture2Alpha2x_Skin");
-                else
-                    return FindShader("LitTexture2x_Skin");
-            }
+            if (properties.isTextured)
+                return FindShader("LitTexture2x_Skin");
             else
                 return FindShader("Gouraud_Skin");
         }

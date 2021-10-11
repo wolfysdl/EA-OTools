@@ -1,4 +1,4 @@
-#include "d3d9.h"
+#include "D3DInclude.h"
 #include "main.h"
 #include <assimp\Importer.hpp>
 #include <assimp\scene.h>
@@ -15,6 +15,7 @@
 #include "Fsh\Fsh.h"
 #include "FifamReadWrite.h"
 #include "srgb/SrgbTransform.hpp"
+#include "modelfsh_shared.h"
 
 struct Vector4D {
     float x = 0.0f;
@@ -41,15 +42,10 @@ enum AlphaMode {
     ALPHA_BLEND
 };
 
-struct Symbol {
-    string name;
-    int offset;
-
-    Symbol(string const &_name, int _offset = -1) {
-        name = _name;
-        offset = _offset;
-    }
-};
+Symbol::Symbol(string const &_name, int _offset) {
+    name = _name;
+    offset = _offset;
+}
 
 struct GlobalArg {
     unsigned int offset;
@@ -149,173 +145,140 @@ struct Node {
 
 aiScene const *Node::scene = nullptr;
 
-struct Tex {
-    enum Mode {
-        Wrap = 1,
-        Mirror = 2,
-        Clamp = 3,
-        Border = 4,
-        ClampToEdge = 5
-    };
-    enum Filter {
-        Point = 1,
-        Bilinear = 2,
-        Anisotropic = 3,
-        GaussianCubic = 5
-    };
-    enum MipMapMode {
-        Off = 0,
-        Nearest = 1,
-        Linear = 2
-    };
-    string name;
-    Mode uAddressing = Wrap;
-    Mode vAddressing = Mirror;
-    unsigned char anisotropy = 1;
-    Filter filtering = Bilinear;
-    float mipMapLodBias = 0.0f;
-    MipMapMode mipMapMode = Linear;
-    unsigned int offset = 0;
-    bool isGlobal = false;
-    bool runtimeConstructed = true;
-    string filepath;
-    TexEmbedded embedded;
+Tex::Tex() {
+    name = "----";
+    uAddressing = Wrap;
+    vAddressing = Mirror;
+    filtering = Bilinear;
+    mipMapMode = Linear;
+    mipMapLodBias = 0.0f;
+    anisotropy = 1;
+    isGlobal = false;
+    embedded.data = nullptr;
+    embedded.width = 0;
+    embedded.height = 0;
+}
 
-    Tex() {
-        name = "----";
-        uAddressing = Wrap;
-        vAddressing = Mirror;
-        filtering = Bilinear;
-        mipMapMode = Linear;
-        mipMapLodBias = 0.0f;
-        anisotropy = 1;
-        isGlobal = false;
-        embedded.data = nullptr;
-        embedded.width = 0;
-        embedded.height = 0;
-    }
+Tex::Tex(string const &_name, Mode _u, Mode _v, Filter _filtering, MipMapMode _mipMapMode, float _mipMapLodBias, unsigned char _anisotropy, unsigned int _offset, TexEmbedded const &_embedded) {
+    name = _name;
+    uAddressing = _u;
+    vAddressing = _v;
+    filtering = _filtering;
+    mipMapMode = _mipMapMode;
+    mipMapLodBias = _mipMapLodBias;
+    anisotropy = _anisotropy;
+    offset = _offset;
+    isGlobal = false;
+    embedded = _embedded;
+}
 
-    Tex(string const &_name, Mode _u, Mode _v, Filter _filtering, MipMapMode _mipMapMode, float _mipMapLodBias = 0.0f, unsigned char _anisotropy = 1, unsigned int _offset = 0, TexEmbedded const &_embedded = TexEmbedded()) {
-        name = _name;
-        uAddressing = _u;
-        vAddressing = _v;
-        filtering = _filtering;
-        mipMapMode = _mipMapMode;
-        mipMapLodBias = _mipMapLodBias;
-        anisotropy = _anisotropy;
-        offset = _offset;
-        isGlobal = false;
-        embedded = _embedded;
-    }
+bool Tex::IsRuntimeConstructed() const {
+    return runtimeConstructed;
+}
 
-    bool IsRuntimeConstructed() const {
-        return runtimeConstructed;
-    }
+bool Tex::IsFIFAAdboardsTexture() const {
+    string ln = ToLower(name);
+    return ln == "adba" || ln == "adbb" || ln == "adbc";
+}
 
-    bool IsFIFAAdboardsTexture() const {
-        string ln = ToLower(name);
-        return ln == "adba" || ln == "adbb" || ln == "adbc";
-    }
+bool Tex::IsFIFACrowdHomeTexture() const {
+    string ln = ToLower(name);
+    return ln == "chf0" || ln == "chf1" || ln == "chf2" || ln == "chf3";
+}
 
-    bool IsFIFACrowdHomeTexture() const {
-        string ln = ToLower(name);
-        return ln == "chf0" || ln == "chf1" || ln == "chf2" || ln == "chf3";
-    }
+bool Tex::IsFIFACrowdAwayTexture() const {
+    string ln = ToLower(name);
+    return ln == "caf0" || ln == "caf1" || ln == "caf2" || ln == "caf3";
+}
 
-    bool IsFIFACrowdAwayTexture() const {
-        string ln = ToLower(name);
-        return ln == "caf0" || ln == "caf1" || ln == "caf2" || ln == "caf3";
+void Tex::SetUVAddressingMode(aiTextureMapMode _mode) {
+    Mode m = Wrap;
+    switch (_mode) {
+    case aiTextureMapMode_Wrap:
+        m = Wrap;
+        break;
+    case aiTextureMapMode_Clamp:
+        m = Clamp;
+        break;
+    case aiTextureMapMode_Mirror:
+        m = Mirror;
+        break;
+    case aiTextureMapMode_Decal:
+        m = Border;
+        break;
     }
+    uAddressing = m;
+    vAddressing = m;
+}
 
-    void SetUVAddressingMode(aiTextureMapMode _mode) {
-        Mode m = Wrap;
-        switch (_mode) {
-        case aiTextureMapMode_Wrap:
-            m = Wrap;
-            break;
-        case aiTextureMapMode_Clamp:
-            m = Clamp;
-            break;
-        case aiTextureMapMode_Mirror:
-            m = Mirror;
-            break;
-        case aiTextureMapMode_Decal:
-            m = Border;
-            break;
-        }
-        uAddressing = m;
-        vAddressing = m;
+string Tex::GetModeName(Mode m) {
+    switch (m) {
+    case Wrap:
+        return "EAGL::PCCM_WRAP";
+    case Mirror:
+        return "EAGL::PCCM_MIRROR";
+    case Clamp:
+        return "EAGL::PCCM_CLAMP";
+    case Border:
+        return "EAGL::PCCM_BORDER";
+    case ClampToEdge:
+        return "PCCM_CLAMPTOEDGE";
     }
+    return "";
+}
 
-    static string GetModeName(Mode m) {
-        switch (m) {
-        case Wrap:
-            return "EAGL::PCCM_WRAP";
-        case Mirror:
-            return "EAGL::PCCM_MIRROR";
-        case Clamp:
-            return "EAGL::PCCM_CLAMP";
-        case Border:
-            return "EAGL::PCCM_BORDER";
-        case ClampToEdge:
-            return "PCCM_CLAMPTOEDGE";
-        }
-        return "";
+string Tex::GetFilteringName(Filter f) {
+    switch (f) {
+    case Point:
+        return "EAGL::FM_POINT";
+    case Bilinear:
+        return "EAGL::FM_BILINEAR";
+    case Anisotropic:
+        return "EAGL::FM_ANISOTROPIC";
+    case GaussianCubic:
+        return "EAGL::FM_GAUSSIANCUBIC";
     }
+    return "";
+}
 
-    static string GetFilteringName(Filter f) {
-        switch (f) {
-        case Point:
-            return "EAGL::FM_POINT";
-        case Bilinear:
-            return "EAGL::FM_BILINEAR";
-        case Anisotropic:
-            return "EAGL::FM_ANISOTROPIC";
-        case GaussianCubic:
-            return "EAGL::FM_GAUSSIANCUBIC";
-        }
-        return "";
+string Tex::GetMipMapModeName(MipMapMode m) {
+    switch (m) {
+    case Off:
+        return "EAGL::MMM_OFF";
+    case Nearest:
+        return "EAGL::MMM_NEAREST";
+    case Linear:
+        return "EAGL::MMM_LINEAR";
     }
+    return "";
+}
 
-    static string GetMipMapModeName(MipMapMode m) {
-        switch (m) {
-        case Off:
-            return "EAGL::MMM_OFF";
-        case Nearest:
-            return "EAGL::MMM_NEAREST";
-        case Linear:
-            return "EAGL::MMM_LINEAR";
-        }
-        return "";
+string Tex::GetRuntimeConstructorLine(unsigned int uid, unsigned int numVariations) const {
+    string line = "__EAGL::TAR:::RUNTIME_ALLOC::";
+    vector<string> components;
+    components.push_back("UID=" + to_string(uid));
+    components.push_back("SHAPENAME=" + name + "," + to_string(numVariations));
+    components.push_back("PCEXTOBJ_SetClampU=" + GetModeName(uAddressing));
+    components.push_back("PCEXTOBJ_SetClampV=" + GetModeName(vAddressing));
+    if (filtering != Bilinear) {
+        components.push_back("SetFilterMode=" + GetFilteringName(filtering));
+        if (filtering == Anisotropic && anisotropy != 1)
+            components.push_back("PCEXTOBJ_SetAnisotropy=" + to_string(anisotropy));
     }
-
-    string GetRuntimeConstructorLine(unsigned int uid, unsigned int numVariations = 1) const {
-        string line = "__EAGL::TAR:::RUNTIME_ALLOC::";
-        vector<string> components;
-        components.push_back("UID=" + to_string(uid));
-        components.push_back("SHAPENAME=" + name + "," + to_string(numVariations));
-        components.push_back("PCEXTOBJ_SetClampU=" + GetModeName(uAddressing));
-        components.push_back("PCEXTOBJ_SetClampV=" + GetModeName(vAddressing));
-        if (filtering != Bilinear) {
-            components.push_back("SetFilterMode=" + GetFilteringName(filtering));
-            if (filtering == Anisotropic && anisotropy != 1)
-                components.push_back("PCEXTOBJ_SetAnisotropy=" + to_string(anisotropy));
-        }
-        if (mipMapMode != Linear)
-            components.push_back("SetMIPMAPMode=" + GetMipMapModeName(mipMapMode));
-        if (mipMapLodBias != 0.0f)
-            components.push_back("SetMIPMAPLODBias=" + Format("%g", mipMapLodBias));
-        bool first = true;
-        for (auto const &c : components) {
-            if (first)
-                first = false;
-            else
-                line += ";";
-            line += c;
-        }
-        return line;
+    if (mipMapMode != Linear)
+        components.push_back("SetMIPMAPMode=" + GetMipMapModeName(mipMapMode));
+    if (mipMapLodBias != 0.0f)
+        components.push_back("SetMIPMAPLODBias=" + Format("%g", mipMapLodBias));
+    bool first = true;
+    for (auto const &c : components) {
+        if (first)
+            first = false;
+        else
+            line += ";";
+        line += c;
     }
-};
+    return line;
+}
 
 struct ModData {
     string name;
@@ -638,16 +601,6 @@ bool IsCollisionNode(aiNode *node) {
     return false;
 }
 
-struct StadiumExtra {
-    bool used = false;
-    unsigned int stadiumId = 0;
-    unsigned int lightingId = 0;
-    aiNode *flags = nullptr;
-    aiNode *effects = nullptr;
-    aiNode *collision = nullptr;
-    enum FIFA_STAD_TYPE { STAD_DEFAULT, STAD_CUSTOM } stadType = STAD_DEFAULT;
-};
-
 void NodeAddCallback(aiNode *node, vector<Node> &nodes, StadiumExtra &stadExtra) {
     if (!ShouldIgnoreThisNode(node)) {
         bool isExtra = false;
@@ -874,6 +827,7 @@ void oimport(path const &out, path const &in) {
 
     static aiMatrix4x4 identityMatrix = { 1, 0, 0, 0,  0, 1, 0, 0,  0, 0, 1, 0,  0, 0, 0, 1 };
     Vector4D vecZeroOneTwoThree = { 0, 1, 2, 3 };
+    Vector4D vecZeroOneTwoThreeHair = { 0, options().hairSpec, 2, 3 };
     Vector4D vec0000 = { 1, 1, 1, 1 };
     Vector4D vec1111 = { 1, 1, 1, 1 };
     Vector4D vecEnvMapConstants = { 1.0f, 0.25f, 0.5f, 0.75f };
@@ -1198,6 +1152,8 @@ void oimport(path const &out, path const &in) {
                 throw runtime_error("Unable to decide shader");
 
             auto shaderName = shader->name;
+            auto originalShaderName = shaderName;
+            auto originalShaderNameLowered = ToLower(originalShaderName);
             auto shaderExt = shaderName.find('.');
             if (shaderExt != string::npos)
                 shaderName = shaderName.substr(0, shaderExt);
@@ -1429,13 +1385,53 @@ void oimport(path const &out, path const &in) {
             vector<unsigned short> allMeshesIndexBuffer(totalNumIndices);
             Memory_Zero(allMeshesIndexBuffer.data(), totalIndexBufferSize);
 
+            struct Tri { unsigned int indices[3]; ai_real distance; };
+            vector<Tri> meshTris(totalNumFaces);
+            // sort faces
+            bool sortFaces = options().sortFaces || (options().sortHairFaces && originalShaderNameLowered.ends_with(".hair"));
+            if (sortFaces) {
+                aiVector3D bboxMin;
+                aiVector3D bboxMax;
+                for (size_t bv = 0; bv < mesh->mNumVertices; bv++) {
+                    aiVector3D vec = mesh->mVertices[bv];
+                    if (bv == 0) {
+                        bboxMin = vec;
+                        bboxMax = vec;
+                    }
+                    else {
+                        for (size_t ve = 0; ve < 3; ve++) {
+                            if (bboxMin[ve] > vec[ve])
+                                bboxMin[ve] = vec[ve];
+                            else if (bboxMax[ve] < vec[ve])
+                                bboxMax[ve] = vec[ve];
+                        }
+                    }
+                }
+                aiVector3D meshCenter = bboxMin + (bboxMax - bboxMin) / 2.0f;
+                for (unsigned int mf = 0; mf < totalNumFaces; mf++) {
+                    meshTris[mf].indices[0] = mesh->mFaces[mf].mIndices[0];
+                    meshTris[mf].indices[1] = mesh->mFaces[mf].mIndices[1];
+                    meshTris[mf].indices[2] = mesh->mFaces[mf].mIndices[2];
+                }
+                for (unsigned int mf = 0; mf < totalNumFaces; mf++) {
+                    aiVector3D triVert1 = mesh->mVertices[meshTris[mf].indices[0]];
+                    aiVector3D triVert2 = mesh->mVertices[meshTris[mf].indices[1]];
+                    aiVector3D triVert3 = mesh->mVertices[meshTris[mf].indices[2]];
+                    aiVector3D triCenter = (triVert1 + triVert2 + triVert3) / 3.0f;
+                    meshTris[mf].distance = (triCenter - meshCenter).SquareLength();
+                }
+                std::sort(meshTris.begin(), meshTris.end(), [](Tri const &a, Tri const &b) {
+                    return a.distance < b.distance;
+                });
+            }
+
             vector<MeshInfo> meshes;
 
             meshes.push_back(MeshInfo());
             meshes.back().startFace = 0;
 
             for (unsigned int f = 0; f < mesh->mNumFaces; f++) {
-                unsigned int *tri = mesh->mFaces[f].mIndices;
+                unsigned int *tri = sortFaces ?  meshTris[f].indices : mesh->mFaces[f].mIndices;
                 if (useSkinning) {
                     unsigned int numBoneWeights = meshes.back().weightsMap.size();
                     if ((numBoneWeights + 3) > target->GetMaxVertexWeightsPerMesh()) {
@@ -1461,6 +1457,7 @@ void oimport(path const &out, path const &in) {
                 }
                 for (unsigned int ind = 0; ind < 3; ind++)
                     meshes.back().verticesMap[tri[ind]] = 0;
+
                 allMeshesIndexBuffer[f * 3 + 0] = tri[0];
                 allMeshesIndexBuffer[f * 3 + 1] = tri[1];
                 allMeshesIndexBuffer[f * 3 + 2] = tri[2];
@@ -1486,6 +1483,10 @@ void oimport(path const &out, path const &in) {
                 vector<unsigned short> indexBuffer(numIndices);
                 for (unsigned int ind = 0; ind < numIndices; ind++)
                     indexBuffer[ind] = m.verticesMap[allMeshesIndexBuffer[startIndex + ind]];
+                if (options().flipFaces) {
+                    for (unsigned int f = 0; f < numFaces; f++)
+                        swap(indexBuffer[f * 3 + 0], indexBuffer[f * 3 + 2]);
+                }
                 unsigned int vertexWeightsNumBones3 = 0;
                 unsigned int vertexWeightsNumBones2 = 0;
                 unsigned int vertexWeightsNumBones1 = 0;
@@ -1743,7 +1744,10 @@ void oimport(path const &out, path const &in) {
                         break;
                     case Shader::ZeroOneTwoThreeLocal:
                         globalArgs.emplace_back(bufData.Position());
-                        bufData.Put(vecZeroOneTwoThree);
+                        if (options().hairSpec != 1.0f && originalShaderNameLowered.ends_with(".hair"))
+                            bufData.Put(vecZeroOneTwoThreeHair);
+                        else
+                            bufData.Put(vecZeroOneTwoThree);
                         bufData.Put(ZERO);
                         break;
                     case Shader::EnvMapConstants:
@@ -2509,15 +2513,8 @@ void oimport(path const &out, path const &in) {
         bufData.Put(ZERO);
     }
     bufData.Align(16);
-    if (options().embeddedTextures) { // TODO
-        for (auto const &[id, t] : textures) {
-            // load texture from disk
-            // convert to fsh shape
-        //    symbols.emplace_back("__SHAPE::shape_" + t.name, bufData.Position());
-            // bufData.Put(shapeData, shapeDataSize);
-        //    bufData.Align(16);
-        }
-    }
+    if (options().embeddedTextures)
+        ProcessTextures(modelName, targetName, out, in, textures, stadExtra, &symbols, &bufData);
 
     vector<unsigned int> sectionOffsets;
     vector<unsigned int> sectionNamesOffets;
@@ -2666,8 +2663,8 @@ void oimport(path const &out, path const &in) {
         unsigned int pad = 0;
         if (options().pad > 0)
             pad = options().pad;
-        else if (options().hd)
-            pad = 1'048'576;
+        //else if (options().hd)
+        //    pad = 1'048'576;
         if (pad > 0 && bufElf.Size() < pad) {
             unsigned int numPaddingBytes = pad - bufElf.Size();
             for (unsigned int i = 0; i < numPaddingBytes; i++)
@@ -2682,196 +2679,8 @@ void oimport(path const &out, path const &in) {
         bufElf.WriteToFile(orlPath, sectionOffsets[2], bufElf.Size() - sectionOffsets[2]);
     }
 
-    if (options().writeFsh) {
-        auto modelNameLow = ToLower(modelName);
-        if (options().head &&
-            (
-                modelNameLow.starts_with("m228__") ||
-                modelNameLow.starts_with("player____model60__") ||
-                modelNameLow.starts_with("player____m228__")
-            )
-            &&
-            (
-                targetName == "FIFA03" ||
-                targetName == "FIFA04" ||
-                targetName == "FIFA05" ||
-                targetName == "FIFA06" ||
-                targetName == "FIFA07" ||
-                targetName == "FIFA08" ||
-                targetName == "FIFA09" ||
-                targetName == "FIFA10" ||
-                targetName == "EURO04" ||
-                targetName == "EURO08" ||
-                targetName == "WC06" ||
-                targetName == "CL0405" ||
-                targetName == "CL0607" ||
-                targetName == "FM13"
-            )
-            )
-        {
-            unsigned int playerId = 0;
-            unsigned int numChars = 6;
-            if (modelNameLow.starts_with("player____model60__"))
-                numChars = 19;
-            else if (modelNameLow.starts_with("player____m228__"))
-                numChars = 16;
-            if (sscanf(modelName.substr(numChars).c_str(), "%d", &playerId) == 1) {
-                string playerIdStr = to_string(playerId);
-
-                // writing head texture
-                string headTexName;
-                map<string, TextureToAdd> fshTextures1;
-
-                unsigned int fshFormat32Bit = options().hasFshFormat ? options().fshFormat : D3DFMT_DXT1;
-                unsigned int fshFormat32BitAlpha = options().hasFshFormat ? options().fshFormat : D3DFMT_DXT5;
-                unsigned int fshFormat16Bit = options().hasFshFormat ? options().fshFormat : D3DFMT_R5G6B5;
-                unsigned int fshFormat16BitAlpha = options().hasFshFormat ? options().fshFormat : D3DFMT_A4R4G4B4;
-                
-                if (targetName == "FIFA03")
-                    headTexName = "PlayerTexObj.texobj11__texture12__" + playerIdStr + "_0_0.fsh";
-                else if (targetName == "FIFA04" || targetName == "FIFA05" || targetName == "EURO04" || targetName == "CL0405")
-                    headTexName = "playertexobj.texobj11__texture12__" + playerIdStr + "_0_0.fsh";
-                else if (targetName == "FIFA06" || targetName == "FIFA07" || targetName == "FIFA08" || targetName == "WC06" || targetName == "CL0607" || targetName == "EURO08")
-                    headTexName = "t21__" + playerIdStr + "_0_0.fsh";
-                else
-                    headTexName = "t21__" + playerIdStr + "_0_0_0_0.fsh";
-
-                if (targetName == "CL0405") {
-                    if (options().hd) {
-                        fshTextures1["glos"] = { "glos", "glos@" + playerIdStr, fshFormat32Bit, 99 };
-                        fshTextures1["face"] = { "face", "face@" + playerIdStr, fshFormat32Bit, 99 };
-                    }
-                    else {
-                        fshTextures1["glos"] = { "glos", "glos@" + playerIdStr, fshFormat16Bit, 1 };
-                        fshTextures1["face"] = { "face", "face@" + playerIdStr, fshFormat32Bit, 1 };
-                    }
-                }
-                else {
-                    if (options().hd)
-                        fshTextures1["tp01"] = { "tp01", "tp01@" + playerIdStr, fshFormat32Bit, 99 };
-                    else {
-                        if (targetName == "FIFA03")
-                            fshTextures1["tp01"] = { "tp01", "tp01@" + playerIdStr, fshFormat32Bit, 7 };
-                        else if (targetName == "FIFA10")
-                            fshTextures1["tp01"] = { "tp01", "tp01@" + playerIdStr, fshFormat32Bit, 8 };
-                        else
-                            fshTextures1["tp01"] = { "tp01", "tp01@" + playerIdStr, fshFormat32Bit, 1 };
-                    }
-                }
-                WriteFsh(out.parent_path() / headTexName, in.parent_path(), fshTextures1);
-
-                // writing hair texture
-                if (targetName != "FIFA09" && targetName != "FIFA10" && targetName != "FM13") {
-                    string hairTexName;
-                    if (targetName == "FIFA03")
-                        hairTexName = "PlayerTexObj.texobj11__texture14__0_" + playerIdStr + "_0.fsh";
-                    else if (targetName == "FIFA04" || targetName == "FIFA05" || targetName == "EURO04" || targetName == "CL0405")
-                        hairTexName = "playertexobj.texobj11__texture14__0_" + playerIdStr + "_0.fsh";
-                    else if (targetName == "FIFA06" || targetName == "FIFA07" || targetName == "FIFA08" || targetName == "WC06" || targetName == "CL0607" || targetName == "EURO08")
-                        hairTexName = "t22__" + playerIdStr + "_0.fsh";
-                    
-                    map<string, TextureToAdd> fshTextures2;
-                    if (options().hd)
-                        fshTextures2["tp02"] = { "tp02", "tp02@" + playerIdStr, fshFormat32BitAlpha, 99 };
-                    else {
-                        int hairTexLevels = 99;
-                        unsigned int hairTexFormat = fshFormat16BitAlpha;
-                        if (targetName == "FIFA08" || targetName == "EURO08")
-                            hairTexFormat = fshFormat32Bit;
-                        fshTextures2["tp02"] = { "tp02", "tp02@" + playerIdStr, hairTexFormat, 7 };
-                    }
-                    WriteFsh(out.parent_path() / hairTexName, in.parent_path(), fshTextures2);
-                }
-            }
-        }
-        else {
-            if (!options().stadium || stadExtra.used) {
-                path fshPath;
-                bool hasFshName = false;
-                if (stadExtra.used) {
-                    if (stadExtra.stadType == StadiumExtra::STAD_CUSTOM) {
-                        fshPath = out;
-                        fshPath.replace_filename("texture_" + to_string(stadExtra.lightingId) + ".fsh");
-                        hasFshName = true;
-                    }
-                    else if (stadExtra.stadType == StadiumExtra::STAD_DEFAULT) {
-                        fshPath = out;
-                        fshPath.replace_filename("t226__" + to_string(stadExtra.stadiumId) + "_" + to_string(stadExtra.lightingId) + ".fsh");
-                        hasFshName = true;
-                    }
-                }
-                if (!hasFshName) {
-                    if (!options().fshOutput.empty()) {
-                        if (options().processingFolders)
-                            fshPath = path(options().fshOutput) / (out.stem().string() + ".fsh");
-                        else
-                            fshPath = options().fshOutput;
-                    }
-                    else {
-                        fshPath = out;
-                        fshPath.replace_extension(".fsh");
-                    }
-                }
-                map<string, TextureToAdd> fshTextures;
-                if (!options().fshTextures.empty()) {
-                    for (auto const &a : options().fshTextures) {
-                        path ap = a;
-                        string texFilenameLowered = ToLower(ap.stem().string());
-                        string afilename = ap.stem().string();
-                        if (!afilename.empty()) {
-                            if (afilename.length() > 4)
-                                afilename = afilename.substr(0, 4);
-                            string akey = ToLower(afilename);
-                            if (!fshTextures.contains(akey)) {
-                                bool texFound = false;
-                                for (auto const &[k, img] : textures) {
-                                    auto imgLoweredName = ToLower(img.name);
-                                    auto imgLoweredFilename = ToLower(path(img.filepath).stem().string());
-                                    if (imgLoweredFilename == texFilenameLowered) {
-                                        fshTextures[imgLoweredName] = { img.name, img.filepath, options().fshFormat, options().fshLevels, img.embedded };
-                                        texFound = true;
-                                        break;
-                                    }
-                                }
-                                if (!texFound)
-                                    fshTextures[akey] = { afilename, a, options().fshFormat, options().fshLevels };
-                            }
-                        }
-                    }
-                }
-                else {
-                    static set<string> defaultTexturesToIgnore = { "eyeb", "rwa0", "rwa1", "rwa2", "rwa3", "rwh0", "rwh1", "rwh2", "rwh3", "rwn0", "rwn1", "rwn2", "rwn3", "abna", "abnb", "abnc", "afla", "aflb", "aflc", "hbna", "hbnb", "hbnc", "hfla", "hflb", "hflc", "adba", "adbb", "adbc", "chf0", "chf1", "chf2", "chf3","caf0", "caf1", "caf2", "caf3", "hcrs", "acrs", "hcla", "hclb", "acla", "aclb" };
-                    for (auto const &[k, img] : textures) {
-                        auto imgLoweredName = ToLower(img.name);
-                        auto imgLoweredFilename = ToLower(path(img.filepath).stem().string());
-                        bool ignoreThisTexture = false;
-                        if (!options().fshDisableTextureIgnore) {
-                            if (defaultTexturesToIgnore.contains(imgLoweredName) || options().fshIgnoreTextures.contains(imgLoweredName)
-                                || defaultTexturesToIgnore.contains(imgLoweredFilename) || options().fshIgnoreTextures.contains(imgLoweredFilename))
-                            {
-                                ignoreThisTexture = true;
-                            }
-                        }
-                        if (!ignoreThisTexture) {
-                            fshTextures[imgLoweredName] = { img.name, img.filepath, options().fshFormat, options().fshLevels, img.embedded };
-                        }
-                    }
-                }
-                for (auto const &a : options().fshAddTextures) {
-                    path ap = a;
-                    string afilename = ap.stem().string();
-                    if (!afilename.empty()) {
-                        if (afilename.length() > 4)
-                            afilename = afilename.substr(0, 4);
-                        string akey = ToLower(afilename);
-                        if (!fshTextures.contains(akey))
-                            fshTextures[akey] = { afilename, a, options().fshFormat, options().fshLevels };
-                    }
-                }
-                WriteFsh(fshPath, in.parent_path(), fshTextures);
-            }
-        }
-    }
+    if (options().writeFsh && !options().embeddedTextures)
+        ProcessTextures(modelName, targetName, out, in, textures, stadExtra, nullptr, nullptr);
 
     if (stadExtra.used) {
         path targetFolder;

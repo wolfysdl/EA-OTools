@@ -6,12 +6,13 @@
 #include <filesystem>
 #include "elf.h"
 #include "memory.h"
-#include "utils.h"
+#include "outils.h"
 #include <assimp/color4.h>
 #include <assimp/vector3.h>
 #include <assimp/aabb.h>
 #include "target.h"
 #include "Fsh/Fsh.h"
+#include "modelfsh_shared.h"
 
 using namespace std;
 using namespace std::filesystem;
@@ -72,6 +73,7 @@ struct GlobalOptions {
     bool fshDisableTextureIgnore = false;
     set<string> fshIgnoreTextures;
     bool fshUniqueHashForEachTexture = false;
+    int fshPalette = -1;
     bool preTransformVertices = false;
     bool sortByName = false;
     bool sortByAlpha = false;
@@ -95,6 +97,10 @@ struct GlobalOptions {
     unsigned int layerFlags = 0;
     unsigned int uid = 0;
     bool flipNormals = false;
+    bool flipFaces = false;
+    float hairSpec = 1.0f;
+    bool sortFaces = false;
+    bool sortHairFaces = false;
     // export options
     bool noTextures = false;
     bool dummyTextures = false;
@@ -113,6 +119,8 @@ struct GlobalOptions {
     bool fshKits = false;
     bool fshShoes = false;
     bool fshPatterns = false;
+    bool fshJNumbers = false;
+    bool fshSNumbers = false;
     unsigned int fshId = 1;
     unsigned int fshHash = 0;
     bool useFshHash = false;
@@ -120,24 +128,6 @@ struct GlobalOptions {
 };
 
 GlobalOptions &options();
-
-struct TexEmbedded {
-    unsigned int width = 0;
-    unsigned int height = 0;
-    string format;
-    void *data = nullptr;
-};
-
-struct TextureToAdd {
-    string name;
-    string filepath;
-    unsigned int format;
-    int levels;
-    TexEmbedded embedded;
-
-    TextureToAdd();
-    TextureToAdd(string const &_name, string const &_filepath, unsigned int _format, int _levels, TexEmbedded const &_embedded = TexEmbedded());
-};
 
 struct GlobalVars {
     Target *target = nullptr;
@@ -155,8 +145,6 @@ GlobalVars &globalVars();
 extern const char *OTOOLS_VERSION;
 
 pair<unsigned char *, unsigned int> readofile(path const &inPath);
-
-void WriteFsh(path const &fshFilePath, path const &searchDir, map<string, TextureToAdd> const &texturesToAdd);
 
 void odump(path const &out, path const &in);
 void oexport(path const &out, path const &in);

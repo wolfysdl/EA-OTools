@@ -1,5 +1,5 @@
 #include "shaders.h"
-#include "utils.h"
+#include "outils.h"
 
 Shader DummyShader = { "DUMMY", 0, { { Shader::Float3, Shader::Position } }, {}, {} };
 Shader DummyShader_Skin = { "DUMMY_SKIN", 0, { { Shader::Float3, Shader::Position }, { Shader::D3DColor, Shader::Color1 }, { Shader::UByte4, Shader::BlendIndices }, { Shader::Float3, Shader::BlendWeight } }, {}, {} };

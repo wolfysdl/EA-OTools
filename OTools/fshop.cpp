@@ -1,6 +1,7 @@
-#include "d3d9.h"
+#include "D3DInclude.h"
 #include "main.h"
 #include "Fsh/Fsh.h"
+#include "modelfsh_shared.h"
 
 TextureToAdd::TextureToAdd() {};
 
@@ -43,7 +44,7 @@ void packfsh_pack() {
             fshFinalPath = fshPath.parent_path() / (fshPath.filename().string() + ".fsh");
         else
             fshFinalPath = fshPath / (fshPath.filename().string() + ".fsh");
-        WriteFsh(fshFinalPath, fshPath, fshImages);
+        WriteFsh(fshFinalPath, fshPath, fshImages, nullptr, nullptr);
     }
 }
 
@@ -60,7 +61,7 @@ void unpackfsh(path const &out, path const &in) {
     });
 }
 
-void WriteFsh(path const &fshFilePath, path const &searchDir, map<string, TextureToAdd> const &texturesToAdd) {
+void WriteFsh(path const &fshFilePath, path const &searchDir, map<string, TextureToAdd> const &texturesToAdd, vector<Symbol> *symbols, BinaryBuffer *bufData) {
     static vector<string> imgExt = { ".png", ".jpg", ".jpeg", ".bmp", ".dds", ".tga" };
     path fshDir = fshFilePath.parent_path();
     string fshFileName = fshFilePath.filename().string();
@@ -163,7 +164,7 @@ void WriteFsh(path const &fshFilePath, path const &searchDir, map<string, Textur
             }
             if (loadingInfo.fileData || loadingInfo.data || loadingInfo.fileExists) {
                 auto &image = fsh.AddImage();
-                image.Load(loadingInfo, img.format, img.levels, options().fshRescale, options().fshForceAlphaCheck);
+                image.Load(loadingInfo, img.format, img.levels, options().fshRescale, options().fshForceAlphaCheck, options().fshPalette);
                 ea::FshPixelData *pixelsData = image.FindFirstData(ea::FshData::PIXELDATA)->As<ea::FshPixelData>();
                 image.AddData(new ea::FshMetalBin(metalBinData, 0x10));
                 image.SetTag(img.name);
@@ -214,7 +215,7 @@ void WriteFsh(path const &fshFilePath, path const &searchDir, map<string, Textur
                     else if (options().fshBalls)
                         hotSpot->Regions().push_back(ea::FshHotSpot::Region('ball', 0, 0, pixelsData->GetWidth(), pixelsData->GetHeight()));
                     else if (options().fshKits) {
-                        unsigned int shortsHeight = unsigned int(roundf(float(pixelsData->GetHeight()) * 0.333f));
+                        unsigned int shortsHeight = (unsigned int)(roundf(float(pixelsData->GetHeight()) * 0.333f));
                         hotSpot->Regions().push_back(ea::FshHotSpot::Region('jrsy', 0, shortsHeight, pixelsData->GetWidth(), pixelsData->GetHeight() - shortsHeight));
                         hotSpot->Regions().push_back(ea::FshHotSpot::Region('shrt', 0, 0, pixelsData->GetWidth(), shortsHeight));
                     }
@@ -222,6 +223,30 @@ void WriteFsh(path const &fshFilePath, path const &searchDir, map<string, Textur
                         hotSpot->Regions().push_back(ea::FshHotSpot::Region('clet', 0, 0, pixelsData->GetWidth(), pixelsData->GetHeight()));
                     else if (options().fshPatterns)
                         hotSpot->Regions().push_back(ea::FshHotSpot::Region('mowp', 0, 0, pixelsData->GetWidth(), pixelsData->GetHeight()));
+                    else if (options().fshJNumbers) {
+                        hotSpot->Regions().push_back(ea::FshHotSpot::Region('Jnu9', 921, 0, 103, 128));
+                        hotSpot->Regions().push_back(ea::FshHotSpot::Region('Jnu8', 409, 0, 103, 128));
+                        hotSpot->Regions().push_back(ea::FshHotSpot::Region('Jnu7', 614, 0, 102, 128));
+                        hotSpot->Regions().push_back(ea::FshHotSpot::Region('Jnu6', 102, 0, 102, 128));
+                        hotSpot->Regions().push_back(ea::FshHotSpot::Region('Jnu5', 716, 0, 103, 128));
+                        hotSpot->Regions().push_back(ea::FshHotSpot::Region('Jnu4', 204, 0, 103, 128));
+                        hotSpot->Regions().push_back(ea::FshHotSpot::Region('Jnu3', 512, 0, 102, 128));
+                        hotSpot->Regions().push_back(ea::FshHotSpot::Region('Jnu2', 0, 0, 102, 128));
+                        hotSpot->Regions().push_back(ea::FshHotSpot::Region('Jnu1', 819, 0, 102, 128));
+                        hotSpot->Regions().push_back(ea::FshHotSpot::Region('Jnu0', 307, 0, 102, 128));
+                    }
+                    else if (options().fshSNumbers) {
+                        hotSpot->Regions().push_back(ea::FshHotSpot::Region('Snu9', 103, 0, 25, 32)); // 5
+                        hotSpot->Regions().push_back(ea::FshHotSpot::Region('Snu8', 51, 0, 26, 32)); // 3
+                        hotSpot->Regions().push_back(ea::FshHotSpot::Region('Snu7', 154, 0, 25, 32)); // 7
+                        hotSpot->Regions().push_back(ea::FshHotSpot::Region('Snu6', 179, 0, 25, 32)); // 8
+                        hotSpot->Regions().push_back(ea::FshHotSpot::Region('Snu5', 204, 0, 26, 32)); // 9
+                        hotSpot->Regions().push_back(ea::FshHotSpot::Region('Snu4', 128, 0, 26, 32)); // 6
+                        hotSpot->Regions().push_back(ea::FshHotSpot::Region('Snu3', 77, 0, 26, 32)); // 4
+                        hotSpot->Regions().push_back(ea::FshHotSpot::Region('Snu2', 25, 0, 26, 32)); // 2
+                        hotSpot->Regions().push_back(ea::FshHotSpot::Region('Snu1', 0, 0, 25, 32)); // 1
+                        hotSpot->Regions().push_back(ea::FshHotSpot::Region('Snu0', 230, 0, 26, 32)); // 10
+                    }
                     else if (image.GetTag() == "misc") {
                         hotSpot->Regions().push_back(ea::FshHotSpot::Region('glov', 0, 0, pixelsData->GetWidth() / 2, pixelsData->GetHeight()));
                         hotSpot->Regions().push_back(ea::FshHotSpot::Region('flag', pixelsData->GetWidth() / 2, 0, pixelsData->GetWidth() / 2, pixelsData->GetHeight()));
@@ -258,21 +283,222 @@ void WriteFsh(path const &fshFilePath, path const &searchDir, map<string, Textur
                 if (targetName == "CL0405")
                     fsh.SetAlignment(8);
             }
-            fsh.Write(fshFilePath);
-            if (options().padFsh > 0) {
-                FILE *fshFile = _wfopen(fshFilePath.c_str(), L"a+");
-                if (fshFile) {
-                    fseek(fshFile, 0, SEEK_END);
-                    unsigned int fshSize = ftell(fshFile);
-                    if (fshSize < options().padFsh) {
-                        unsigned int numPaddingBytes = options().padFsh - fshSize;
-                        static unsigned char zero = 0;
-                        for (unsigned int i = 0; i < numPaddingBytes; i++)
-                            fwrite(&zero, 1, 1, fshFile);
+            if (symbols && bufData) {
+                size_t im = 0;
+                fsh.ForAllImages([&](ea::FshImage &fshIm) {
+                    symbols->emplace_back("__SHAPE:::shape_" + fshIm.GetTag(), bufData->Position());
+                    fsh.WriteImageToBuffer(*bufData, im++);
+                    bufData->Align(16);
+                });
+            }
+            else {
+                fsh.Write(fshFilePath);
+                if (options().padFsh > 0) {
+                    FILE *fshFile = _wfopen(fshFilePath.c_str(), L"a+");
+                    if (fshFile) {
+                        fseek(fshFile, 0, SEEK_END);
+                        unsigned int fshSize = ftell(fshFile);
+                        if (fshSize < options().padFsh) {
+                            unsigned int numPaddingBytes = options().padFsh - fshSize;
+                            static unsigned char zero = 0;
+                            for (unsigned int i = 0; i < numPaddingBytes; i++)
+                                fwrite(&zero, 1, 1, fshFile);
+                        }
+                        fclose(fshFile);
                     }
-                    fclose(fshFile);
                 }
             }
         }
     }
-};
+}
+
+void ProcessTextures(string const &modelName, string const &targetName, path const &out, path const &in, map<string, Tex> const &textures, StadiumExtra const &stadExtra, vector<Symbol> *symbols, BinaryBuffer *bufData) {
+    auto modelNameLow = ToLower(modelName);
+    if (options().head &&
+        (
+            modelNameLow.starts_with("m228__") ||
+            modelNameLow.starts_with("player____model60__") ||
+            modelNameLow.starts_with("player____m228__")
+            )
+        &&
+        (
+            targetName == "FIFA03" ||
+            targetName == "FIFA04" ||
+            targetName == "FIFA05" ||
+            targetName == "FIFA06" ||
+            targetName == "FIFA07" ||
+            targetName == "FIFA08" ||
+            targetName == "FIFA09" ||
+            targetName == "FIFA10" ||
+            targetName == "EURO04" ||
+            targetName == "EURO08" ||
+            targetName == "WC06" ||
+            targetName == "CL0405" ||
+            targetName == "CL0607" ||
+            targetName == "FM13"
+            )
+        )
+    {
+        unsigned int playerId = 0;
+        unsigned int numChars = 6;
+        if (modelNameLow.starts_with("player____model60__"))
+            numChars = 19;
+        else if (modelNameLow.starts_with("player____m228__"))
+            numChars = 16;
+        if (sscanf(modelName.substr(numChars).c_str(), "%d", &playerId) == 1) {
+            string playerIdStr = to_string(playerId);
+
+            // writing head texture
+            string headTexName;
+            map<string, TextureToAdd> fshTextures1;
+
+            unsigned int fshFormat32Bit = options().hasFshFormat ? options().fshFormat : D3DFMT_DXT1;
+            unsigned int fshFormat32BitAlpha = options().hasFshFormat ? options().fshFormat : D3DFMT_DXT5;
+            unsigned int fshFormat16Bit = options().hasFshFormat ? options().fshFormat : D3DFMT_R5G6B5;
+            unsigned int fshFormat16BitAlpha = options().hasFshFormat ? options().fshFormat : D3DFMT_A4R4G4B4;
+
+            if (targetName == "FIFA03")
+                headTexName = "PlayerTexObj.texobj11__texture12__" + playerIdStr + "_0_0.fsh";
+            else if (targetName == "FIFA04" || targetName == "FIFA05" || targetName == "EURO04" || targetName == "CL0405")
+                headTexName = "playertexobj.texobj11__texture12__" + playerIdStr + "_0_0.fsh";
+            else if (targetName == "FIFA06" || targetName == "FIFA07" || targetName == "FIFA08" || targetName == "WC06" || targetName == "CL0607" || targetName == "EURO08")
+                headTexName = "t21__" + playerIdStr + "_0_0.fsh";
+            else
+                headTexName = "t21__" + playerIdStr + "_0_0_0_0.fsh";
+
+            if (targetName == "CL0405") {
+                if (options().hd) {
+                    fshTextures1["glos"] = { "glos", "glos@" + playerIdStr, fshFormat32Bit, 99 };
+                    fshTextures1["face"] = { "face", "face@" + playerIdStr, fshFormat32Bit, 99 };
+                }
+                else {
+                    fshTextures1["glos"] = { "glos", "glos@" + playerIdStr, fshFormat16Bit, 1 };
+                    fshTextures1["face"] = { "face", "face@" + playerIdStr, fshFormat32Bit, 1 };
+                }
+            }
+            else {
+                if (options().hd)
+                    fshTextures1["tp01"] = { "tp01", "tp01@" + playerIdStr, fshFormat32Bit, 99 };
+                else {
+                    if (targetName == "FIFA03")
+                        fshTextures1["tp01"] = { "tp01", "tp01@" + playerIdStr, fshFormat32Bit, 7 };
+                    else if (targetName == "FIFA10")
+                        fshTextures1["tp01"] = { "tp01", "tp01@" + playerIdStr, fshFormat32Bit, 8 };
+                    else
+                        fshTextures1["tp01"] = { "tp01", "tp01@" + playerIdStr, fshFormat32Bit, 1 };
+                }
+            }
+            WriteFsh(out.parent_path() / headTexName, in.parent_path(), fshTextures1, symbols, bufData);
+
+            // writing hair texture
+            if (targetName != "FIFA09" && targetName != "FIFA10" && targetName != "FM13") {
+                string hairTexName;
+                if (targetName == "FIFA03")
+                    hairTexName = "PlayerTexObj.texobj11__texture14__0_" + playerIdStr + "_0.fsh";
+                else if (targetName == "FIFA04" || targetName == "FIFA05" || targetName == "EURO04" || targetName == "CL0405")
+                    hairTexName = "playertexobj.texobj11__texture14__0_" + playerIdStr + "_0.fsh";
+                else if (targetName == "FIFA06" || targetName == "FIFA07" || targetName == "FIFA08" || targetName == "WC06" || targetName == "CL0607" || targetName == "EURO08")
+                    hairTexName = "t22__" + playerIdStr + "_0.fsh";
+
+                map<string, TextureToAdd> fshTextures2;
+                if (options().hd)
+                    fshTextures2["tp02"] = { "tp02", "tp02@" + playerIdStr, fshFormat32BitAlpha, 99 };
+                else {
+                    int hairTexLevels = 99;
+                    unsigned int hairTexFormat = fshFormat16BitAlpha;
+                    if (targetName == "FIFA08" || targetName == "EURO08")
+                        hairTexFormat = fshFormat32Bit;
+                    fshTextures2["tp02"] = { "tp02", "tp02@" + playerIdStr, hairTexFormat, 7 };
+                }
+                WriteFsh(out.parent_path() / hairTexName, in.parent_path(), fshTextures2, symbols, bufData);
+            }
+        }
+    }
+    else {
+        if (!options().stadium || stadExtra.used) {
+            path fshPath;
+            bool hasFshName = false;
+            if (stadExtra.used) {
+                if (stadExtra.stadType == StadiumExtra::STAD_CUSTOM) {
+                    fshPath = out;
+                    fshPath.replace_filename("texture_" + to_string(stadExtra.lightingId) + ".fsh");
+                    hasFshName = true;
+                }
+                else if (stadExtra.stadType == StadiumExtra::STAD_DEFAULT) {
+                    fshPath = out;
+                    fshPath.replace_filename("t226__" + to_string(stadExtra.stadiumId) + "_" + to_string(stadExtra.lightingId) + ".fsh");
+                    hasFshName = true;
+                }
+            }
+            if (!hasFshName) {
+                if (!options().fshOutput.empty()) {
+                    if (options().processingFolders)
+                        fshPath = path(options().fshOutput) / (out.stem().string() + ".fsh");
+                    else
+                        fshPath = options().fshOutput;
+                }
+                else {
+                    fshPath = out;
+                    fshPath.replace_extension(".fsh");
+                }
+            }
+            map<string, TextureToAdd> fshTextures;
+            if (!options().fshTextures.empty()) {
+                for (auto const &a : options().fshTextures) {
+                    path ap = a;
+                    string texFilenameLowered = ToLower(ap.stem().string());
+                    string afilename = ap.stem().string();
+                    if (!afilename.empty()) {
+                        if (afilename.length() > 4)
+                            afilename = afilename.substr(0, 4);
+                        string akey = ToLower(afilename);
+                        if (!fshTextures.contains(akey)) {
+                            bool texFound = false;
+                            for (auto const &[k, img] : textures) {
+                                auto imgLoweredName = ToLower(img.name);
+                                auto imgLoweredFilename = ToLower(path(img.filepath).stem().string());
+                                if (imgLoweredFilename == texFilenameLowered) {
+                                    fshTextures[imgLoweredName] = { img.name, img.filepath, options().fshFormat, options().fshLevels, img.embedded };
+                                    texFound = true;
+                                    break;
+                                }
+                            }
+                            if (!texFound)
+                                fshTextures[akey] = { afilename, a, options().fshFormat, options().fshLevels };
+                        }
+                    }
+                }
+            }
+            else {
+                static set<string> defaultTexturesToIgnore = { "eyeb", "rwa0", "rwa1", "rwa2", "rwa3", "rwh0", "rwh1", "rwh2", "rwh3", "rwn0", "rwn1", "rwn2", "rwn3", "abna", "abnb", "abnc", "afla", "aflb", "aflc", "hbna", "hbnb", "hbnc", "hfla", "hflb", "hflc", "adba", "adbb", "adbc", "chf0", "chf1", "chf2", "chf3","caf0", "caf1", "caf2", "caf3", "hcrs", "acrs", "hcla", "hclb", "acla", "aclb" };
+                for (auto const &[k, img] : textures) {
+                    auto imgLoweredName = ToLower(img.name);
+                    auto imgLoweredFilename = ToLower(path(img.filepath).stem().string());
+                    bool ignoreThisTexture = false;
+                    if (!options().fshDisableTextureIgnore) {
+                        if (defaultTexturesToIgnore.contains(imgLoweredName) || options().fshIgnoreTextures.contains(imgLoweredName)
+                            || defaultTexturesToIgnore.contains(imgLoweredFilename) || options().fshIgnoreTextures.contains(imgLoweredFilename))
+                        {
+                            ignoreThisTexture = true;
+                        }
+                    }
+                    if (!ignoreThisTexture) {
+                        fshTextures[imgLoweredName] = { img.name, img.filepath, options().fshFormat, options().fshLevels, img.embedded };
+                    }
+                }
+            }
+            for (auto const &a : options().fshAddTextures) {
+                path ap = a;
+                string afilename = ap.stem().string();
+                if (!afilename.empty()) {
+                    if (afilename.length() > 4)
+                        afilename = afilename.substr(0, 4);
+                    string akey = ToLower(afilename);
+                    if (!fshTextures.contains(akey))
+                        fshTextures[akey] = { afilename, a, options().fshFormat, options().fshLevels };
+                }
+            }
+            WriteFsh(fshPath, in.parent_path(), fshTextures, symbols, bufData);
+        }
+    }
+}
