@@ -335,7 +335,9 @@ void ProcessTextures(string const &modelName, string const &targetName, path con
             targetName == "WC06" ||
             targetName == "CL0405" ||
             targetName == "CL0607" ||
-            targetName == "FM13"
+            targetName == "FM13" ||
+            targetName == "TCM04" ||
+            targetName == "TCM05"
             )
         )
     {
@@ -359,7 +361,7 @@ void ProcessTextures(string const &modelName, string const &targetName, path con
 
             if (targetName == "FIFA03")
                 headTexName = "PlayerTexObj.texobj11__texture12__" + playerIdStr + "_0_0.fsh";
-            else if (targetName == "FIFA04" || targetName == "FIFA05" || targetName == "EURO04" || targetName == "CL0405")
+            else if (targetName == "FIFA04" || targetName == "FIFA05" || targetName == "EURO04" || targetName == "CL0405" || targetName == "TCM04" || targetName == "TCM05")
                 headTexName = "playertexobj.texobj11__texture12__" + playerIdStr + "_0_0.fsh";
             else if (targetName == "FIFA06" || targetName == "FIFA07" || targetName == "FIFA08" || targetName == "WC06" || targetName == "CL0607" || targetName == "EURO08")
                 headTexName = "t21__" + playerIdStr + "_0_0.fsh";
@@ -377,8 +379,10 @@ void ProcessTextures(string const &modelName, string const &targetName, path con
                 }
             }
             else {
-                if (options().hd)
+                if (options().hd) {
                     fshTextures1["tp01"] = { "tp01", "tp01@" + playerIdStr, fshFormat32Bit, 99 };
+                    fshTextures1["eyes"] = { "eyes", "eyes@" + playerIdStr, fshFormat32Bit, 99 };
+                }
                 else {
                     if (targetName == "FIFA03")
                         fshTextures1["tp01"] = { "tp01", "tp01@" + playerIdStr, fshFormat32Bit, 7 };
@@ -395,7 +399,7 @@ void ProcessTextures(string const &modelName, string const &targetName, path con
                 string hairTexName;
                 if (targetName == "FIFA03")
                     hairTexName = "PlayerTexObj.texobj11__texture14__0_" + playerIdStr + "_0.fsh";
-                else if (targetName == "FIFA04" || targetName == "FIFA05" || targetName == "EURO04" || targetName == "CL0405")
+                else if (targetName == "FIFA04" || targetName == "FIFA05" || targetName == "EURO04" || targetName == "CL0405" || targetName == "TCM04" || targetName == "TCM05")
                     hairTexName = "playertexobj.texobj11__texture14__0_" + playerIdStr + "_0.fsh";
                 else if (targetName == "FIFA06" || targetName == "FIFA07" || targetName == "FIFA08" || targetName == "WC06" || targetName == "CL0607" || targetName == "EURO08")
                     hairTexName = "t22__" + playerIdStr + "_0.fsh";
